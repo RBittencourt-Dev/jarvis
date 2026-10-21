@@ -41,6 +41,7 @@ GLOBO_NORMAL = re.compile(
     r"volta(?:r)?\s+(?:o\s+|a\s+)?(?:globo|mapa|planeta)(?:\s+inteiro)?)" + FIM)
 CAMADA = re.compile(
     J + r"(?:e\s+)?(?P<acao>mostra|mostrar|me\s+mostra|liga|ativa|bota|coloca|p[oõ]e|quero\s+ver|tira|esconde|desliga|apaga|remove|some\s+com|"
+    r"oculta|ocultar|esconder|tirar|desligar|apagar|remover|sumir\s+com|"
     r"adiciona|acrescenta|mostra\s+tamb[eé]m|me\s+mostra\s+tamb[eé]m|bota\s+tamb[eé]m)\s+(?:tamb[eé]m\s+|junto\s+)?"
     r"(?:o\s+|a\s+|os\s+|as\s+)?(?:camada\s+d[oea]s?\s+)?"
     r"(?P<camada>avi[oõ]es|aviao|voos?|tr[aá]fego\s+a[eé]reo|sat[eé]lites?|esta[cç][aã]o\s+espacial|iss|terremotos?|sismos?|"
@@ -122,7 +123,10 @@ NAO_E_LUGAR = re.compile(r"^(?:chrome|opera|edge|navegador|youtube|spotify|whats
 SATELITE = re.compile(J + r"(?:(?:me\s+)?(?:mostra|mostrar|liga|ativa|bota|coloca|p[oõ]e|quero\s+ver|abre|deixa|muda\s+pr[oa]|troca\s+pr[oa]|vai\s+pr[oa])\s+)?"
                       r"(?:o\s+|a\s+|as\s+|em\s+)?(?:modo\s+)?(?:globo\s+(?:real|de\s+verdade|via\s+sat[eé]lite|com\s+(?:foto|imagem)\s+de\s+sat[eé]lite)|"
                       r"terra\s+(?:real|de\s+verdade)|camadas?\s+da\s+terra|(?:foto|imagem|vis[aã]o|vista)\s+(?:real\s+)?(?:de|do|via)\s+sat[eé]lite|"
-                      r"sat[eé]lite\s+(?:real|ao\s+vivo|em\s+tempo\s+real)|mapa\s+(?:real|de\s+sat[eé]lite)|modo\s+sat[eé]lite|via\s+sat[eé]lite)"
+                      r"sat[eé]lite\s+(?:real|ao\s+vivo|em\s+tempo\s+real)|mapa\s+(?:real|de\s+sat[eé]lite)|modo\s+sat[eé]lite|via\s+sat[eé]lite|"
+                      # "segunda visão da terra", "outra visão", "a terra com aquelas camadas" (a foto real por cima)
+                      r"(?:segunda|outra|nova)\s+vis[aã]o(?:\s+d[ao]\s+(?:terra|globo|planeta|mundo))?|vis[aã]o\s+real(?:\s+d[ao]\s+(?:terra|globo))?|"
+                      r"(?:terra|globo|planeta)\s+com\s+(?:as\s+|aquelas\s+|essas\s+)?camadas)"
                       r"(?:\s+(?:no\s+globo|ao\s+vivo|em\s+tempo\s+real|agora))*" + FIM)
 NUVENS = re.compile(J + r"(?P<tira>tira|tirar|sem|esconde|remove|apaga)?\s*(?:(?:mostra|mostrar|bota|coloca|liga|com|p[oõ]e)\s+)?(?:as\s+)?nuvens"
                     r"(?:\s+(?:de\s+hoje|de\s+verdade|reais|do\s+sat[eé]lite|no\s+globo))*" + FIM)
@@ -173,7 +177,7 @@ def entender(texto):
     m = CAMADA.match(t) or (CAMADA.match("mostra tambem " + t[2:]) if re.match(r"e\s+(?:os|as|o|a)\s", t) else None)
     if m:
         camada = next(v for k, v in MAPA_CAMADA.items() if _sa(m.group("camada")).startswith(k))
-        tira = re.match(r"tira|esconde|desliga|apaga|remove|some", m.group("acao"))
+        tira = re.match(r"tira|esconde|desliga|apaga|remove|some|oculta|sumir", m.group("acao"))
         onde = (m.group("onde") or "").strip()
         if re.sub(r"^(?:a|o)\s+", "", onde) in ("aqui", "aqui perto", "perto", "mundo", "globo", "mapa", "ceu", "tela", "orbita",
                                                    "orbita da terra", "orbita terrestre", "espaco", "planeta", "terra"):

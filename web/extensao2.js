@@ -405,6 +405,8 @@
       if (e.olho_camada.exclusivo)  // só o que ele pediu: as outras camadas saem
         for (const outra of Object.keys(olho)) if (outra !== e.olho_camada.camada && olho[outra]) camada(outra, false, null, true);
       camada(e.olho_camada.camada, e.olho_camada.ligado, e.olho_camada.area);
+      // ocultou a última camada que estava na tela: o globo volta ao normal (sem zoom, girando)
+      if (!e.olho_camada.ligado && !Object.values(olho).some(Boolean)) window.globoNormal && window.globoNormal();
     }
   });
 })();

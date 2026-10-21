@@ -498,6 +498,9 @@ FRASES = [
     ("toca Tempo Perdido da Legião Urbana", "tocar tempo perdido da legião urbana"),
     ("bota Evidências do Chitãozinho e Xororó", "tocar evidências do chitãozinho"),
     ("toca um pagode gospel", "tocar pagode gospel"),
+    ("oculta os aviões", "interno camada ('avioes', False"),
+    ("mostra a segunda visão da terra", "interno modo_globo satelite"),
+    ("mostra os aviões sobrevoando a Argentina", "interno camada ('avioes', True, 'Argentina'"),
 ]
 
 

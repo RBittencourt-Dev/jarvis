@@ -308,6 +308,8 @@
     sons.fecha();
   }
 
+  window.globoNormal = globoNormal;
+
   // ------------------------------------------------------------ eventos
   fonte.addEventListener("message", (m) => {
     const e = JSON.parse(m.data);
