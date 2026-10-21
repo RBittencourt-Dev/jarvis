@@ -1,0 +1,3 @@
+Ponha aqui arquivos .md com o que o Jarvis deve saber (ele lê tudo desta pasta).
+Eles ficam só neste PC (fora do git). Pra levar pra outro PC: Configurações → Geral → Exportar/Importar.
+memoria.md é criada sozinha quando você pede pra ele lembrar de algo.

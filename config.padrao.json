@@ -1,0 +1,51 @@
+{
+  "nome_do_usuario": "",
+  "como_chamar": "misto",
+  "perfil": {
+    "nome": "Meu PC",
+    "contexto": ""
+  },
+  "usar_rosto": true,
+  "modelo": "qwen2.5:3b",
+  "ollama_url": "http://127.0.0.1:11434",
+  "porta": 8765,
+  "voz": "pt-BR-AntonioNeural",
+  "voz_velocidade": "+16%",
+  "voz_tom": "-7Hz",
+  "confirmar_acoes_perigosas": true,
+  "palmas": {
+    "sensibilidade": 0.35,
+    "intervalo_min_ms": 120,
+    "intervalo_max_ms": 700
+  },
+  "apelidos": {
+    "whatsapp": "WhatsApp",
+    "zap": "WhatsApp",
+    "instagram": "https://www.instagram.com/",
+    "insta": "https://www.instagram.com/",
+    "vs code": "Visual Studio Code",
+    "vscode": "Visual Studio Code"
+  },
+  "pastas_permitidas": [
+    "%USERPROFILE%\\Desktop",
+    "%USERPROFILE%\\Documents",
+    "%USERPROFILE%\\Downloads"
+  ],
+  "arquivos_proibidos": [
+    ".env",
+    ".env.local",
+    "demo-acessos.txt",
+    "id_rsa",
+    ".pem",
+    ".key"
+  ],
+  "tela_dos_sites": "outra",
+  "casa": {
+    "endereco": "",
+    "bairro": "",
+    "cidade": "Porto Alegre",
+    "lat": -30.0346,
+    "lng": -51.2177
+  },
+  "spotify_client_id": "cbd84dbc19c2403fb2508aa6e5bfd9b0"
+}

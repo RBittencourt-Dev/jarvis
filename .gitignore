@@ -1,0 +1,57 @@
+# ambiente e caches
+.venv/
+__pycache__/
+*.pyc
+.perfil-navegador/
+.perfil-extensao/
+voz-guardada/
+amostras-de-voz/
+modelos/
+dados/
+_backup/
+*.log
+
+# chaves, logins e tokens (NUNCA versionar)
+.env
+*.key
+groq.json
+gemini.json
+spotify.json
+spotify-token.json
+login-painel.json
+login-porthon.json
+cofre.bin
+cofre.json
+
+# dados pessoais / aprendidos (ficam só neste PC)
+rosto.json
+rosto-confirmado.json
+resumo-falado.json
+conhecimento/memoria.md
+contatos*.json
+apps-conhecidos.json
+respostas-aprendidas.json
+frases-aprendidas*.json
+habilidades-aprendidas.json
+musicas-aprendidas*.json
+vocabulario-aprendido.json
+lugares-conhecidos.json
+leads-ja-avisados.json
+automacoes.json
+automacoes-ligada.json
+lembretes.json
+anotacoes.json
+pomodoro.json
+modo.json
+extensao.json
+historico*.json
+memoria.db
+indice*.db
+registro*.jsonl
+
+# 21/10 (item 13): cada PC tem os seus
+config.json
+conhecimento/*.md
+*.antes*.json
+login-*.json
+!login-*.exemplo.json

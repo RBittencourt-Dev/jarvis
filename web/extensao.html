@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J.A.R.V.I.S. · Extensão</title>
+<link rel="icon" href="/web/marca/jarvis.ico" sizes="any">
+<style>
+  :root { --fundo: #03080f; --ciano: #39d0ff; --ciano-fraco: #39d0ff33; --texto: #cfeeff; --apagado: #6c8aa0; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; color: var(--texto); font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+    background: radial-gradient(circle at 50% 45%, #0d2236 0%, transparent 55%),
+                repeating-linear-gradient(0deg, #39d0ff06 0 1px, transparent 1px 48px),
+                repeating-linear-gradient(90deg, #39d0ff06 0 1px, transparent 1px 48px), var(--fundo); }
+  body.caverna { --ciano: #ff3b30; --ciano-fraco: #ff3b3033; --texto: #ffd9d6; --apagado: #8a4b47; --fundo: #000;
+    background: radial-gradient(circle at 50% 45%, #1a0202 0%, transparent 55%), #000; }
+  header { position: fixed; top: 0; left: 0; right: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center;
+    padding: 18px 24px; letter-spacing: .3em; font-size: 12px; color: var(--apagado); pointer-events: none; }
+  header .marca { color: var(--ciano); }
+  .ponto { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ciano); box-shadow: 0 0 10px var(--ciano);
+    margin-right: 10px; animation: pulsa 1.6s ease-in-out infinite; }
+  @keyframes pulsa { 50% { opacity: .3; } }
+
+  /* ---------------------------------------------------- o globo: tela toda; com pop-up na tela, vai pro canto */
+  #globo { position: fixed; z-index: 1; inset: 0; transition: all .7s cubic-bezier(.2, .9, .3, 1); }
+  body.com-cartoes:not(.lugar) #globo { inset: auto 20px 20px auto; width: 260px; height: 260px; border-radius: 50%; overflow: hidden;
+    box-shadow: 0 0 40px var(--ciano-fraco); }
+  #mira { position: fixed; z-index: 2; inset: 0; pointer-events: none; display: grid; place-items: center; opacity: 0; transition: opacity .4s; }
+  body.mirando #mira { opacity: 1; }
+  #mira div { width: 180px; height: 180px; border: 1px solid var(--ciano); border-radius: 50%; position: relative;
+    box-shadow: 0 0 20px var(--ciano-fraco), inset 0 0 20px var(--ciano-fraco); animation: mira 1.2s ease-out infinite; }
+  @keyframes mira { from { transform: scale(1.6); opacity: 0; } 60% { opacity: 1; } to { transform: scale(1); opacity: 0; } }
+  #coordenadas { position: fixed; z-index: 3; left: 24px; bottom: 20px; font: 12px/1.6 Consolas, monospace; color: var(--apagado);
+    letter-spacing: .1em; pointer-events: none; }
+  body.com-cartoes:not(.lugar) #coordenadas { display: none; }
+
+  /* ---------------------------------------------------- pop-ups comuns */
+  main { position: fixed; z-index: 3; inset: 64px 0 0; overflow-y: auto; padding: 4px 24px 300px; display: none; align-content: start; gap: 14px; }
+  body.com-cartoes:not(.lugar) main { display: grid; }
+  .cartao { position: relative; padding: 18px 20px; background: linear-gradient(135deg, #0c2236f0, #06121df0);
+    border: 1px solid var(--ciano-fraco); animation: surge .5s cubic-bezier(.2, .9, .3, 1.2) both; backdrop-filter: blur(6px);
+    clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)); }
+  .cartao::before { content: ""; position: absolute; left: 0; top: 0; width: 3px; height: 100%; background: var(--ciano); box-shadow: 0 0 10px var(--ciano); }
+  .cartao h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: .25em; text-transform: uppercase; color: var(--apagado); font-weight: 600; }
+  .cartao .destaque { font-size: 30px; font-weight: 300; color: var(--ciano); line-height: 1.2; }
+  .cartao .texto { margin: 10px 0 0; white-space: pre-wrap; font-size: 17px; }
+  .cartao ul { margin: 8px 0 0; padding: 0; list-style: none; font-size: 16px; }
+  .cartao li { padding: 6px 0; border-top: 1px solid #39d0ff14; }
+  .cartao a { color: var(--ciano); }
+  .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin-top: 10px; }
+  .galeria img { width: 100%; height: 220px; object-fit: cover; border: 1px solid var(--ciano-fraco); cursor: zoom-in; }
+  .hora { color: var(--apagado); font-size: 11px; letter-spacing: .1em; margin-left: 8px; }
+  @keyframes surge { from { opacity: 0; transform: translateY(-14px) scale(.97); filter: blur(4px); } }
+
+  /* ---------------------------------------------------- pop-up rápido: barrinha do tempo que falta pra sumir */
+  .cartao .some { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--ciano); opacity: .6;
+    animation: some linear forwards; }
+  @keyframes some { from { width: 100%; } to { width: 0; } }
+  .cartao.alerta { border-color: var(--ciano); box-shadow: 0 0 40px var(--ciano-fraco); }
+
+  /* ---------------------------------------------------- mini-painel: PC e pomodoro */
+  #painel { position: fixed; z-index: 5; top: 56px; right: 24px; width: 220px; display: grid; gap: 8px; pointer-events: none;
+    font: 11px/1.4 Consolas, monospace; letter-spacing: .12em; color: var(--apagado); }
+  body.com-cartoes:not(.lugar) #painel { display: none; }
+  .medidor .rotulo { display: flex; justify-content: space-between; }
+  .medidor .barra { height: 3px; background: var(--ciano-fraco); margin-top: 3px; }
+  .medidor .barra div { height: 100%; width: 0; background: var(--ciano); box-shadow: 0 0 8px var(--ciano); transition: width 1s; }
+  .medidor.alto .barra div { background: #ffb547; box-shadow: 0 0 8px #ffb547; }
+  #pomodoro { display: none; margin-top: 6px; padding: 12px; border: 1px solid var(--ciano-fraco); background: #06121dcc; text-align: center; }
+  #pomodoro.ativo { display: block; }
+  #pomodoro .tempo { font: 300 40px/1.1 "Segoe UI", sans-serif; color: var(--ciano); letter-spacing: .04em; text-shadow: 0 0 14px var(--ciano-fraco); }
+  #pomodoro.pausado .tempo { opacity: .45; animation: pulsa 1.4s ease-in-out infinite; }
+
+  /* ---------------------------------------------------- silhueta ("seleciona o Brasil"): só o contorno na tela */
+  #silhueta { position: fixed; z-index: 2; inset: 0; display: grid; place-items: center; opacity: 0; pointer-events: none;
+    transition: opacity .6s; }
+  body.silhueta #silhueta { opacity: 1; }
+  body.silhueta #globo { opacity: 0; transform: scale(.85); }
+  #silhueta svg { width: 100%; height: 100%; overflow: visible; transform: scale(.72); transition: transform 1.4s cubic-bezier(.2, .9, .3, 1); }
+  body.silhueta #silhueta svg { transform: scale(1); }
+  body.silhueta #globo { transition: opacity 1.1s, transform 1.4s; }
+  #silhueta .forma { fill: url(#malha); stroke: var(--ciano); stroke-width: 2.2; stroke-linejoin: round; filter: url(#brilho); }
+  #silhueta .fundo { fill: var(--ciano); opacity: 0; animation: acende 1.2s 1.8s ease-out forwards; }
+  #silhueta .nome { position: fixed; left: 0; right: 0; bottom: 120px; text-align: center; font: 200 44px/1.1 "Segoe UI", sans-serif;
+    letter-spacing: .3em; color: var(--ciano); text-shadow: 0 0 20px var(--ciano-fraco); opacity: 0; animation: acende 1s 1.6s forwards; }
+  #silhueta .nome small { display: block; margin-top: 10px; font: 12px Consolas, monospace; letter-spacing: .25em; color: var(--apagado); }
+  @keyframes desenha { to { stroke-dashoffset: 0; } }
+  @keyframes acende { to { opacity: 1; } }
+  #silhueta .fundo { animation-name: acende-fundo; }
+  @keyframes acende-fundo { to { opacity: .08; } }
+
+  /* ---------------------------------------------------- trava: até o rosto ser confirmado, só "Autenticando" */
+  #trava { position: fixed; z-index: 20; inset: 0; display: none; place-items: center; align-content: center; gap: 28px;
+    background: radial-gradient(circle at 50% 45%, #0b1d2d 0%, var(--fundo) 60%); text-align: center; }
+  body.travado #trava { display: grid; }
+  body.travado #globo, body.travado #painel, body.travado main, body.travado #sobre-globo, body.travado #silhueta,
+  body.travado #coordenadas { visibility: hidden; }
+  #trava .anel { width: 220px; height: 220px; border-radius: 50%; border: 1px solid var(--ciano-fraco); position: relative;
+    box-shadow: 0 0 40px var(--ciano-fraco), inset 0 0 30px var(--ciano-fraco); }
+  #trava .anel::before { content: ""; position: absolute; inset: -1px; border-radius: 50%; border: 2px solid transparent;
+    border-top-color: var(--ciano); animation: gira 1.4s linear infinite; }
+  #trava .anel::after { content: ""; position: absolute; left: 12%; right: 12%; height: 2px; top: 50%; background: var(--ciano);
+    box-shadow: 0 0 14px var(--ciano); animation: varre 2s ease-in-out infinite alternate; }
+  #trava .titulo { font: 200 34px/1.2 "Segoe UI", sans-serif; letter-spacing: .4em; color: var(--ciano); text-shadow: 0 0 18px var(--ciano-fraco); }
+  #trava .sub { font: 12px Consolas, monospace; letter-spacing: .22em; color: var(--apagado); }
+  #trava.negado { --ciano: #ff4d4d; --ciano-fraco: #ff4d4d33; }
+  #trava.liberado .titulo { animation: pulsa .5s 3; }
+  #trava .carga { width: min(420px, 70vw); height: 3px; background: var(--ciano-fraco); overflow: hidden; display: none; }
+  #trava.carregando .carga { display: block; }
+  #trava .carga div { height: 100%; width: 0; background: var(--ciano); box-shadow: 0 0 12px var(--ciano); transition: width .45s ease-out; }
+  #trava .pct { font: 12px Consolas, monospace; letter-spacing: .3em; color: var(--ciano); display: none; }
+  #trava.carregando .pct { display: block; }
+  #trava.saindo { animation: some-trava .7s ease-in forwards; }
+  @keyframes some-trava { to { opacity: 0; transform: scale(1.04); filter: blur(3px); } }
+  @keyframes gira { to { transform: rotate(360deg); } }
+  @keyframes varre { from { transform: translateY(-80px); } to { transform: translateY(80px); } }
+
+  /* ---------------------------------------------------- Street View dentro da extensão */
+  #street { position: fixed; z-index: 6; left: 16px; right: 16px; top: 60px; bottom: 140px; display: none; flex-direction: column;
+    border: 1px solid var(--ciano); background: #020a12; box-shadow: 0 0 50px var(--ciano-fraco); animation: surge .5s cubic-bezier(.2, .9, .3, 1.2); }
+  body.street #street { display: flex; }
+  body.street #globo { opacity: .15; }
+  body.street #sobre-globo { display: none; }
+  #street header { position: static; padding: 10px 14px; pointer-events: auto; border-bottom: 1px solid var(--ciano-fraco); }
+  #street iframe { flex: 1; width: 100%; border: 0; background: #000; }
+  #street .dica { padding: 8px 14px; font: 11px Consolas, monospace; letter-spacing: .15em; color: var(--apagado); border-top: 1px solid var(--ciano-fraco); }
+
+  /* ---------------------------------------------------- foto do lugar em cima do globo */
+  #sobre-globo { position: fixed; z-index: 4; left: 50%; top: 80px; transform: translateX(-50%); width: min(560px, calc(100vw - 32px));
+    display: none; }
+  body.lugar #sobre-globo { display: block; }
+  #sobre-globo .cartao { padding: 0; }
+  #sobre-globo img { display: block; width: 100%; height: 300px; object-fit: cover; }
+  #sobre-globo .legenda { padding: 14px 18px 16px; }
+  #sobre-globo .satelite { position: relative; }
+  #sobre-globo .satelite img { height: 420px; }
+  #sobre-globo .satelite::before, #sobre-globo .satelite::after { content: ""; position: absolute; left: 50%; top: 50%; pointer-events: none; }
+  #sobre-globo .satelite::before { width: 46px; height: 46px; margin: -23px 0 0 -23px; border: 2px solid var(--ciano); border-radius: 50%;
+    box-shadow: 0 0 14px var(--ciano), inset 0 0 10px var(--ciano-fraco); animation: pulsa 1.4s ease-in-out infinite; }
+  #sobre-globo .satelite::after { width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: var(--ciano); box-shadow: 0 0 10px var(--ciano); }
+  #sobre-globo .credito { position: absolute; right: 8px; bottom: 6px; font: 10px Consolas, monospace; color: #fffa; text-shadow: 0 0 4px #000; }
+  #sobre-globo .maps { margin-top: 8px; color: var(--ciano); font-size: 13px; letter-spacing: .15em; text-transform: uppercase; }
+</style>
+</head>
+<body class="travado">
+  <header><span><span class="ponto"></span><span class="marca">J.A.R.V.I.S.</span> · EXTENSÃO</span><span id="relogio"></span></header>
+  <div id="globo" aria-label="Globo"></div>
+  <div id="mira" aria-hidden="true"><div></div></div>
+  <div id="coordenadas" aria-live="polite">ESCANEANDO · ÓRBITA BAIXA</div>
+  <section id="sobre-globo" aria-live="polite"></section>
+  <div id="silhueta" aria-live="polite"></div>
+  <section id="street" aria-label="Street View">
+    <header><span><span class="ponto"></span><span class="marca">STREET VIEW</span> · <span id="street-nome"></span></span></header>
+    <iframe id="street-quadro" title="Street View" allow="fullscreen" referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <div class="dica">"VIRA PRA DIREITA" · "OLHA PRA TRÁS" · "FECHA O STREET VIEW" · "ABRE NO NAVEGADOR"</div>
+  </section>
+  <section id="trava" aria-live="assertive">
+    <div class="anel" aria-hidden="true"></div>
+    <div class="titulo">CARREGANDO GLOBO E ÓRBITA TERRESTRE</div>
+    <div class="carga"><div></div></div>
+    <div class="pct">0%</div>
+    <div class="sub">INICIANDO</div>
+  </section>
+  <aside id="painel" aria-label="PC e pomodoro">
+    <div class="medidor" id="m-cpu"><div class="rotulo"><span>CPU</span><span>–</span></div><div class="barra"><div></div></div></div>
+    <div class="medidor" id="m-ram"><div class="rotulo"><span>MEMÓRIA</span><span>–</span></div><div class="barra"><div></div></div></div>
+    <div id="pomodoro"><div class="fase">FOCO</div><div class="tempo">25:00</div></div>
+  </aside>
+  <main id="lista" aria-live="polite"></main>
+<link rel="stylesheet" href="/web/vendor/highlight.css">
+<script src="/web/vendor/globe.gl-2.45.3.min.js"></script>
+<script src="/web/vendor/highlight.min.js"></script>
+<script>
+let paises = null;
+const $ = (id) => document.getElementById(id);
+const MAXIMO = 4;  // só os pop-ups de agora: os mais velhos saem, nada de histórico
+let CASA = { lat: -30.12, lng: -51.21 };  // a casa dele (vem do servidor): de onde sai o arco
+
+// ------------------------------------------------------------ sons (sintetizados, sem arquivo)
+const sons = (() => {
+  let ctx = null;
+  const tom = (freq, ini, dur, vol = 0.05, tipo = "sine", ate = null) => {
+    try {
+      ctx = ctx || new AudioContext();
+      const t0 = ctx.currentTime + ini, o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = tipo; o.frequency.setValueAtTime(freq, t0);
+      if (ate) o.frequency.exponentialRampToValueAtTime(ate, t0 + dur);
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g).connect(ctx.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+    } catch {}
+  };
+  const grave = () => document.body.classList.contains("caverna") ? 0.6 : 1;
+  return {
+    popup() { tom(1500 * grave(), 0, .05, .04, "triangle"); tom(2300 * grave(), .05, .06, .03, "triangle"); tom(3100 * grave(), .1, .08, .02); },
+    fecha() { tom(1800 * grave(), 0, .18, .035, "sine", 500); },
+    viagem() { tom(180, 0, 1.4, .05, "sawtooth", 900); for (let i = 0; i < 8; i++) tom(2400 + i * 140, .15 + i * .14, .03, .015, "square"); },
+    trava() { tom(1200, 0, .07, .05, "square"); tom(1200, .12, .07, .05, "square"); tom(1800, .26, .22, .04); },
+    varredura() { tom(900 * grave(), 0, .35, .008, "sine", 1300 * grave()); },
+  };
+})();
+
+// ------------------------------------------------------------ o globo
+const corCiano = () => getComputedStyle(document.body).getPropertyValue("--ciano").trim() || "#39d0ff";
+const globo = Globe({ rendererConfig: { antialias: true, alpha: true } })($("globo"))
+  .backgroundColor("rgba(0,0,0,0)")
+  .showAtmosphere(true).atmosphereAltitude(0.28)
+  .showGraticules(true)
+  // malha fina por dentro dos continentes (o "quadriculado" do holograma)
+  .hexPolygonResolution(4).hexPolygonMargin(0.72).hexPolygonUseDots(false).hexPolygonAltitude(0.004)
+  // continentes: preenchimento translúcido, contorno e fronteiras acesos
+  .polygonAltitude((f) => (f === selecionada ? 0.035 : 0.006)).polygonsTransitionDuration(800)
+  .ringMaxRadius(5).ringPropagationSpeed(3).ringRepeatPeriod(800)
+  .arcDashLength(0.5).arcDashGap(0.2).arcDashAnimateTime(1600).arcStroke(0.6)
+  .labelSize(1.6).labelDotRadius(0.5).labelResolution(3).labelAltitude(0.01);
+function pintar() {
+  const c = corCiano();
+  globo.atmosphereColor(c).hexPolygonColor(() => c + "70")
+    .polygonCapColor((f) => (f === selecionada ? c + "88" : selecionada ? c + "12" : c + "30"))
+    .polygonSideColor((f) => (f === selecionada ? c + "55" : c + "18"))
+    .polygonStrokeColor((f) => (f === selecionada ? "#ffffff" : selecionada ? c + "55" : c))
+    .ringColor(() => (t) => `${c}${Math.round((1 - t) * 255).toString(16).padStart(2, "0")}`)
+    .arcColor(() => [c + "00", c]).labelColor(() => c);
+  const caverna = document.body.classList.contains("caverna");
+  const m = globo.globeMaterial();
+  m.color.set(caverna ? "#160303" : "#04203a");       // oceano azul-escuro, levemente transparente
+  m.emissive.set(caverna ? "#120000" : "#03182c");
+  m.emissiveIntensity = 0.9;
+  m.shininess = 25;
+  m.transparent = true;
+  m.opacity = 0.92;
+  // a grade de latitude/longitude mais acesa
+  globo.scene().traverse((o) => {
+    if (o.type === "LineSegments" && o.material && !o.__jarvis) { o.material.color.set(c); o.material.opacity = 0.22; o.material.transparent = true; o.__jarvis = 1; }
+  });
+}
+pintar();
+let selecionada = null;  // território selecionado ("seleciona o Brasil")
+fetch("/web/vendor/paises.geojson").then((r) => r.json()).then((g) => {
+  paises = g.features;
+  globo.polygonsData(paises).hexPolygonsData(paises);
+  carregamento.etapa("continentes");
+  requestAnimationFrame(() => requestAnimationFrame(() => carregamento.etapa("globo")));
+  pintar();
+}).catch(() => {});
+globo.controls().autoRotate = true;
+globo.controls().autoRotateSpeed = 0.55;
+globo.controls().enableZoom = true;  // roda do mouse dá zoom (21/10)
+// longe o bastante pro globo inteiro caber (na tela em pé, a largura é que manda)
+const ALTURA_PARADO = () => (innerHeight > innerWidth ? 3.75 : 2.7);
+globo.pointOfView({ lat: -15, lng: -50, altitude: ALTURA_PARADO() });
+
+function ajustarTamanho() {
+  const el = $("globo");
+  globo.width(el.clientWidth).height(el.clientHeight);
+}
+new ResizeObserver(ajustarTamanho).observe($("globo"));
+ajustarTamanho();
+
+let voltaAGirar = null;
+function irPara({ lat, lng, altitude = 0.4, nome, completo, id, foto, texto, maps, satelite, tipo }) {
+  clearTimeout(voltaAGirar);
+  document.body.classList.add("lugar", "mirando");
+  globo.controls().autoRotate = false;
+  sons.viagem();
+  globo.arcsData([{ startLat: CASA.lat, startLng: CASA.lng, endLat: lat, endLng: lng }]);
+  globo.pointOfView({ lat, lng, altitude: Math.max(altitude, 0.25) + 0.9 }, 900);
+  setTimeout(() => globo.pointOfView({ lat, lng, altitude }, 1400), 950);
+  setTimeout(() => {
+    sons.trava();
+    document.body.classList.remove("mirando");
+    globo.labelSize(Math.max(0.35, altitude * 0.9)).labelDotRadius(Math.max(0.12, altitude * 0.25))
+      .ringMaxRadius(Math.max(1.5, altitude * 4))
+      .ringsData([{ lat, lng }]).labelsData([{ lat, lng, text: (nome || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase() }]).labelText("text");  // a fonte 3D não tem acento
+    $("coordenadas").textContent = `ALVO · ${(completo || nome || "").toUpperCase()}\n` +
+      `${Math.abs(lat).toFixed(4)}° ${lat < 0 ? "S" : "N"} · ${Math.abs(lng).toFixed(4)}° ${lng < 0 ? "O" : "L"}`;
+    $("coordenadas").style.whiteSpace = "pre";
+    mostrarFoto({ id, nome: completo || nome, foto, texto, maps, satelite, tipo });
+  }, 2400);
+  voltaAGirar = setTimeout(voltarAGirar, 30000);  // 30 s parado: volta sozinho
+}
+
+// "qual deles?": todas as opções piscando no globo, a câmera no meio delas
+function marcarOpcoes(opcoes) {
+  if (!opcoes.length) return;
+  clearTimeout(voltaAGirar);
+  document.body.classList.add("lugar");
+  $("sobre-globo").innerHTML = "";
+  globo.controls().autoRotate = false;
+  const lat = opcoes.reduce((s, o) => s + o.lat, 0) / opcoes.length, lng = opcoes.reduce((s, o) => s + o.lng, 0) / opcoes.length;
+  const espalhado = Math.max(...opcoes.map((o) => Math.hypot(o.lat - lat, o.lng - lng)));
+  sons.viagem();
+  globo.arcsData([]).pointOfView({ lat, lng, altitude: Math.min(2.5, Math.max(0.35, espalhado / 12)) }, 1800);
+  setTimeout(() => {
+    sons.trava();
+    globo.ringMaxRadius(1.2).ringsData(opcoes).labelSize(0.25).labelDotRadius(0.08)
+      .labelsData(opcoes.map((o, i) => ({ lat: o.lat, lng: o.lng, text: `${i + 1} ${(o.nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase()}` })))
+      .labelText("text");
+    $("coordenadas").style.whiteSpace = "pre";
+    $("coordenadas").textContent = `${opcoes.length} ALVOS ENCONTRADOS\nAGUARDANDO ESCOLHA`;
+  }, 1900);
+  voltaAGirar = setTimeout(voltarAGirar, 30000);  // 30 s parado: volta sozinho
+}
+
+// "seleciona o Brasil": pinta só o território, com contorno aceso e levantado do globo
+let estadosBR = null;
+const semAcento = (t) => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+async function selecionar(alvo) {
+  if (!alvo) { voltarAGirar(); return; }
+  let forma = null;
+  if (alvo.sigla) {
+    estadosBR = estadosBR || (await (await fetch("/web/vendor/estados-br.geojson")).json()).features;
+    forma = estadosBR.find((f) => f.properties.sigla === alvo.sigla);
+  } else if (paises) {
+    forma = paises.find((f) => f.properties.ISO_A2 === alvo.iso)
+      || paises.find((f) => [f.properties.ADMIN, f.properties.NAME, f.properties.NAME_LONG].some((n) => semAcento(n) === semAcento(alvo.nome_en)));
+  }
+  if (!forma) return;
+  clearTimeout(voltaAGirar);
+  document.body.classList.remove("silhueta", "com-cartoes");
+  document.body.classList.add("lugar");
+  $("sobre-globo").innerHTML = "";
+  $("silhueta").innerHTML = "";
+  globo.controls().autoRotate = false;
+  const pontos = (forma.geometry.type === "MultiPolygon" ? forma.geometry.coordinates.flat(1) : forma.geometry.coordinates).flat(1);
+  const lngs = pontos.map((p) => p[0]), lats = pontos.map((p) => p[1]);
+  const tamanho = Math.max(Math.max(...lngs) - Math.min(...lngs), Math.max(...lats) - Math.min(...lats));
+  sons.viagem();
+  globo.ringsData([]).labelsData([]).arcsData([])
+    .pointOfView({ lat: alvo.lat, lng: alvo.lng, altitude: Math.min(2.6, Math.max(0.75, tamanho / 18)) }, 1700);
+  selecionada = forma;
+  globo.polygonsData(paises.includes(forma) ? paises : [...paises, forma]);  // estado do Brasil entra por cima
+  pintar();
+  $("coordenadas").style.whiteSpace = "pre";
+  $("coordenadas").textContent = `ALVO · ${semAcento(alvo.nome).toUpperCase()}\nLOCALIZANDO TERRITÓRIO`;
+  setTimeout(() => { if (selecionada === forma) mostrarSilhueta(forma, alvo.nome); }, 2300);
+  voltaAGirar = setTimeout(voltarAGirar, 30000);  // 30 s parado: volta sozinho
+}
+
+function mostrarSilhueta(forma, nome) {
+  const aneis = forma.geometry.type === "MultiPolygon" ? forma.geometry.coordinates.flat(1) : forma.geometry.coordinates;
+  const pontos = aneis.flat(1);
+  const lats = pontos.map((p) => p[1]), lngs = pontos.map((p) => p[0]);
+  const latMeio = (Math.max(...lats) + Math.min(...lats)) / 2;
+  const k = Math.cos((latMeio * Math.PI) / 180);  // projeção equiretangular corrigida: o formato fica certo
+  const xs = lngs.map((x) => x * k), ys = lats.map((y) => -y);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const area = { w: innerWidth * 0.84, h: innerHeight * 0.62 };
+  const esc = Math.min(area.w / (x1 - x0 || 1), area.h / (y1 - y0 || 1));
+  const dx = (innerWidth - (x1 - x0) * esc) / 2, dy = (innerHeight - (y1 - y0) * esc) / 2 - innerHeight * 0.04;
+  const proj = ([lng, lat]) => `${((lng * k - x0) * esc + dx).toFixed(1)},${((-lat - y0) * esc + dy).toFixed(1)}`;
+  const d = aneis.filter((a) => a.length > 2).map((a) => "M" + a.map(proj).join("L") + "Z").join("");
+  const caixa = $("silhueta");
+  caixa.innerHTML = `
+    <svg viewBox="0 0 ${innerWidth} ${innerHeight}" aria-hidden="true">
+      <defs>
+        <pattern id="malha" width="14" height="14" patternUnits="userSpaceOnUse">
+          <path d="M14 0H0V14" fill="none" stroke="${corCiano()}" stroke-opacity=".28" stroke-width="1"/>
+        </pattern>
+        <filter id="brilho" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <path class="fundo" d="${d}"/>
+      <path class="forma" d="${d}"/>
+    </svg>
+    <div class="nome">${semAcento(nome).toUpperCase()}<small>TERRITÓRIO ISOLADO</small></div>`;
+  void caixa.offsetWidth;  // a escala pequena vale antes de ampliar
+  document.body.classList.add("silhueta");
+  globo.controls().autoRotate = false;
+  sons.trava();
+  $("coordenadas").style.whiteSpace = "pre";
+  $("coordenadas").textContent = `SELECIONADO · ${semAcento(nome).toUpperCase()}\nCONTORNO EXTRAÍDO`;
+}
+
+function voltarAGirar() {
+  if (document.body.classList.contains("street")) return;  // vendo a rua: não some sozinho
+  document.body.classList.remove("lugar", "mirando", "silhueta");
+  $("silhueta").innerHTML = "";
+  if (selecionada) { selecionada = null; globo.polygonsData(paises || []); pintar(); }
+  $("sobre-globo").innerHTML = "";
+  globo.ringsData([]).labelsData([]).arcsData([]);
+  if (selecionada) { selecionada = null; globo.polygonsData(paises || []); pintar(); }
+  globo.pointOfView({ lat: globo.pointOfView().lat, lng: globo.pointOfView().lng, altitude: ALTURA_PARADO() }, 1500);
+  globo.controls().autoRotate = true;
+  $("coordenadas").textContent = "ESCANEANDO · ÓRBITA BAIXA";
+  atualizarEstado();
+}
+
+function mostrarFoto({ id, nome, foto, texto, maps, satelite, tipo }) {
+  const lugar = $("sobre-globo");
+  lugar.innerHTML = "";
+  if (!foto && !texto) return;
+  const c = document.createElement("article");
+  c.className = "cartao";
+  if (id) c.dataset.id = id;
+  if (foto) {
+    const img = document.createElement("img"); img.src = foto; img.alt = nome; img.onerror = () => img.remove();
+    if (satelite) {  // vista de cima com a mira no endereço
+      const moldura = document.createElement("div"); moldura.className = "satelite";
+      const credito = document.createElement("span"); credito.className = "credito"; credito.textContent = "Imagem: Esri";
+      moldura.append(img, credito); c.append(moldura);
+    } else c.append(img);
+  }
+  const leg = document.createElement("div"); leg.className = "legenda";
+  const h = document.createElement("h3"); h.textContent = satelite ? "Endereço localizado" : "Localizado";
+  const d = document.createElement("div"); d.className = "destaque"; d.textContent = nome;
+  leg.append(h, d);
+  if (texto) { const p = document.createElement("p"); p.className = "texto"; p.textContent = texto; leg.append(p); }
+  if (maps) { const m = document.createElement("div"); m.className = "maps"; m.textContent = satelite ? "Quer ver na rua (Street View)?" : "Quer ver no Google Maps?"; leg.append(m); }
+  c.append(leg);
+  lugar.append(c);
+  sons.popup();
+}
+
+// varredura leve do radar enquanto o globo gira sozinho
+setInterval(() => { if (globo.controls().autoRotate && !document.hidden) sons.varredura(); }, 7000);
+
+// ------------------------------------------------------------ pop-ups comuns
+const lista = $("lista");
+function agora() { return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); }
+function atualizarEstado() { document.body.classList.toggle("com-cartoes", lista.children.length > 0); }
+
+function cartao({ id, titulo = "", destaque = "", linhas = [], texto = "", imagens = [], links = [] }) {
+  const c = document.createElement("article");
+  c.className = "cartao";
+  if (id) c.dataset.id = id;
+  const h = document.createElement("h3");
+  h.textContent = titulo;
+  const hora = document.createElement("span"); hora.className = "hora"; hora.textContent = agora(); h.append(hora);
+  c.append(h);
+  if (destaque) { const d = document.createElement("div"); d.className = "destaque"; d.textContent = destaque; c.append(d); }
+  if (imagens.length) {
+    const g = document.createElement("div"); g.className = "galeria";
+    for (const url of imagens) {
+      const img = document.createElement("img");
+      img.src = url; img.loading = "lazy"; img.alt = destaque || titulo;
+      img.onclick = () => ampliarFoto(url, destaque || titulo);  // amplia aqui dentro, sem navegador
+      img.onerror = () => img.remove();
+      g.append(img);
+    }
+    c.append(g);
+  }
+  if (texto) { const p = document.createElement("p"); p.className = "texto"; p.textContent = texto; c.append(p); }
+  if (linhas.length || links.length) {
+    const ul = document.createElement("ul");
+    for (const l of linhas) { const li = document.createElement("li"); li.textContent = l; ul.append(li); }
+    for (const { texto: t, url } of links) {
+      const li = document.createElement("li"); const a = document.createElement("a");
+      a.href = url; a.textContent = t || url;
+      a.onclick = (ev) => { ev.preventDefault(); abrirLeitura(url); };  // modo leitura dentro do Jarvis
+      li.append(a); ul.append(li);
+    }
+    c.append(ul);
+  }
+  if (arguments[0].codigo) {  // código / saída de comando com realce de sintaxe
+    const pre = document.createElement("pre"), code = document.createElement("code");
+    code.className = "language-" + (arguments[0].linguagem || "plaintext"); code.textContent = arguments[0].codigo;
+    pre.append(code); c.append(pre);
+    try { window.hljs?.highlightElement(code); } catch {}
+    if (arguments[0].saida != null) {
+      const sd = document.createElement("pre"); sd.className = "saida" + (arguments[0].erro ? " erro" : ""); sd.textContent = arguments[0].saida; c.append(sd);
+    }
+  }
+  // informação rápida (cotação, lembrete, aviso) some sozinha no tempo de ler; foto, lista e link ficam até ele fechar
+  const palavras = `${titulo} ${destaque} ${texto} ${linhas.join(" ")}`.split(/\s+/).length;
+  const rapido = arguments[0].rapido ?? (!imagens.length && !links.length && !arguments[0].codigo && linhas.length <= 3 && texto.length <= 220);
+  if (arguments[0].alerta) c.classList.add("alerta");
+  if (rapido) {
+    const segundos = Math.max(12, Math.round(palavras / 3)) + (arguments[0].alerta ? 8 : 0);
+    const barra = document.createElement("div"); barra.className = "some"; barra.style.animationDuration = segundos + "s";
+    c.append(barra);
+    setTimeout(() => { if (c.isConnected) remover([c.dataset.id || (c.dataset.id = "tmp" + Math.random())]); }, segundos * 1000);
+  }
+  document.body.classList.remove("lugar", "silhueta");  // pop-up comum: o globo vai pro canto
+  lista.prepend(c);
+  podar();
+  atualizarEstado();
+  sons.popup();
+}
+
+// só os pop-ups de agora (4); os fixados (📌) não saem
+function podar() {
+  const soltos = [...lista.children].filter((el) => !el.classList.contains("fixo"));
+  while (soltos.length > MAXIMO) soltos.pop().remove();
+}
+
+function remover(ids) {
+  let algum = false;
+  for (const id of ids) {
+    if (!id) continue;
+    if ($("street").dataset.id === id) { fecharStreet(); algum = true; continue; }
+    for (const el of document.querySelectorAll(`[data-id="${id}"]`)) {
+      algum = true;
+      el.style.transition = "opacity .3s, transform .3s"; el.style.opacity = "0"; el.style.transform = "scale(.96)";
+      setTimeout(() => {
+        const eraDoLugar = !!el.closest("#sobre-globo");
+        el.remove();
+        if (eraDoLugar) voltarAGirar(); else atualizarEstado();
+      }, 320);
+    }
+  }
+  if (algum) sons.fecha();
+}
+
+// ------------------------------------------------------------ tempo real: o servidor empurra tudo
+const fonte = new EventSource("/api/extensao/eventos");
+fonte.onmessage = (m) => {
+  const e = JSON.parse(m.data);
+  if (e.cartao) cartao(e.cartao);
+  if (e.globo) irPara(e.globo);
+  if (e.globo_opcoes) marcarOpcoes(e.globo_opcoes);
+  if ("selecionar" in e) selecionar(e.selecionar);
+  if (e.autenticacao) autenticacao(e.autenticacao);
+  if (e.streetview) abrirStreet(e.streetview);
+  if (e.fechar_street) fecharStreet();
+  if (e.modo) { document.body.classList.toggle("caverna", e.modo === "caverna"); pintar(); }
+  if (e.remover) remover(e.remover);
+  if (e.fechar) window.close();
+};
+
+// ------------------------------------------------------------ Street View
+function abrirStreet({ url, nome, id, girar }) {
+  clearTimeout(voltaAGirar);
+  $("street-quadro").src = url;
+  if (!girar) {
+    $("street-nome").textContent = (nome || "").toUpperCase();
+    if (id) $("street").dataset.id = id;
+    sons.viagem();
+    setTimeout(() => sons.trava(), 900);
+  } else sons.popup();
+  document.body.classList.add("street");
+}
+function fecharStreet() {
+  if (!document.body.classList.contains("street")) return;
+  document.body.classList.remove("street");
+  $("street-quadro").src = "about:blank";
+  sons.fecha();
+  voltaAGirar = setTimeout(voltarAGirar, 30000);
+}
+
+// ------------------------------------------------------------ trava: rosto (quando precisa) e carregamento do globo
+// Já reconhecido hoje: nada de "autenticando"/"acesso liberado" — mostra "carregando globo e órbita terrestre"
+// com a barra andando pelas etapas reais e só some quando o globo está desenhado.
+let reconhecendoAgora = false;
+const carregamento = (() => {
+  // etapa → [peso, texto]. A barra só chega a 100% com o globo pronto E o acesso liberado.
+  const ETAPAS = { inicio: [8, "INICIANDO SISTEMAS"], continentes: [35, "CARREGANDO MALHA DOS CONTINENTES"],
+                   globo: [30, "RENDERIZANDO O GLOBO"], satelites: [12, "POSICIONANDO SATÉLITES"],
+                   liberado: [15, "SINCRONIZANDO ÓRBITA TERRESTRE"] };
+  const feitas = new Set();
+  let inicio = Date.now(), fim = null;
+  const t = () => $("trava");
+  function desenhar() {
+    const pct = Math.min(100, [...feitas].reduce((s, e) => s + ETAPAS[e][0], 0));
+    t().querySelector(".carga div").style.width = pct + "%";
+    t().querySelector(".pct").textContent = pct + "%";
+    const ultima = [...feitas].pop();
+    if (ultima && !fim && !t().classList.contains("liberado") && !reconhecendoAgora) t().querySelector(".sub").textContent = ETAPAS[ultima][1];
+    if (feitas.has("globo") && feitas.has("liberado") && !fim) {
+      fim = setTimeout(() => {  // mostra o 100% um instante e some
+        t().querySelector(".sub").textContent = "ÓRBITA ESTABELECIDA";
+        t().classList.add("saindo");
+        sons.viagem();
+        setTimeout(() => { document.body.classList.remove("travado"); t().classList.remove("saindo", "carregando"); }, 700);
+      }, Math.max(500, 1400 - (Date.now() - inicio)));  // nunca pisca: fica pelo menos ~1,4 s
+    }
+  }
+  return {
+    mostrar() {
+      if (reconhecendoAgora) return;
+      t().classList.add("carregando");
+      t().querySelector(".titulo").textContent = "CARREGANDO GLOBO E ÓRBITA TERRESTRE";
+      desenhar();
+    },
+    etapa(nome) {
+      if (!ETAPAS[nome]) return;
+      feitas.add(nome);
+      if (nome === "globo") setTimeout(() => { feitas.add("satelites"); desenhar(); }, 350);
+      desenhar();
+    },
+  };
+})();
+carregamento.mostrar();
+carregamento.etapa("inicio");
+
+function autenticacao(estado) {
+  const t = $("trava");
+  t.classList.remove("negado", "liberado");
+  if (estado === "ok") {
+    if (!reconhecendoAgora) { carregamento.etapa("liberado"); return; }
+    reconhecendoAgora = false;
+    t.classList.remove("carregando");
+    t.classList.add("liberado");
+    t.querySelector(".titulo").textContent = "ACESSO LIBERADO";
+    t.querySelector(".sub").textContent = "IDENTIDADE CONFIRMADA";
+    sons.trava();
+    setTimeout(() => { t.classList.remove("liberado"); carregamento.mostrar(); carregamento.etapa("liberado"); }, 1300);
+    return;
+  }
+  reconhecendoAgora = true;
+  t.classList.remove("carregando");
+  document.body.classList.add("travado");
+  if (estado === "negado") {
+    t.classList.add("negado");
+    t.querySelector(".titulo").textContent = "ACESSO NEGADO";
+    t.querySelector(".sub").textContent = "ROSTO NÃO RECONHECIDO";
+    sons.fecha();
+  } else {
+    t.querySelector(".titulo").textContent = estado === "cadastrando" ? "CADASTRANDO" : "AUTENTICANDO";
+    t.querySelector(".sub").textContent = "OLHE PARA A CÂMERA NA TELA PRINCIPAL";
+  }
+}
+
+// ------------------------------------------------------------ mini-painel (PC + pomodoro)
+let pomo = null, pomoLido = 0;
+function medidor(id, valor, texto) {
+  const el = $(id);
+  el.querySelector(".rotulo span:last-child").textContent = texto;
+  el.querySelector(".barra div").style.width = Math.min(100, valor) + "%";
+  el.classList.toggle("alto", valor >= 85);
+}
+async function lerPainel() {
+  try {
+    const p = await (await fetch("/api/painel")).json();
+    // destrava sozinha se o rosto já foi conferido (não depende de um aviso que pode ter se perdido)
+    if (p.autenticado && document.body.classList.contains("travado") && !$("trava").classList.contains("negado")) autenticacao("ok");
+    medidor("m-cpu", p.pc.cpu, `${Math.round(p.pc.cpu)}%`);
+    medidor("m-ram", p.pc.ram, `${p.pc.ram_gb}/${p.pc.ram_total} GB`);
+    const antes = pomo?.fase;
+    pomo = p.pomodoro; pomoLido = Date.now();
+    if (antes && pomo?.fase !== antes) sons.trava();  // trocou de fase
+  } catch {}
+}
+function contarPomodoro() {
+  const el = $("pomodoro");
+  el.classList.toggle("ativo", !!pomo);
+  if (!pomo) return;
+  const resta = Math.max(0, pomo.restante - (pomo.pausado ? 0 : (Date.now() - pomoLido) / 1000));
+  const m = Math.floor(resta / 60), s = Math.floor(resta % 60);
+  el.querySelector(".tempo").textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  el.querySelector(".fase").textContent = (pomo.fase === "foco" ? "FOCO" : "PAUSA") + (pomo.pausado ? " · PAUSADO" : "") +
+    (pomo.ciclos ? ` · ${pomo.ciclos}º CICLO` : "");
+  el.classList.toggle("pausado", !!pomo.pausado);
+}
+setInterval(lerPainel, 2000);
+setInterval(contarPomodoro, 1000);
+lerPainel();
+
+// avisa que está aberta (o HUD para de pôr cartão em volta do núcleo enquanto isso)
+setInterval(() => fetch("/api/extensao/sinal", { method: "POST" }).catch(() => {}), 2000);
+fetch("/api/extensao/sinal", { method: "POST" });
+fetch("/api/status").then((r) => r.json()).then((s) => {
+  document.body.classList.toggle("caverna", s.modo === "caverna"); pintar();
+  if (s.casa) CASA = s.casa;
+  if (s.autenticado) autenticacao("ok");  // já conferiu o rosto hoje: carrega o globo e abre (sem "autenticando")
+}).catch(() => {});
+setInterval(() => ($("relogio").textContent = new Date().toLocaleTimeString("pt-BR")), 1000);
+</script>
+<script src="/web/extensao2.js?v=2110e"></script>
+<script src="/web/extensao3.js?v=2110i"></script>
+</body>
+</html>
