@@ -139,6 +139,17 @@ VER_ATUALIZACAO = re.compile(J + r"(?:(?:tem|t[eê]m|h[aá]|existe)\s+(?:alguma\
                              r"(?:verifica|ver|confere|procura)\s+(?:se\s+tem\s+)?(?:as\s+)?atualiza[cç](?:[aã]o|[oõ]es)|"
                              r"(?:voc[eê]|tu)\s+(?:t[aá]|est[aá])\s+atualizado)" + FIM)
 
+AVIAO_INFO = re.compile(
+    J + r"(?:(?:qual|que)\s+(?:[eé]\s+)?(?:o\s+)?avi[aã]o\s+(?:[eé]\s+)?(?:esse|aquele|este|t[aá]\s+(?:passando|sobrevoando|voando)|"
+    r"est[aá]\s+(?:passando|sobrevoando|voando)|passa|que\s+t[aá]\s+(?:passando|sobrevoando))|"
+    r"(?:me\s+)?(?:fala|diz|conta)\s+(?:mais\s+)?(?:desse|daquele|sobre\s+esse)\s+avi[aã]o|"
+    r"(?:de\s+)?onde\s+(?:vem|veio)\s+(?:esse|aquele)\s+avi[aã]o|pra\s+onde\s+vai\s+(?:esse|aquele)\s+avi[aã]o)"
+    r"(?:\s+(?:aqui|em\s+cima(?:\s+de\s+mim|\s+da\s+minha\s+casa)?|agora|perto|sobre\s+(?:a\s+|o\s+)?(?P<onde>.+?)))?" + FIM)
+ESPECIFICAR_AVIOES = re.compile(
+    J + r"(?:especifica|especificar|detalha|detalhar|identifica|identificar|lista|listar|me\s+(?:fala|diz|conta)\s+(?:d?os|quais\s+s[aã]o\s+os)|"
+    r"quais\s+(?:s[aã]o\s+)?(?:os\s+)?avi[oõ]es(?:\s+(?:que\s+)?(?:est[aã]o|t[aã]o)\s+(?:no\s+ar|voando|passando|sobrevoando)))"
+    r"(?:\s+(?:os|esses|aqueles))?(?:\s+avi[oõ]es)?(?:\s+(?:da\s+tela|no\s+globo|aqui|em\s+cima|perto|sobre\s+(?:a\s+|o\s+)?(?P<onde>.+?)))?" + FIM)
+
 RUIDO_INICIAL = re.compile(r"^(?:jarvis[ ,]*)?(?:ent[aã]o|a[ií]|agora|e|ah|bom|n[aã]o)[ ,]+(?=(?:me\s+)?(?:mostra|liga|ativa|desativa|desliga|conta|abre|passa|traz))")
 
 DESFAZER = re.compile(J + r"(?:desfaz|desfazer|desfa[cç]a|volta\s+atr[aá]s|reverte|cancela)\s*(?:isso|o\s+que\s+(?:voc[eê]|tu)\s+fez|"
@@ -174,6 +185,12 @@ def entender(texto):
         return ("olho", "ligar")
     if LIMPAR_CAMADAS.match(t):
         return ("olho", "desligar")
+    m = AVIAO_INFO.match(t)
+    if m:
+        return ("aviao_info", (m.group("onde") or "").strip())
+    m = ESPECIFICAR_AVIOES.match(t)
+    if m and re.search(r"avi[oõ]es|quais", t):
+        return ("avioes_lista", (m.group("onde") or "").strip())
     m = CAMADA.match(t) or (CAMADA.match("mostra tambem " + t[2:]) if re.match(r"e\s+(?:os|as|o|a)\s", t) else None)
     if m:
         camada = next(v for k, v in MAPA_CAMADA.items() if _sa(m.group("camada")).startswith(k))

@@ -225,3 +225,116 @@ def avioes_na_caixa(sul, norte, oeste, leste):
             reg["em"], reg["rodando"] = time.time(), False
         threading.Thread(target=volta, daemon=True).start()
     return list(reg["avioes"].values())
+
+
+# ------------------------------------------------------------------ "que avião é esse?": rota, companhia, modelo e foto
+
+MODELOS_AVIAO = {  # código ICAO do tipo → nome falado
+    "A20N": "Airbus A320neo", "A320": "Airbus A320", "A319": "Airbus A319", "A321": "Airbus A321", "A21N": "Airbus A321neo",
+    "A332": "Airbus A330-200", "A333": "Airbus A330-300", "A339": "Airbus A330-900neo", "A359": "Airbus A350-900",
+    "A35K": "Airbus A350-1000", "A388": "Airbus A380", "B737": "Boeing 737-700", "B738": "Boeing 737-800",
+    "B38M": "Boeing 737 MAX 8", "B39M": "Boeing 737 MAX 9", "B744": "Boeing 747-400", "B748": "Boeing 747-8",
+    "B763": "Boeing 767-300", "B772": "Boeing 777-200", "B77W": "Boeing 777-300ER", "B788": "Boeing 787-8",
+    "B789": "Boeing 787-9", "B78X": "Boeing 787-10", "E190": "Embraer E190", "E195": "Embraer E195", "E295": "Embraer E195-E2",
+    "E290": "Embraer E190-E2", "E145": "Embraer ERJ-145", "AT72": "ATR 72", "AT76": "ATR 72-600", "AT45": "ATR 42-500",
+    "C525": "Cessna Citation", "C208": "Cessna Caravan", "PC12": "Pilatus PC-12", "BE20": "Beechcraft King Air",
+}
+_detalhes = {}
+NOMES_DE_HOJE = {"TAM Brazilian Airlines": "LATAM", "LAN Airlines": "LATAM", "Gol Linhas Aéreas Inteligentes": "Gol",
+                 "GOL Linhas Aereas Inteligentes": "Gol", "Azul Brazilian Airlines": "Azul", "Azul Linhas Aereas Brasileiras": "Azul",
+                 "Aerolineas Argentinas": "Aerolíneas Argentinas", "JS Aviation": "JetSMART",
+                 "JetSMART SpA": "JetSMART", "Sky Airline": "SKY Airline"}
+
+
+def detalhes_aviao(hex_="", voo="", reg="", tipo=""):
+    """Tudo que dá pra saber de um avião no ar, de fontes abertas: rota e companhia (adsbdb, pelo número do voo),
+    dono/modelo (adsbdb, pelo código do transponder) e foto (Planespotters pela matrícula/hex; se não tiver, uma foto
+    livre do mesmo modelo no Wikimedia Commons). Guardado por avião."""
+    chave = hex_ or voo or reg
+    if chave in _detalhes:
+        return _detalhes[chave]
+    d = {"hex": hex_, "voo": voo, "matricula": reg, "tipo": tipo, "modelo": MODELOS_AVIAO.get(tipo, tipo)}
+    if voo:
+        try:
+            c = httpx.get(f"https://api.adsbdb.com/v0/callsign/{voo}", headers=CABECALHO, timeout=8).json().get("response")
+            rota = c.get("flightroute") if isinstance(c, dict) else None
+            if rota:
+                o, de = rota.get("origin") or {}, rota.get("destination") or {}
+                d["companhia"] = NOMES_DE_HOJE.get((rota.get("airline") or {}).get("name"), (rota.get("airline") or {}).get("name"))
+                d["origem"] = o.get("municipality") or o.get("name")
+                d["destino"] = de.get("municipality") or de.get("name")
+                d["origem_aeroporto"], d["destino_aeroporto"] = o.get("name"), de.get("name")
+        except Exception:
+            pass
+    if hex_:
+        try:
+            r = httpx.get(f"https://api.adsbdb.com/v0/aircraft/{hex_}", headers=CABECALHO, timeout=8).json().get("response")
+            a = r.get("aircraft") if isinstance(r, dict) else None
+            if a:
+                d["dono"] = a.get("registered_owner")
+                d["matricula"] = d["matricula"] or a.get("registration")
+                d["fabricante"] = a.get("manufacturer")
+                if a.get("url_photo"):  # airport-data bloqueia foto fora do site: só se nada mais tiver foto
+                    d["_reserva"] = a["url_photo"]
+        except Exception:
+            pass
+    for caminho in ([f"reg/{d['matricula']}"] if d.get("matricula") else []) + ([f"hex/{hex_}"] if hex_ else []):
+        if d.get("foto") and "plnspttrs" in d["foto"]:
+            break
+        try:
+            p = httpx.get(f"https://api.planespotters.net/pub/photos/{caminho}", headers=CABECALHO, timeout=8).json()
+            foto = (p.get("photos") or [None])[0]
+            if foto:
+                d["foto"] = (foto.get("thumbnail_large") or foto.get("thumbnail") or {}).get("src")
+                d["credito"] = f"Foto: {foto.get('photographer', '')} · Planespotters.net"
+                d["foto_pagina"] = foto.get("link")
+                break
+        except Exception:
+            pass
+    if not d.get("foto") and d.get("modelo"):  # foto livre do mesmo modelo (e da companhia, se der)
+        try:
+            import pesquisa_painel
+            for termo in ([f"{d['companhia']} {d['modelo']}"] if d.get("companhia") else []) + [d["modelo"]]:
+                fotos = pesquisa_painel.fotos_commons(termo, 3)
+                if fotos:
+                    d["foto"], d["credito"] = fotos[0]["url"], f"Mesmo modelo ({termo}) · {fotos[0]['credito']}"
+                    break
+        except Exception:
+            pass
+    if not d.get("foto") and d.get("_reserva"):
+        d["foto"], d["credito"] = d["_reserva"], "airport-data.com"
+    d.pop("_reserva", None)
+    _detalhes[chave] = d
+    return d
+
+
+def frase_do_aviao(a, d):
+    """Como o Jarvis fala do avião: voo, modelo, companhia, rota, altura e velocidade."""
+    partes = [f"É o voo {a.get('voo') or d.get('voo') or 'sem número'}"]
+    if d.get("modelo"):
+        partes.append(f"um {d['modelo']}")
+    if d.get("companhia"):
+        partes.append(f"da {d['companhia']}")
+    texto = ", ".join(partes)
+    if d.get("origem") and d.get("destino"):
+        texto += f", de {d['origem']} pra {d['destino']}"
+    if a.get("alt_m"):
+        texto += f". Tá a {round(a['alt_m'] / 100) * 100:,} metros".replace(",", ".")
+    if a.get("vel_kmh"):
+        texto += f", a {a['vel_kmh']} km/h"
+    return texto + "."
+
+
+_ultimos = {"lista": [], "centro": None}  # os aviões que a tela pediu por último (pra "que avião é esse?")
+
+
+def lembrar_lista(lista, centro):
+    _ultimos.update(lista=lista, centro=centro)
+
+
+def mais_perto(lat, lng, lista=None):
+    import math
+    lista = lista if lista is not None else _ultimos["lista"]
+    if not lista:
+        return None
+    return min(lista, key=lambda a: (a["lat"] - lat) ** 2 + ((a["lng"] - lng) * math.cos(math.radians(lat))) ** 2)

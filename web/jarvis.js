@@ -88,6 +88,10 @@ function estado(classe, texto) {
 }
 
 // Legenda embaixo do núcleo: só as últimas falas, as antigas apagadas.
+// o nome como o reconhecimento costuma escrever: Jarvis, Járvis, Jarbis, Jarves, Jarvi
+const NOME = /\bj[aá]r(?:v|b)[iíe]s?\b|\bjarvi\b/i;
+let acordadoEm = 0;  // ouviu "Jar…" agora há pouco (antes de terminar a palavra)
+
 function escrever(texto, quem = "jarvis") {
   const conversa = $("conversa");
   [...conversa.children].forEach((f) => f.classList.add("velha"));
@@ -533,7 +537,7 @@ function criarReconhecimento() {
       // ordem de parar dita SOZINHA ("deu!", "chega", "pera") que não esteja na frase que ele mesmo diz
       const ouvido = ultimo[0].transcript.trim().toLowerCase();
       if (respostaAntecipada(ultimo)) return;
-      if (/\bjarvis\b/.test(ouvido)) return interromper();
+      if (NOME.test(ouvido)) return interromper();
       const parar = ouvido.match(/^(?:j[aá] )?(deu|chega|pera|espera(?: a[ií])?|para(?: a[ií]| j[aá]| de falar)?|pode parar|sil[eê]ncio|stop|cala(?: a)?(?: boca)?|fica quiet[oa]|quiet[oa]|xiu|shh+)(?: a[ií]| j[aá]| chefe)?[.!]?$/);
       if (parar && !ultimasFalas.some((f) => f.toLowerCase().includes(parar[1]))) interromper();
       return;
@@ -545,13 +549,20 @@ function criarReconhecimento() {
       return;
     }
     $("texto").value = (juntando.texto + " " + ultimo[0].transcript).trim();
+    // "Jar…" no meio da palavra: já responde (som curto + núcleo aceso), sem esperar ele terminar a frase.
+    // Se ele emendar o pedido, executa direto; se ficar só no nome, aí sim vem o "Pois não, chefe?".
+    if (!conversaAberta() && Date.now() - acordadoEm > 4000 && /\bj[aá]r/i.test(ultimo[0].transcript)) {
+      acordadoEm = Date.now();
+      sons.abrir();
+      estado("ouvindo", "Pode falar");
+    }
     clearTimeout(juntando.timer);
     if (ultimo.isFinal) {
       // cada pausa dele vira um pedaço; junta tudo e só age depois de um silêncio
       juntando.texto = (juntando.texto + " " + ultimo[0].transcript).trim();
       juntando.alternativas = [...ultimo].slice(1).map((a) => a.transcript.trim());
     }
-    if (juntando.texto) juntando.timer = setTimeout(fimDaFala, 750);
+    if (juntando.texto) juntando.timer = setTimeout(fimDaFala, 1000);  // 1 s de silêncio = acabou (pausa menor não corta)
   };
   // o reconhecimento fica ligado o tempo todo (também enquanto ele fala, para ouvir o "Jarvis" de interrupção)
   rec.onstart = () => { ligado = true; vivoEm = Date.now(); };
@@ -675,8 +686,8 @@ function fimDaFala() {
   if (!dito || ocupado) return;
   if (!conversaAberta() && $("autorizacao").hidden && Date.now() - interrompidoEm >= 8000) {
     // em silêncio fazia tempo: sem "Jarvis" na frase, não é com ele
-    if (!/\bjarvis\b/i.test(dito)) return;
-    dito = dito.split(/\bjarvis\b/i).pop().replace(/^[\s,.!?]+/, "");
+    if (!NOME.test(dito)) return;
+    dito = dito.split(NOME).pop().replace(/^[\s,.!?]+/, "");
     ultimaTroca = Date.now();
     if (!dito) {
       // só chamou: responde e fica escutando direto
@@ -691,8 +702,8 @@ function fimDaFala() {
   ultimaTroca = Date.now();
   if (Date.now() - interrompidoEm < 8000) {
     // a frase da interrupção pode ter pego o fim da fala dele: vale só o que vem depois de "Jarvis"
-    const depois = dito.split(/\bjarvis\b/i).pop().replace(/^[\s,.!]+/, "");
-    if (/\bjarvis\b/i.test(dito)) dito = depois;
+    const depois = dito.split(NOME).pop().replace(/^[\s,.!]+/, "");
+    if (NOME.test(dito)) dito = depois;
     if (!dito || /^(j[aá] )?(para|pare|chega|deu|espera|pera|calma|cala|quiet|xiu|shh|sil[eê]ncio|stop|ok|t[aá] bom|beleza|pode parar)/i.test(dito)) return;
   }
   if (!$("autorizacao").hidden) {

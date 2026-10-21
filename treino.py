@@ -499,6 +499,10 @@ FRASES = [
     ("bota Evidências do Chitãozinho e Xororó", "tocar evidências do chitãozinho"),
     ("toca um pagode gospel", "tocar pagode gospel"),
     ("oculta os aviões", "interno camada ('avioes', False"),
+    ("que avião é esse", "interno aviao_info"),
+    ("qual avião tá passando aqui", "interno aviao_info"),
+    ("especifica os aviões", "interno avioes_lista"),
+    ("quais aviões estão sobrevoando", "interno avioes_lista"),
     ("mostra a segunda visão da terra", "interno modo_globo satelite"),
     ("mostra os aviões sobrevoando a Argentina", "interno camada ('avioes', True, 'Argentina'"),
 ]

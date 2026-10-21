@@ -237,6 +237,8 @@
     if (!el) {
       el = document.createElement("div"); el.className = "aviao"; el.innerHTML = AVIAO_SVG + `<span></span>`;
       el.title = ""; elAviao.set(a.id, el);
+      el.style.cursor = "pointer";
+      el.onclick = (ev) => { ev.stopPropagation(); const atual = avioes.find((x) => x.id === a.id) || a; window.clicarAviao && window.clicarAviao(atual); };
     }
     el.querySelector("svg").style.transform = `rotate(${a.rumo}deg)`;
     el.querySelector("span").textContent = a.voo || "";

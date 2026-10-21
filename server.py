@@ -1961,6 +1961,46 @@ async def abrir_noticia(sessao, n=None, no_navegador=False):
     yield {"fim": True}
 
 
+async def falar_dos_avioes(sessao, tipo, onde=""):
+    """"Que avião é esse?" (o mais perto de você / do que está selecionado) ou "especifica os aviões" (os 5 mais perto)."""
+    yield {"trecho": falas.escolher(["Deixa eu identificar, chefe.", "Puxando os dados do transponder.", "Um instante, consultando o radar."]) + " ",
+           "falar_ja": True}
+    centro = None
+    if onde:
+        area = await asyncio.to_thread(area_falada, onde)
+        if area:
+            centro = (area["lat"], area["lng"])
+    if not centro and selecao_do_globo.get("lat") is not None and time.time() - selecao_do_globo.get("quando", 0) < 1800:
+        centro = (selecao_do_globo["lat"], selecao_do_globo["lng"])
+    centro = centro or (lugares.CASA["lat"], lugares.CASA["lng"])
+    lista = olho._ultimos["lista"]
+    if not lista or onde:
+        lista = await asyncio.to_thread(olho.avioes, *centro)
+    if not lista:
+        yield {"trecho": "Não tem avião no radar por aqui agora, chefe."}
+        yield {"fim": True}
+        return
+    import math
+    perto = sorted(lista, key=lambda a: (a["lat"] - centro[0]) ** 2 + ((a["lng"] - centro[1]) * math.cos(math.radians(centro[0]))) ** 2)
+    escolhidos = perto[:1] if tipo == "aviao_info" else perto[:5]
+    detalhes = await asyncio.gather(*[asyncio.to_thread(olho.detalhes_aviao, a["id"], a["voo"], "", a["modelo"]) for a in escolhidos])
+    if not extensao.aberta():
+        await asyncio.to_thread(extensao.abrir, CONFIG["porta"])
+    if tipo == "aviao_info":
+        a, d = escolhidos[0], detalhes[0]
+        extensao.publicar({"aviao": {**a, **d, "frase": olho.frase_do_aviao(a, d)}})
+        yield {"trecho": olho.frase_do_aviao(a, d)}
+    else:
+        extensao.publicar_cartao({"titulo": "Aviões perto", "destaque": f"{len(lista)} no radar",
+                                  "imagens": [d["foto"] for d in detalhes if d.get("foto")][:4],
+                                  "linhas": [olho.frase_do_aviao(a, d).removeprefix("É o ") for a, d in zip(escolhidos, detalhes)],
+                                  "rapido": False}, "outra")
+        resumo = "; ".join(f"{a['voo'] or 'sem número'}{(' da ' + d['companhia']) if d.get('companhia') else ''}"
+                           f"{(' pra ' + d['destino']) if d.get('destino') else ''}" for a, d in zip(escolhidos[:3], detalhes[:3]))
+        yield {"trecho": f"Tem {len(lista)} no radar. Os mais perto: {resumo}. Os detalhes tão na tela."}
+    yield {"fim": True}
+
+
 async def pedido_interno(sid, sessao, tipo, valor):
     """Globo, mapa, painéis e Olho de Deus: tudo dentro dele, na hora."""
     if tipo in ("abrir_globo", "olho", "camada", "lugar") and not extensao.aberta():
@@ -2002,6 +2042,8 @@ async def pedido_interno(sid, sessao, tipo, valor):
         sessao["pendente"] = {"atualizacao": True, "nome": "atualizar o Jarvis", "args": {"novidades": lista},
                               "fala": f"Tem {r['novas']} novidade{'s' if r['novas'] > 1 else ''}: {lista}. Atualizo agora? Eu reinicio sozinho."}
         return pedir_confirmacao(sessao["pendente"])
+    if tipo in ("aviao_info", "avioes_lista"):
+        return falar_dos_avioes(sessao, tipo, valor)
     if tipo == "modo_globo":
         extensao.publicar({"modo_globo": valor})
         return responder_ja({"satelite": "Terra de verdade no globo, chefe, sem nuvens, dá pra chegar até a rua. Gira e dá zoom com o mouse.",
@@ -3314,10 +3356,14 @@ async def api_foto_local(lat: float, lng: float, nome: str = ""):
 async def api_olho(camada: str, lat: float | None = None, lng: float | None = None, caixa: str = ""):
     if camada == "avioes" and caixa:
         s_, n_, o_, l_ = (float(x) for x in caixa.split(","))
-        return await asyncio.to_thread(olho.avioes_na_caixa, s_, n_, o_, l_)
+        lista = await asyncio.to_thread(olho.avioes_na_caixa, s_, n_, o_, l_)
+        olho.lembrar_lista(lista, ((s_ + n_) / 2, (o_ + l_) / 2))  # pra "que avião é esse?"
+        return lista
     if camada == "avioes":
-        return await asyncio.to_thread(olho.avioes, lat if lat is not None else lugares.CASA["lat"],
-                                       lng if lng is not None else lugares.CASA["lng"])
+        la, ln = (lat if lat is not None else lugares.CASA["lat"]), (lng if lng is not None else lugares.CASA["lng"])
+        lista = await asyncio.to_thread(olho.avioes, la, ln)
+        olho.lembrar_lista(lista, (la, ln))
+        return lista
     if camada == "satelites":
         return await asyncio.to_thread(olho.satelites)
     if camada == "terremotos":
@@ -3327,6 +3373,15 @@ async def api_olho(camada: str, lat: float | None = None, lng: float | None = No
     if camada == "noticias":
         return await asyncio.to_thread(olho.manchetes)
     raise HTTPException(404, "camada desconhecida")
+
+
+@app.get("/api/aviao")
+async def api_aviao(hex: str = "", voo: str = "", reg: str = "", tipo: str = "", lat: float | None = None, lng: float | None = None,
+                    alt_m: float = 0, vel_kmh: float = 0):
+    """Clique num avião do globo: quem é, de onde vem, pra onde vai, e a foto."""
+    d = await asyncio.to_thread(olho.detalhes_aviao, hex, voo.strip(), reg, tipo)
+    a = {"voo": voo.strip(), "alt_m": alt_m, "vel_kmh": vel_kmh}
+    return {**d, "frase": olho.frase_do_aviao(a, d)}
 
 
 class Destaque(BaseModel):

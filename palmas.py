@@ -153,7 +153,7 @@ def ouvir_o_nome():
 # ------------------------------------------------------------------ segundo plano: pedido sem abrir a tela
 
 FALA_MINIMA = 0.02
-SILENCIO_PARA_ACABAR = 45  # blocos de 20 ms (0,9 s)
+SILENCIO_PARA_ACABAR = 70  # blocos de 20 ms (1,4 s): dá pra respirar no meio da frase sem ele cortar
 
 
 def esvaziar_fila():
@@ -164,7 +164,7 @@ def esvaziar_fila():
             break
 
 
-def gravar_pedido(inicio=(), espera_fala=4.0, maximo=12.0):
+def gravar_pedido(inicio=(), espera_fala=4.0, maximo=20.0):
     """Junta o áudio até ele parar de falar. Devolve bytes PCM 16 bits, ou None se ele não falou nada."""
     blocos = list(inicio)
     falou = any(np.abs(np.frombuffer(b, np.int16)).max() / 32767 > FALA_MINIMA * 2 for b in blocos[-25:])
@@ -196,7 +196,7 @@ def gravar_depois_do_nome(inicio):
     comeco = time.time()
     ate = comeco + 2.2
     falou_depois, silencio = False, 0
-    fim = comeco + 12.0
+    fim = comeco + 20.0
     while time.time() < fim:
         try:
             bloco = audio_para_voz.get(timeout=0.5)
@@ -384,7 +384,7 @@ def segundo_plano(inicio):
         # só chamou e ficou quieto: aí sim se apresenta e espera; se continuar quieto, volta pro stand-by
         interrompido = falar(falas.escolher(falas.CHAMADO))
         esvaziar_fila()
-        pcm = gravar_pedido(inicio=interrompido or (), espera_fala=6.0)
+        pcm = gravar_pedido(inicio=interrompido or (), espera_fala=15.0)
         if not pcm:
             print("chamaram e não pediram nada: voltando pro stand-by")
             bip_de_saida()
@@ -415,7 +415,7 @@ def segundo_plano(inicio):
                 return  # barulho, ou nem era com ele
             interrompido = falar(falas.escolher(falas.CHAMADO))  # disse só "Jarvis": responde e escuta o pedido
             esvaziar_fila()
-            pcm = gravar_pedido(inicio=interrompido or (), espera_fala=6.0)
+            pcm = gravar_pedido(inicio=interrompido or (), espera_fala=15.0)
             if not pcm:
                 bip_de_saida()
                 return

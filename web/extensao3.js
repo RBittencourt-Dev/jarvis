@@ -310,6 +310,35 @@
 
   window.globoNormal = globoNormal;
 
+  // ------------------------------------------------------------ "que avião é esse?" / clique no avião
+  function cartaoDoAviao(a) {
+    const caixa = $("sobre-globo");
+    caixa.innerHTML = "";
+    const c = document.createElement("article"); c.className = "cartao"; c.dataset.id = "av" + (a.hex || a.id || "");
+    if (a.foto) {
+      const img = document.createElement("img"); img.src = a.foto; img.alt = a.modelo || "avião"; img.style.cssText = "width:100%;height:260px;object-fit:cover;display:block";
+      img.onerror = () => img.remove(); c.append(img);
+    }
+    const leg = document.createElement("div"); leg.className = "legenda";
+    const h = document.createElement("h3"); h.textContent = `VOO ${a.voo || "—"}${a.companhia ? " · " + a.companhia.toUpperCase() : ""}`;
+    const d = document.createElement("div"); d.className = "destaque"; d.textContent = a.origem && a.destino ? `${a.origem} → ${a.destino}` : (a.modelo || "Avião");
+    const t = document.createElement("p"); t.className = "texto";
+    t.textContent = [a.modelo, a.matricula, a.alt_m ? `${Math.round(a.alt_m / 100) * 100} m` : "", a.vel_kmh ? `${a.vel_kmh} km/h` : ""].filter(Boolean).join(" · ");
+    const cr = document.createElement("p"); cr.style.cssText = "margin:6px 0 0;font:10px Consolas,monospace;color:var(--apagado)"; cr.textContent = a.credito || "";
+    const fecha = Object.assign(document.createElement("button"), { className: "pp-botao", textContent: "✕" });
+    fecha.onclick = () => { caixa.innerHTML = ""; document.body.classList.remove("tem-unidade"); sons.fecha(); };
+    leg.append(h, d, t, cr, fecha); c.append(leg); caixa.append(c);
+    document.body.classList.add("lugar", "tem-unidade");
+    if (a.lat != null) globo.pointOfView({ lat: a.lat, lng: a.lng, altitude: Math.max(0.12, Math.min(0.35, globo.pointOfView().altitude)) }, 1000);
+    sons.trava();
+  }
+  window.cartaoDoAviao = cartaoDoAviao;
+  window.clicarAviao = async (a) => {
+    cartaoDoAviao({ ...a, modelo: a.modelo, voo: a.voo });
+    const q = new URLSearchParams({ hex: a.id || "", voo: a.voo || "", tipo: a.modelo || "", alt_m: a.alt_m || 0, vel_kmh: a.vel_kmh || 0 });
+    try { const d = await (await fetch("/api/aviao?" + q)).json(); cartaoDoAviao({ ...a, ...d }); } catch {}
+  };
+
   // ------------------------------------------------------------ eventos
   fonte.addEventListener("message", (m) => {
     const e = JSON.parse(m.data);
@@ -322,5 +351,6 @@
     if (e.fechar_painel && fecharPagina()) return;
     if (e.remover && paginaId && e.remover.includes(paginaId)) fecharPagina();
     if (e.limpar_selecao) limparSelecao();
+    if (e.aviao) cartaoDoAviao(e.aviao);
   });
 })();
