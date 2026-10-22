@@ -400,9 +400,14 @@ function ajudaDoMic(erro) {
 function mostrarPermissao(erro) {
   const ajuda = $("perm-ajuda");
   ajuda.hidden = !erro;
-  if (erro) ajuda.textContent = ajudaDoMic(erro);
+  if (erro) ajuda.textContent = ajudaDoMic(erro) + "\n\n(código: " + erro + ")";
   $("ativar-mic").textContent = erro ? "Tentar de novo" : "Ativar microfone";
   $("permissao").hidden = false;
+}
+function registrar(o) {
+  estadoDoMic().then((st) => fetch("/api/celular/log", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...o, permissao: st, tela_inicio: NA_TELA_DE_INICIO, seguro: isSecureContext, temMic: !!navigator.mediaDevices?.getUserMedia,
+                           ua: navigator.userAgent }) }).catch(() => {}));
 }
 async function pedirMic() {
   if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error("sem microfone"), { name: "SemSuporte" });
@@ -418,6 +423,7 @@ $("ativar-mic").onclick = async () => {
     escrever("Microfone ativado. Toque no núcleo e fale.", "ele");
   } catch (e) {
     lembrar(false);
+    registrar({ onde: "botao", erro: e.name, msg: e.message });
     mostrarPermissao(e.name || "NotAllowedError");
   }
 };
@@ -425,6 +431,7 @@ $("perm-depois").onclick = () => { $("permissao").hidden = true; };
 (async () => {
   const st = await estadoDoMic();
   if (st === "granted") return lembrar(true);  // já liberado: o aviso não aparece
+  registrar({ onde: "abriu", erro: null });
   if (st === "denied") return mostrarPermissao("NotAllowedError");
   if (st === null && lembrado()) return;  // sem como perguntar (Safari antigo) e já funcionou antes
   if (DENTRO_DE_APP || !navigator.mediaDevices?.getUserMedia) return mostrarPermissao("SemSuporte");
@@ -440,6 +447,7 @@ async function comecar() {
     lembrar(true);
   } catch (e) {
     lembrar(false);
+    registrar({ onde: "nucleo", erro: e.name, msg: e.message });
     return mostrarPermissao(e.name || "NotAllowedError");
   }
   const tipo = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || "";

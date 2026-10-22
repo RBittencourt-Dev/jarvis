@@ -3685,6 +3685,18 @@ async def celular_atalho(request: Request):
     return Response(fala[:1500], media_type="text/plain; charset=utf-8")
 
 
+@app.post("/api/celular/log")
+async def celular_log(request: Request):
+    """Diagnóstico da tela do celular (erro do microfone etc.): vai pra celular-log.txt pra eu ler daqui."""
+    try:
+        d = await request.json()
+    except ValueError:
+        d = {}
+    with open(RAIZ / "celular-log.txt", "a", encoding="utf-8") as f:
+        f.write(time.strftime("%d/%m %H:%M:%S ") + json.dumps(d, ensure_ascii=False)[:2000] + "\n")
+    return {"ok": True}
+
+
 @app.post("/api/celular/ouvir")
 async def celular_ouvir(request: Request):
     """O áudio gravado no celular (m4a no iPhone, webm no Android) → texto, pelo mesmo Whisper do segundo plano."""
