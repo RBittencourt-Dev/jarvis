@@ -34,6 +34,7 @@ import pomodoro
 import sistemas
 import automacoes
 import cerebro
+import avisos_diarios
 import celular
 import planner7
 import claude_ponte
@@ -935,7 +936,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (planner7, celular, falas_programadas, instagram, lembretes, pomodoro, anotacoes, noticias, sistemas)
+RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, lembretes, pomodoro, anotacoes, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
@@ -3293,7 +3294,7 @@ async def abertura(curta: bool = False):
 
 def config_da_abertura():
     """O que entra no resumo do dia DESTE PC (Configurações → Abertura). No colégio: 7planner + avisos; em casa: tudo."""
-    a = CONFIG.get("abertura") or {}
+    a = (json.loads((RAIZ / "config.json").read_text(encoding="utf-8")).get("abertura") or {})  # avisos por voz gravam direto no arquivo
     return {"porthon": a.get("porthon", True), "painel": a.get("painel", True), "planner": a.get("planner", True),
             "avisos": [x for x in a.get("avisos") or [] if isinstance(x, dict) and str(x.get("texto", "")).strip()]}
 

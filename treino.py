@@ -618,6 +618,10 @@ FRASES += [
     # 22/10: falas programadas e Instagram
     ("todo dia às 18h fala hora de ir embora", "falas_programadas criar 18:00"),
     ("me mostra meu celular", "celular holograma"),
+    ("adiciona um aviso diário: conferir os Chromebooks carregando", "avisos_diarios criar Conferir os Chromebooks carregando [0, 1, 2, 3, 4, 5, 6]"),
+    ("quais são os avisos diários", "avisos_diarios listar"),
+    ("o que tem no seven planner amanhã", "planner7 agenda"),
+    ("abre o seven planner", "planner7 abrir"),
     ("como é o meu iphone", "celular holograma"),
     ("quanto de espaço tô usando no celular", "celular espaco"),
     ("tô usando 180 giga no celular", "celular guardar_uso 180.0"),
