@@ -220,7 +220,7 @@
       };
       desenharCofre(dados.cofre);
       const tipo = seletor([["groq", "Chave do Groq (gsk_…)"], ["gemini", "Chave do Gemini (AIza…)"],
-                            ["google_places", "Chave do Google Places (foto das lojas)"], ["outro", "Outro nome…"]], "groq", () => {
+                            ["google_places", "Chave do Google Places (foto das lojas)"], ["windy", "Chave da Windy (câmeras ao vivo)"], ["outro", "Outro nome…"]], "groq", () => {
         outroNome.hidden = tipo.querySelector("select")?.value !== "outro";
       });
       const sel = tipo; const outroNome = h("input", { placeholder: "nome da chave", hidden: true });

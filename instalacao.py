@@ -305,21 +305,39 @@ def _alvo_do_atalho(atalho):
         return ""
 
 
+CHAVE_RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+
+def _comando_de_inicio():
+    return f'"{RAIZ / ".venv" / "Scripts" / "pythonw.exe"}" "{RAIZ / "iniciar.py"}"'
+
+
 def autoinicio(ligar=None):
-    """Só mexe no atalho de inicialização que aponta pra ESTA pasta (outro Jarvis no mesmo PC não é tocado)."""
+    """Ligar junto com o Windows, o mais cedo possível: entrada "Executar" do usuário (roda logo no login, antes da
+    pasta Inicializar), sem o atraso que o Windows põe nos programas de início, e já abrindo a tela.
+    Só mexe no que aponta pra ESTA pasta (outro Jarvis no mesmo PC não é tocado)."""
+    import winreg
     atalho = _atalho_inicio()
-    meu = atalho.exists() and Path(_alvo_do_atalho(atalho) or "x").resolve().parent == RAIZ.resolve()
+    atalho_meu = atalho.exists() and Path(_alvo_do_atalho(atalho) or "x").resolve().parent == RAIZ.resolve()
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, CHAVE_RUN) as k:
+            atual = winreg.QueryValueEx(k, "Jarvis")[0]
+    except OSError:
+        atual = ""
+    meu = str(RAIZ).lower() in atual.lower()
     if ligar is None:
-        return meu
-    if not ligar:
-        if meu:
-            atalho.unlink(missing_ok=True)
-        return False
-    alvo = RAIZ / "ligar-jarvis.bat"
-    cmd = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{atalho}');$s.TargetPath='{alvo}';"
-           f"$s.WorkingDirectory='{RAIZ}';$s.WindowStyle=7;$s.IconLocation='{RAIZ / 'web' / 'marca' / 'jarvis.ico'}';$s.Save()")
-    subprocess.run(["powershell", "-NoProfile", "-Command", cmd], timeout=20, creationflags=SEM_JANELA)
-    return atalho.exists()
+        return meu or atalho_meu
+    if atalho_meu:
+        atalho.unlink(missing_ok=True)  # o jeito antigo (pasta Inicializar, mais lento): sai pra não ligar duas vezes
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, CHAVE_RUN, 0, winreg.KEY_SET_VALUE) as k:
+        if ligar:
+            winreg.SetValueEx(k, "Jarvis", 0, winreg.REG_SZ, _comando_de_inicio())
+        elif meu:
+            winreg.DeleteValue(k, "Jarvis")
+    if ligar:  # tira o atraso de ~10 s dos programas de início (só deste usuário)
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize") as k:
+            winreg.SetValueEx(k, "StartupDelayInMSec", 0, winreg.REG_DWORD, 0)
+    return bool(ligar)
 
 
 # ------------------------------------------------------------------ atualizações (GitHub)

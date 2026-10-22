@@ -62,6 +62,11 @@ const sons = (() => {
     pensando() { [880, 1320, 1760].forEach((f, i) => tom(caverna() ? f / 2 : f, i * 0.07, 0.06, 0.035)); },
     cartao() { tom(caverna() ? 900 : 1600, 0, 0.05, 0.04, "triangle"); tom(caverna() ? 1350 : 2400, 0.05, 0.05, 0.03, "triangle"); },
     abrir() { tom(caverna() ? 200 : 420, 0, 0.18, 0.045, "sawtooth", caverna() ? 600 : 1300); },
+    // executando uma ferramenta: rajada de "dados" subindo; terminou: dois tons de confirmação; falhou: grave descendo
+    passo() { for (let i = 0; i < 6; i++) tom(1400 + Math.random() * 1600, i * 0.045, 0.03, 0.014, "square"); tom(220, 0, 0.25, 0.02, "sawtooth", 440); },
+    feito() { tom(880, 0, 0.08, 0.035, "sine"); tom(1320, 0.08, 0.14, 0.035, "sine"); },
+    falhou() { tom(330, 0, 0.3, 0.05, "sawtooth", 110); },
+    palco(ligar) { ligar ? (tom(90, 0, 0.6, 0.05, "sawtooth", 300), tom(1200, 0.2, 0.25, 0.02, "sine", 2400)) : tom(900, 0, 0.35, 0.03, "sine", 200); },
     modo(entrando) {
       if (entrando) { tom(110, 0, 0.6, 0.08, "sawtooth", 55); tom(220, 0.05, 0.5, 0.04, "square", 110); }
       else { tom(300, 0, 0.35, 0.05, "sine", 900); }
@@ -109,7 +114,7 @@ const cartoes = []; // { el, vaga }
 
 function mostrarCartao({ id, onde, titulo, destaque, linhas = [], aguardando, texto, imagens = [], links = [], rapido, alerta }) {
   // "na outra tela" vai pra extensão; "aqui" fica no HUD; sem dizer, a extensão aberta leva
-  if (onde === "outra" || (onde !== "aqui" && extensaoAberta && !aguardando)) { sons.cartao(); return; }
+  if (onde === "outra" || onde === "palco" || (onde !== "aqui" && extensaoAberta && !aguardando)) { sons.cartao(); return; }
   const repetido = id && cartoes.find((x) => x.el.dataset.id === id);
   if (repetido) { cartoes.splice(cartoes.indexOf(repetido), 1); repetido.el.remove(); }
   const vaga = proximaVaga++ % VAGAS;
@@ -164,8 +169,46 @@ function mostrarCartao({ id, onde, titulo, destaque, linhas = [], aguardando, te
     }, (Math.max(12, Math.round(palavras / 3)) + (alerta ? 8 : 0)) * 1000);
   }
   cartoes.push({ el: c, vaga });
+  c.__dado = arguments[0];
+  arrastavelHud(c);
   desenharLigacoes(c);
 }
+
+// cartão em volta do núcleo arrastado até a borda da tela: vai pra tela lateral
+function arrastavelHud(el) {
+  el.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0 || ev.target.closest("button, a, input, img, pre")) return;
+    const x0 = ev.clientX, y0 = ev.clientY;
+    let ativo = false;
+    const mover = (e) => {
+      const dx = e.clientX - x0, dy = e.clientY - y0;
+      if (!ativo && Math.hypot(dx, dy) < 8) return;
+      ativo = true; el.classList.add("arrastando");
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      el.classList.toggle("vai-sair", e.clientX < 40 || e.clientY < 40 || e.clientX > innerWidth - 40 || e.clientY > innerHeight - 40);
+    };
+    const soltar = async () => {
+      removeEventListener("pointermove", mover); removeEventListener("pointerup", soltar);
+      if (!ativo) return;
+      const sair = el.classList.contains("vai-sair");
+      el.classList.remove("arrastando", "vai-sair");
+      el.style.transform = "";
+      if (!sair) return;
+      const r = await (await fetch("/api/mover_item", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: el.dataset.id || "", de: "hud", dado: el.__dado || null }) })).json().catch(() => ({}));
+      if (r.ok) { const achado = cartoes.find((x) => x.el === el); if (achado) cartoes.splice(cartoes.indexOf(achado), 1); el.remove(); desenharLigacoes(null); sons.abrir(); }
+    };
+    addEventListener("pointermove", mover); addEventListener("pointerup", soltar);
+  });
+}
+
+// o palco (centro) avisa quando tem algo: o núcleo encolhe pro canto e os cartões vão pra direita
+addEventListener("message", (e) => {
+  if (e.origin !== location.origin || typeof e.data?.palco !== "boolean") return;
+  if (document.body.classList.contains("palco-ativo") !== e.data.palco) sons.palco(e.data.palco);
+  document.body.classList.toggle("palco-ativo", e.data.palco);
+  setTimeout(() => desenharLigacoes(null), 650);
+});
 
 // página / modo leitura na tela principal ("traz a notícia pra cá")
 (() => {
@@ -435,7 +478,11 @@ async function chamar(url, corpo) {
           if (minha) minha.textContent = e.entendido;
         }
         if (e.saida) mostrarCartao({ titulo: "Resultado", destaque: "Feito", linhas: e.saida.split("\n").slice(0, 8) });
-        if (e.passo) { passoNaLinhaDoTempo(e.passo); if (e.passo.estado === "rodando") estado("agindo", "Agindo"); }
+        if (e.passo) {
+          passoNaLinhaDoTempo(e.passo);
+          if (e.passo.estado === "rodando") { estado("agindo", "Agindo"); sons.passo(); }
+          else if (e.passo.estado === "ok") sons.feito(); else if (e.passo.estado === "erro") sons.falhou();
+        }
         if (e.leitura) {
           // pesquisa: o que já veio de texto sai antes; depois cada frase acende o seu tópico no painel
           falarELegendar(texto.slice(falado)); falado = texto.length;
@@ -537,9 +584,16 @@ function criarReconhecimento() {
       // ordem de parar dita SOZINHA ("deu!", "chega", "pera") que não esteja na frase que ele mesmo diz
       const ouvido = ultimo[0].transcript.trim().toLowerCase();
       if (respostaAntecipada(ultimo)) return;
-      if (NOME.test(ouvido)) return interromper();
+      if (NOME.test(ouvido)) {
+        // "Jarvis, para!" / "para, Jarvis": cala e cancela a execução
+        if (/\b(para|pare|chega|deu|cancela|esquece|n[aã]o)\b/i.test(ouvido)) fetch("/api/parar", { method: "POST" }).catch(() => {});
+        return interromper();
+      }
       const parar = ouvido.match(/^(?:j[aá] )?(deu|chega|pera|espera(?: a[ií])?|para(?: a[ií]| j[aá]| de falar)?|pode parar|sil[eê]ncio|stop|cala(?: a)?(?: boca)?|fica quiet[oa]|quiet[oa]|xiu|shh+)(?: a[ií]| j[aá]| chefe)?[.!]?$/);
-      if (parar && !ultimasFalas.some((f) => f.toLowerCase().includes(parar[1]))) interromper();
+      if (parar && !ultimasFalas.some((f) => f.toLowerCase().includes(parar[1]))) {
+        interromper();
+        fetch("/api/parar", { method: "POST" }).catch(() => {});  // e o que ele estava EXECUTANDO para também
+      }
       return;
     }
     if (Date.now() < surdoAte || ehEco(ultimo[0].transcript)) return; // o Chrome entregando a voz do próprio Jarvis
@@ -687,7 +741,8 @@ function fimDaFala() {
   if (!conversaAberta() && $("autorizacao").hidden && Date.now() - interrompidoEm >= 8000) {
     // em silêncio fazia tempo: sem "Jarvis" na frase, não é com ele
     if (!NOME.test(dito)) return;
-    dito = dito.split(NOME).pop().replace(/^[\s,.!?]+/, "");
+    // o nome pode vir no começo, no meio ou no fim ("abre o VS Code, Jarvis"): vale a frase toda, sem o nome
+    dito = dito.replace(new RegExp(NOME.source, "gi"), " ").replace(/\s+/g, " ").replace(/^[\s,.!?]+|[\s,.!?]+$/g, "");
     ultimaTroca = Date.now();
     if (!dito) {
       // só chamou: responde e fica escutando direto

@@ -122,7 +122,7 @@ NAO_E_LUGAR = re.compile(r"^(?:chrome|opera|edge|navegador|youtube|spotify|whats
 # "mostra o globo real", "via satélite", "camadas da terra" ↔ "modo holograma"
 SATELITE = re.compile(J + r"(?:(?:me\s+)?(?:mostra|mostrar|liga|ativa|bota|coloca|p[oõ]e|quero\s+ver|abre|deixa|muda\s+pr[oa]|troca\s+pr[oa]|vai\s+pr[oa])\s+)?"
                       r"(?:o\s+|a\s+|as\s+|em\s+)?(?:modo\s+)?(?:globo\s+(?:real|de\s+verdade|via\s+sat[eé]lite|com\s+(?:foto|imagem)\s+de\s+sat[eé]lite)|"
-                      r"terra\s+(?:real|de\s+verdade)|camadas?\s+da\s+terra|(?:foto|imagem|vis[aã]o|vista)\s+(?:real\s+)?(?:de|do|via)\s+sat[eé]lite|"
+                      r"terra\s+(?:real|de\s+verdade)|(?:foto|imagem|vis[aã]o|vista)\s+(?:real\s+)?(?:de|do|via)\s+sat[eé]lite|"
                       r"sat[eé]lite\s+(?:real|ao\s+vivo|em\s+tempo\s+real)|mapa\s+(?:real|de\s+sat[eé]lite)|modo\s+sat[eé]lite|via\s+sat[eé]lite|"
                       # "segunda visão da terra", "outra visão", "a terra com aquelas camadas" (a foto real por cima)
                       r"(?:segunda|outra|nova)\s+vis[aã]o(?:\s+d[ao]\s+(?:terra|globo|planeta|mundo))?|vis[aã]o\s+real(?:\s+d[ao]\s+(?:terra|globo))?|"
@@ -150,6 +150,62 @@ ESPECIFICAR_AVIOES = re.compile(
     r"quais\s+(?:s[aã]o\s+)?(?:os\s+)?avi[oõ]es(?:\s+(?:que\s+)?(?:est[aã]o|t[aã]o)\s+(?:no\s+ar|voando|passando|sobrevoando)))"
     r"(?:\s+(?:os|esses|aqueles))?(?:\s+avi[oõ]es)?(?:\s+(?:da\s+tela|no\s+globo|aqui|em\s+cima|perto|sobre\s+(?:a\s+|o\s+)?(?P<onde>.+?)))?" + FIM)
 
+# Radar de Leads (a extensão): "busca leads de pizzaria em Porto Alegre", "como tá a busca?", "para a busca do radar"
+RADAR_BUSCAR = re.compile(
+    J + r"(?:(?:busca|buscar|procura|procurar|encontra|encontrar|acha|achar|garimpa|varre|varrer|roda|rodar|faz|fazer)\s+"
+    r"(?:(?:uma\s+)?(?:busca|varredura|garimpo)\s+(?:de\s+)?)?(?:(?:novos\s+)?leads?|clientes|contatos)\s+(?:de|do|da|dos|das|pra|para)\s+|"
+    r"(?:roda|rodar|usa|usar|liga|ligar)\s+o\s+radar\s+(?:de|do|da|dos|das|pra|para|em|com)\s+|"
+    r"(?:varre|varrer)\s+o\s+(?:google\s+)?maps\s+(?:atr[aá]s\s+de|procurando)\s+)"
+    r"(?P<o_que>.+?)\s+(?:em|no|na|nos|nas)\s+(?P<onde>.+?)" + FIM)
+RADAR_ESTADO = re.compile(J + r"(?:como\s+(?:t[aá]|est[aá]|anda)\s+a\s+(?:busca|varredura)(?:\s+do\s+radar)?|quantos\s+leads\s+(?:voc[eê]\s+|tu\s+)?(?:achou|"
+                          r"encontrou)|mostra\s+(?:o\s+)?(?:progresso\s+do\s+)?radar(?:\s+aqui|\s+na\s+tela)?|e\s+o\s+radar)" + FIM)
+RADAR_PARAR = re.compile(J + r"(?:para|parar|pare|cancela|cancelar|interrompe)\s+(?:a\s+)?(?:busca|varredura)(?:\s+do\s+radar)?|"
+                         r"(?:para|parar|pare)\s+o\s+radar" + FIM)
+
+# qualquer jeito de pedir uma busca de leads ("busque 10 barbearias", "quero uns 20 leads de dentista", "garimpa
+# pizzarias em Canoas"): o cérebro tira quantidade, nicho e cidade da frase (servidor), e pergunta o que faltar
+RADAR_PEDIDO = re.compile(
+    # verbo de buscar + (leads/clientes/prospects) ou (número + negócio); ou "garimpa/prospecta …"
+    r"^(?:jarvis[ ,]*)?(?:me\s+)?(?:(?:busca|busque|buscar|procura|procure|acha|ache|encontra|encontre|levanta|levante|traz|traga|"
+    r"pega|pegue|quero|consegue|gera|gere|faz|fa[cç]a|roda|rode)\s+(?:(?:uma\s+)?(?:busca|lista|varredura)\s+(?:de\s+)?)?"
+    r"(?:(?:uns|umas|mais|tipo|uma|um)\s+)?(?:\d+\s+)?(?:novos\s+)?(?:leads?|clientes|prospects?|contatos)\b|"
+    r"(?:busca|busque|buscar|procura|procure|acha|ache|encontra|encontre|levanta|levante|traz|traga|pega|pegue|quero|consegue)\s+"
+    r"(?:uns\s+|umas\s+|mais\s+|tipo\s+)?\d+\s+\w+|(?:garimpa|garimpe|garimpar|prospecta|prospecte|prospectar)\b)", re.I)
+NAO_E_RADAR = re.compile(r"\b(?:abre|abrir|abra)\s+o\s+radar\b|\bme\s+fala\s+do\s+lead\b|\blead\s+\w+\s+como\b|\bmarca\s+o\s+lead\b|"
+                         r"\bleads?\s+(?:novos|interessad|que\s+responder)|quantos\s+leads\s+(?:novos|tem\s+no\s+(?:radar|painel|crm))|"
+                         r"\bcrm\b|\breuni|aqui\s+perto|perto\s+de\s+mim|por\s+aqui|no\s+globo|no\s+mapa", re.I)
+
+# hologramas: apresentação 3D de um assunto, as peças do PC com dados ao vivo, e o núcleo neural (a memória dele)
+NAO_E_HOLO = re.compile(r"\b(?:contrato|documento|arquivo|planilha|pdf|texto|e-?mail|projeto|c[oó]digo|site|p[aá]gina|reuni[aã]o|lead)", re.I)
+APRESENTACAO = re.compile(
+    J + r"(?:(?:me\s+)?(?:mostra|mostrar|explica|explicar|apresenta|apresentar|desmonta|desmontar|projeta|projetar|monta|montar)\s+"
+    r"(?:pra\s+mim\s+)?(?P<a>.+?)\s+(?:em\s+3\s*d|em\s+tr[eê]s\s+d|em\s+holograma|num\s+holograma|holograficamente|tridimensional)|"
+    r"(?:faz|fa[cç]a|cria|monta|me\s+faz)\s+(?:uma\s+)?apresenta[cç][aã]o\s+(?:hologr[aá]fica\s+|em\s+3\s*d\s+)?(?:de|do|da|dos|das|sobre)\s+(?P<b>.+?)|"
+    r"(?:me\s+)?(?:mostra|mostrar|explica|explicar|apresenta|desmonta|abre)\s+(?:pra\s+mim\s+)?(?P<c>(?:as\s+|os\s+)?(?:camadas|partes|pe[cç]as|componentes|"
+    r"estrutura|anatomia)\s+(?:d[aeo]s?|de\s+um[a]?|n[ao])\s+.+?|(?:a\s+|o\s+)?(?:terra|planeta|computador|pc)\s+por\s+dentro))" + FIM)
+HARDWARE = re.compile(
+    J + r"(?:(?:me\s+)?(?:mostra|mostrar|abre|exibe|como\s+(?:t[aá]|est[aá])|quant[oa]s?\s+(?:de\s+)?|qua(?:l|is)\s+(?:[eé]\s+|s[aã]o\s+)?|diz|fala|me\s+diz|me\s+fala)\s*"
+    r"(?:(?:o|a|os|as|meu|minha|meus|minhas|do|da|de|todos|todas|tudo|sobre)\s+)*(?:uso\s+(?:d[aoe]\s+)?)?)?(?:holograma\s+d[aoe]\s+)?"
+    r"(?P<peca>(?:todo\s+o\s+|os\s+)?hardwares?|(?:todas\s+as\s+)?pe[cç]as(?=\s*$)|componentes(?=\s*$)|pe[cç]as\s+do\s+(?:meu\s+)?(?:pc|computador)|configura[cç][aã]o\s+do\s+(?:meu\s+)?(?:pc|computador)|"
+    r"specs|especifica[cç][oõ]es\s+do\s+(?:meu\s+)?(?:pc|computador)|meu\s+(?:pc|computador)\s+por\s+dentro|o\s+que\s+tem\s+no\s+meu\s+(?:pc|computador)|"
+    r"mem[oó]ria\s+ram|mem[oó]ria(?=\s|$)|ram|processador|cpu|placa\s+de\s+v[ií]deo|gpu|v[ií]deo|disco|ssd|hd|armazenamento|espa[cç]o\s+(?:no|do)\s+(?:disco|pc|computador))"
+    r"(?:\s+(?:est[aá]|t[aá]|que\s+(?:est[aá]|t[aá]))?\s*(?:sendo\s+)?(?:usad[ao]|em\s+uso|livre|ocupad[ao]))?(?:\s+(?:do|no|deste|desse)\s+(?:meu\s+)?(?:pc|computador))?(?:\s+(?:eu\s+|tu\s+|o\s+pc\s+)?(?:tenho|tem))?" + FIM)
+NEURAL_ABRIR = re.compile(J + r"(?:(?:me\s+)?(?:mostra|mostrar|abre|abrir|exibe|liga|ativa|acessa|acessar|entra\s+n[oa])\s+)(?:o\s+|teu\s+|seu\s+|a\s+)?"
+                          r"(?:n[uú]cleo\s+neural|c[eé]rebro|rede\s+neural|tua\s+mem[oó]ria|sua\s+mem[oó]ria|mem[oó]ria\s+(?:do\s+jarvis|neural))" + FIM)
+NEURAL_ADICIONAR = re.compile(J + r"(?:adiciona|adicionar|grava|gravar|guarda|guardar|salva|salvar|coloca|bota|p[oõ]e)\s+(?:no|na)\s+(?:teu\s+|seu\s+|tua\s+|sua\s+)?"
+                              r"(?:n[uú]cleo(?:\s+neural)?|c[eé]rebro|mem[oó]ria(?:\s+neural)?)\s*(?:que\s+|:\s*|,\s*)?(?P<fato>.+?)" + FIM)
+NEURAL_BUSCAR = re.compile(J + r"(?:(?:acessa|procura|busca|pesquisa)\s+(?:no|na)\s+(?:teu\s+|seu\s+)?(?:n[uú]cleo(?:\s+neural)?|c[eé]rebro|mem[oó]ria)\s+"
+                           r"(?:sobre\s+|por\s+|o\s+que\s+tem\s+(?:sobre|de)\s+)?|o\s+que\s+(?:tem|voc[eê]\s+(?:sabe|tem|guardou)|tu\s+(?:sabe|tem|guardou))\s+(?:no|na)\s+(?:teu\s+|seu\s+|tua\s+|sua\s+)?(?:n[uú]cleo(?:\s+neural)?|c[eé]rebro|mem[oó]ria)\s+"
+                           r"(?:sobre|de)\s+)(?P<termo>.+?)" + FIM)
+FECHAR_HOLO = re.compile(J + r"(?:fecha|fechar|oculta|ocultar|esconde|esconder|tira|desliga|some\s+com|apaga|desativa)\s+(?:o\s+|a\s+|esse\s+|essa\s+)?"
+                         r"(?:n[uú]cleo(?:\s+neural)?|c[eé]rebro|rede\s+neural|holograma|apresenta[cç][aã]o|modelo\s+3\s*d|3\s*d|mem[oó]ria\s+ram|processador|"
+                         r"placa\s+de\s+v[ií]deo|disco)" + FIM)
+
+CAMERAS = re.compile(J + r"(?:(?:me\s+)?(?:mostra|mostrar|liga|ativa|abre|bota|coloca|quero\s+ver|procura|acha)\s+)?(?:as\s+|a\s+|uma\s+)?"
+                     r"(?:c[aâ]meras?|webcams?)(?:\s+(?:ao\s+vivo|online|em\s+tempo\s+real|p[uú]blicas?|abertas?))*"
+                     r"(?:\s+(?:de|do|da|dos|das|em|no|na|nos|nas|sobre|perto\s+d[eoa])\s+(?P<onde>.+?))?" + FIM)
+CAMERAS_DESLIGAR = re.compile(J + r"(?:tira|esconde|oculta|ocultar|desliga|apaga|remove|fecha)\s+(?:as\s+)?(?:c[aâ]meras?|webcams?)" + FIM)
+
 RUIDO_INICIAL = re.compile(r"^(?:jarvis[ ,]*)?(?:ent[aã]o|a[ií]|agora|e|ah|bom|n[aã]o)[ ,]+(?=(?:me\s+)?(?:mostra|liga|ativa|desativa|desliga|conta|abre|passa|traz))")
 
 DESFAZER = re.compile(J + r"(?:desfaz|desfazer|desfa[cç]a|volta\s+atr[aá]s|reverte|cancela)\s*(?:isso|o\s+que\s+(?:voc[eê]|tu)\s+fez|"
@@ -168,6 +224,51 @@ def entender(texto):
         return None
     if GLOBO_NORMAL.match(t):
         return ("globo_normal", None)
+    if CAMERAS_DESLIGAR.match(t):
+        return ("cameras", None)
+    m = CAMERAS.match(t)
+    if m and re.search(r"c[aâ]mera|webcam", t) and not re.search(r"\b(?:do\s+pc|do\s+notebook|minha\s+c[aâ]mera|webcam\s+do\s+pc)\b", t):
+        onde = m.group("onde")
+        if onde:
+            i = _sa(texto).find(onde)
+            onde = texto[i:i + len(onde)] if i >= 0 else onde
+        return ("cameras", onde or "")
+    if FECHAR_HOLO.match(t):
+        return ("fechar_holo", None)
+    if NEURAL_ABRIR.match(t):
+        return ("neural", None)
+    m = NEURAL_ADICIONAR.match(t)
+    if m:
+        i = _sa(texto).find(m.group("fato"))
+        return ("neural_adicionar", texto[i:i + len(m.group("fato"))] if i >= 0 else m.group("fato"))
+    m = NEURAL_BUSCAR.match(t)
+    if m and "noticia" not in t:
+        return ("neural_buscar", m.group("termo"))
+    if re.search(r"\b(?:meu|minha|deste|desse)\s+(?:pc|computador|m[aá]quina)", t) and re.search(r"pe[cç]as|hardware|componentes|por\s+dentro|configura|spec", t):
+        return ("hardware", "tudo")
+    m = HARDWARE.match(t)
+    if m and not re.match(J + r"(?:mostra|abre)\s+(?:o\s+|a\s+)?(?:disco|hd|ssd)\s+\w", t):
+        pe = m.group("peca")
+        return ("hardware", "tudo" if re.search(r"hardware|pe[cç]as|componentes|configura|spec|especifica|por\s+dentro|o\s+que\s+tem", pe) else
+                "ram" if re.match(r"mem|ram", pe) else "cpu" if re.match(r"proc|cpu", pe) else
+                "gpu" if re.match(r"placa|gpu|v", pe) else "disco")
+    m = APRESENTACAO.match(t)
+    if m and not NAO_E_HOLO.search(t):
+        a = (m.group("a") or m.group("b") or m.group("c") or "").strip()
+        i = _sa(texto).find(a)
+        return ("apresentacao", texto[i:i + len(a)] if i >= 0 else a)
+    m = RADAR_BUSCAR.match(t)
+    if m:
+        def original(x):
+            i = _sa(texto).find(x)
+            return texto[i:i + len(x)] if i >= 0 else x
+        return ("radar_buscar", (original(m.group("o_que").strip()), original(m.group("onde").strip())))
+    if RADAR_PARAR.match(t):
+        return ("radar_parar", None)
+    if RADAR_ESTADO.match(t):
+        return ("radar_estado", None)
+    if RADAR_PEDIDO.search(t) and not NAO_E_RADAR.search(t):
+        return ("radar_pedido", texto)
     if ATUALIZAR.match(t):
         return ("atualizacao", "atualizar")
     if VER_ATUALIZACAO.match(t):
@@ -285,3 +386,28 @@ def entender(texto):
             i = _sa(original).find(resto)
             return ("lugar", original[i:i + len(resto)] if i >= 0 else resto)
     return None
+
+
+# ------------------------------------------------------------------ dentro do contexto do holograma do hardware
+# com o PC na tela: "só o processador", "e a RAM?", "agora o disco", "volta pra todos", "e a temperatura?", "a velocidade"
+CONTEXTO_HW = re.compile(
+    r"^(?:jarvis[ ,]*)?(?:e\s+|agora\s+|s[oó]\s+|somente\s+|apenas\s+|mostra\s+(?:s[oó]\s+)?|me\s+mostra\s+(?:s[oó]\s+)?|foca\s+(?:no|na|nos)\s+|filtra\s+|"
+    r"deixa\s+s[oó]\s+|volta\s+pr[oa]s?\s+|qual\s+(?:e\s+)?|quanto\s+(?:de\s+|t[aá]\s+)?|como\s+t[aá]\s+|me\s+(?:fala|diz)\s+|e\s+(?:como\s+t[aá]|quanto\s+t[aá])\s+)*"
+    r"(?:o\s+|a\s+|os\s+|as\s+|d[oa]\s+)?(?P<alvo>processador|cpu|ram|mem[oó]ria|pentes?|disco|ssd|hd|armazenamento|v[ií]deo|placa\s+de\s+v[ií]deo|gpu|"
+    r"todos|todas|tudo|todas\s+as\s+pe[cç]as|o\s+pc\s+inteiro|temperaturas?|aquecimento|calor|quente|velocidades?|clock|frequ[eê]ncia|mhz|ghz|rede|internet)"
+    r"(?:\s+(?:dele|dela|do\s+pc|agora))?" + FIM)
+
+
+def no_contexto_hw(texto, tipo_aberto):
+    if tipo_aberto not in ("ram", "cpu", "gpu", "disco", "tudo"):
+        return None
+    m = CONTEXTO_HW.match(_sa(texto).strip())
+    if not m:
+        return None
+    a = m.group("alvo")
+    if re.match(r"temper|aquec|calor|quente", a):
+        return ("hardware_info", "temperatura")
+    if re.match(r"veloc|clock|frequ|mhz|ghz|rede|internet", a):
+        return ("hardware_info", "velocidade")
+    return ("hardware", "tudo" if re.match(r"tod|tudo|o pc", a) else "ram" if re.match(r"ram|mem|pente", a) else
+            "cpu" if re.match(r"proc|cpu", a) else "gpu" if re.match(r"v|placa|gpu", a) else "disco")

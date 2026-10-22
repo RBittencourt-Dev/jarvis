@@ -308,3 +308,19 @@ body.leve .cartao, body.leve #configuracoes { backdrop-filter: none; }
 #ph-texto { flex: 1; overflow-y: auto; padding: 18px 28px; font-size: 18px; line-height: 1.6; }
 #ph-texto img { width: 100%; max-height: 360px; object-fit: cover; margin-bottom: 12px; }
 #ph-texto h2 { color: var(--ciano); font-weight: 400; }
+
+/* ============================================================ palco: o centro da tela principal (22/10) */
+#palco-hud { position: fixed; z-index: 3; left: 50%; top: 47%; transform: translate(-50%, -50%) scale(.96); width: min(1240px, 76vw);
+  height: 76vh; border: 0; background: transparent; opacity: 0; pointer-events: none; transition: opacity .45s, transform .45s; }
+body.palco-ativo #palco-hud { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+.palco { transition: left .6s cubic-bezier(.2, .9, .3, 1), top .6s cubic-bezier(.2, .9, .3, 1), transform .6s cubic-bezier(.2, .9, .3, 1); }
+body.palco-ativo .palco { left: 92px; top: 96px; transform: translate(-50%, -50%) scale(.34); }
+body.palco-ativo #ligacoes { opacity: 0; }
+body.palco-ativo .cartao.v0, body.palco-ativo .cartao.v1, body.palco-ativo .cartao.v2, body.palco-ativo .cartao.v3,
+body.palco-ativo .cartao.v4, body.palco-ativo .cartao.v5 { left: auto; right: 14px; width: min(300px, 11vw); }
+body.palco-ativo .cartao.v1 { top: 10vh; } body.palco-ativo .cartao.v0 { top: 26vh; } body.palco-ativo .cartao.v3 { top: 42vh; }
+body.palco-ativo .cartao.v2 { top: 58vh; } body.palco-ativo .cartao.v5 { top: 74vh; } body.palco-ativo .cartao.v4 { top: 88vh; }
+body.palco-ativo #conversa { bottom: 18px; }
+#paineis .cartao.arrastando { transition: none !important; z-index: 50; box-shadow: 0 0 40px var(--ciano); cursor: grabbing; }
+#paineis .cartao.vai-sair { outline: 2px dashed var(--ciano); outline-offset: 6px; }
+#paineis .cartao h3 { cursor: grab; }

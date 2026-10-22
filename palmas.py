@@ -137,8 +137,15 @@ def ouvir_o_nome():
             rec.Reset()
             status = servidor_no_ar()
             audio_da_espera.clear()
-            if status and status["tela_aberta"] and tela_reagiu(status, antes):
-                acordar("chamaram pelo nome: a tela já está aberta")  # a tela ouve sozinha; só vem pra frente
+            if status and status.get("tela_aberta"):
+                # pedido dele: com a interface aberta, o segundo plano NÃO atende (quem ouve é a tela). Se a tela
+                # disser que o ouvido dela morreu, só manda ela se reanimar.
+                if not status.get("tela_ouvindo", True):
+                    try:
+                        httpx.post(URL + "/api/reouvir", timeout=2)
+                    except Exception:
+                        pass
+                print("chamaram pelo nome: a interface está aberta e ouvindo; o segundo plano fica quieto")
             elif not cerebro.chave("groq"):
                 acordar("chamaram pelo nome: abrindo o Jarvis")  # sem Groq não há ouvido bom: abre a tela como antes
             else:
@@ -538,6 +545,9 @@ def abrir_jarvis():
     perfil = RAIZ / ".perfil-navegador"
     subprocess.Popen([str(exe), f"--app={URL}", f"--user-data-dir={perfil}",
                       "--autoplay-policy=no-user-gesture-required",
+                      # coberta por outra janela ela continua viva e ouvindo (só minimizada é que "dorme")
+                      "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling",
+                      "--remote-debugging-port=9230",  # só local: o Jarvis usa a extensão do Radar por aqui
                       f"--window-position={x},{y}", f"--window-size={w},{h}", "--start-fullscreen"])
     trazer_para_frente()
     try:

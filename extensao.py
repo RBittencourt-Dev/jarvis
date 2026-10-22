@@ -24,7 +24,7 @@ TITULO = "J.A.R.V.I.S. · Extensão"
 URL = "http://127.0.0.1:{porta}/extensao"
 PERFIL = RAIZ / ".perfil-extensao"  # perfil próprio: o Chrome respeita posição e tela cheia (janela nova num perfil já aberto ignora)
 
-_ouvintes = {"extensao": set(), "hud": set()}  # filas (asyncio.Queue) de quem está com a página aberta
+_ouvintes = {"extensao": set(), "hud": set(), "palco": set()}  # palco = o centro da tela principal (iframe no HUD)  # filas (asyncio.Queue) de quem está com a página aberta
 _laco = {"loop": None}   # o loop do servidor, pra publicar de dentro de threads (ferramentas)
 _sinal = {"em": 0.0}
 _esperando = []          # (quando, evento) publicados com a extensão ainda abrindo
@@ -85,6 +85,8 @@ def publicar(evento, canal="extensao"):
     loop = _laco["loop"]
     if not loop:
         return
+    if canal == "extensao" and not _ouvintes["extensao"] and not aberta() and _ouvintes["palco"]:
+        canal = "palco"  # sem a tela lateral (PC de um monitor, ou fechada): o globo e os painéis vão pro centro da principal
     if canal == "extensao" and not _ouvintes["extensao"]:
         # a página pode estar abrindo agora: guarda uns segundos pra ela pegar quando conectar
         _esperando[:] = [(t, e) for t, e in _esperando if time.time() - t < 20][-10:] + [(time.time(), evento)]
@@ -93,12 +95,24 @@ def publicar(evento, canal="extensao"):
         loop.call_soon_threadsafe(fila.put_nowait, evento)
 
 
+def tem_palco():
+    return bool(_ouvintes["palco"])
+
+
+def canal_grande():
+    """Coisa pra LER (pesquisa, notícias, página, código, Radar, apresentação): no centro da tela PRINCIPAL quando o HUD
+    está aberto (pedido dele: tudo aparece na principal, o núcleo encolhe); senão na lateral; senão em volta do núcleo."""
+    if tem_palco():
+        return "palco"
+    return "extensao" if aberta() else "hud"
+
+
 def publicar_tela(evento, canal=None):
-    """Evento visual (painel, notícias, página, plano, passo…): coisa GRANDE vai pra tela vertical (extensão) se ela
-    estiver aberta; senão, pro HUD. O que é "mostrado" fica lembrado pra "passa isso pra outra tela"/"pode fechar"."""
-    canal = canal or ("extensao" if aberta() else "hud")
+    """Evento visual (painel, notícias, página, plano, passo…). O que é "mostrado" fica lembrado pra "passa isso pra
+    outra tela", arrastar entre as telas e "pode fechar"."""
+    canal = canal or canal_grande()
     publicar(evento, canal)
-    for tipo in ("painel", "noticias", "pagina", "leitura_pagina"):
+    for tipo in ("painel", "noticias", "pagina", "leitura_pagina", "radar", "apresentacao"):
         if tipo in evento:
             lembrar_mostrado(tipo, evento[tipo], canal)
 
@@ -109,11 +123,16 @@ def publicar_tela(evento, canal=None):
 # página, código, fotos, listas longas) vai pra tela VERTICAL. "Passa isso pra outra tela" / "traz pra cá" move.
 tela_principal_visivel = {"f": lambda: True}  # o servidor troca por "o HUD está aberto e visível?"
 ultimo = {}  # o último item mostrado: tipo, dado, canal, id, quando
+mostrados = {}  # id → mesmo formato (pra arrastar QUALQUER item de uma tela pra outra)
 
 
 def lembrar_mostrado(tipo, dado, canal):
     ultimo.clear()
     ultimo.update(tipo=tipo, dado=dict(dado), canal=canal, id=dado.get("id"), quando=time.time())
+    if dado.get("id"):
+        mostrados[dado["id"]] = dict(ultimo)
+        while len(mostrados) > 40:
+            mostrados.pop(next(iter(mostrados)))
 
 
 def e_pequeno(cartao):
@@ -122,12 +141,16 @@ def e_pequeno(cartao):
 
 
 def tela_do_cartao(cartao):
-    """'aqui' (tela principal, HUD) ou 'outra' (extensão)."""
-    if not aberta():
+    """'aqui' (em volta do núcleo), 'palco' (centro da principal) ou 'outra' (extensão)."""
+    if e_pequeno(cartao) and (tela_principal_visivel["f"]() or not aberta()):
         return "aqui"
-    if e_pequeno(cartao) and tela_principal_visivel["f"]():
-        return "aqui"
-    return "outra"
+    if tem_palco():
+        return "palco"
+    return "outra" if aberta() else "aqui"
+
+
+def canal_de(onde):
+    return {"aqui": "hud", "palco": "palco", "outra": "extensao"}.get(onde, "extensao")
 
 
 def publicar_cartao(cartao, onde=None):
@@ -135,7 +158,7 @@ def publicar_cartao(cartao, onde=None):
     c = com_id(cartao)
     onde = onde or tela_do_cartao(c)
     c["onde"] = onde
-    canal = "hud" if onde == "aqui" else "extensao"
+    canal = canal_de(onde)
     publicar({"cartao": c}, canal)
     lembrar_mostrado("cartao", c, canal)
     return c
@@ -145,28 +168,57 @@ def tem_mostrado(janela_s=600):
     return bool(ultimo) and time.time() - ultimo.get("quando", 0) < janela_s
 
 
-def mover(destino, porta):
-    """destino 'aqui' (tela principal) ou 'outra' (a tela oposta de onde está). Devolve a frase pra falar."""
-    if not tem_mostrado(1800):
-        return None
-    alvo = "hud" if destino == "aqui" else ("extensao" if ultimo["canal"] == "hud" else "hud")
-    if alvo == ultimo["canal"]:
+def _na_principal(item):
+    """Na principal, coisa pequena fica em volta do núcleo; o resto vai pro centro (palco)."""
+    if item["tipo"] == "cartao" and e_pequeno(item["dado"]):
+        return "hud"
+    return "palco" if tem_palco() else "hud"
+
+
+def mover_item(item, destino, porta):
+    """destino 'aqui' (principal), 'outra' (a tela oposta de onde está) ou 'extensao'."""
+    principal = item["canal"] in ("hud", "palco")
+    if destino == "aqui":
+        alvo = _na_principal(item)
+    elif destino == "extensao" or principal:
+        alvo = "extensao"
+    else:
+        alvo = _na_principal(item)
+    if alvo == item["canal"]:
         return "Já tá nessa tela, chefe."
     if alvo == "extensao" and not aberta():
         abrir(porta)
-    if ultimo.get("id"):
-        publicar({"remover": [ultimo["id"]]}, ultimo["canal"])
-    dado = dict(ultimo["dado"])
-    if ultimo["tipo"] == "cartao":
-        dado["onde"] = "aqui" if alvo == "hud" else "outra"
-    publicar({ultimo["tipo"]: dado}, alvo)
-    ultimo.update(canal=alvo, quando=time.time())
-    return "Passei pra tela principal, chefe." if alvo == "hud" else "Passei pra outra tela, chefe."
+    if item.get("id"):
+        publicar({"remover": [item["id"]]}, item["canal"])
+    dado = dict(item["dado"])
+    if item["tipo"] == "cartao":
+        dado["onde"] = {"hud": "aqui", "palco": "palco"}.get(alvo, "outra")
+    publicar({item["tipo"]: dado}, alvo)
+    lembrar_mostrado(item["tipo"], dado, alvo)
+    return "Passei pra outra tela, chefe." if alvo == "extensao" else "Passei pra tela principal, chefe."
+
+
+def mover(destino, porta):
+    """Voz: "passa isso pra outra tela" / "traz pra cá" (o último item mostrado)."""
+    if not tem_mostrado(1800):
+        return None
+    return mover_item(dict(ultimo), destino, porta)
+
+
+def mover_por_id(id_, de, porta, dado=None):
+    """Arrastou um item até a borda da tela: ele vai pra outra."""
+    item = mostrados.get(id_)
+    if not item and dado:
+        item = {"tipo": "cartao", "dado": dado, "canal": {"extensao": "extensao", "palco": "palco"}.get(de, "hud"), "id": id_}
+    if not item:
+        return None
+    item = {**item, "canal": {"extensao": "extensao", "palco": "palco", "hud": "hud"}.get(de, item["canal"])}
+    return mover_item(item, "outra", porta)
 
 
 def fechar_mostrado():
     """"Pode fechar": fecha o que ele acabou de mostrar, nas duas telas."""
-    for canal in ("extensao", "hud"):
+    for canal in ("extensao", "hud", "palco"):
         publicar({"fechar_painel": "ultimo"}, canal)
         if ultimo.get("id"):
             publicar({"remover": [ultimo["id"]]}, canal)
@@ -213,7 +265,7 @@ def fechar_popup(assunto):
         ids = [c["id"] for c in _cartoes if palavras and all(p in c["assunto"] for p in palavras)]
     if ids:
         _cartoes[:] = [c for c in _cartoes if c["id"] not in ids]
-        for canal in ("extensao", "hud"):
+        for canal in ("extensao", "hud", "palco"):
             publicar({"remover": ids}, canal)
         return f"Fechei o pop-up {'de ' + assunto if len(ids) == 1 else 'de ' + assunto + f' ({len(ids)})'}, chefe."
     # pode ser uma janela que ele abriu (site, pesquisa) com esse nome no título
@@ -253,10 +305,20 @@ def abrir(porta):
     x, y, larg, alt = mon["area"]
     subprocess.Popen([str(exe), f"--app={URL.format(porta=porta)}", f"--user-data-dir={PERFIL}",
                       "--no-first-run", "--no-default-browser-check", "--autoplay-policy=no-user-gesture-required",
+                      "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling",
                       f"--window-position={x},{y}",
                       f"--window-size={larg},{alt}", "--start-fullscreen"])
     _sinal["em"] = time.time()  # conta como aberta já: os pop-ups desta resposta vão pra lá
     return "Abri a minha extensão na outra tela, chefe. Os pop-ups vão aparecer lá."
+
+
+def fechar_janela():
+    """Fecha a janela da extensão SEM mudar a preferência (fechou junto com a principal)."""
+    publicar({"fechar": True})
+    _sinal["em"] = 0.0
+    for hwnd in telas._janelas_em_ordem():
+        if telas._titulo(hwnd).startswith(TITULO):
+            telas.u.PostMessageW(hwnd, 0x0010, 0, 0)
 
 
 def fechar():

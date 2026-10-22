@@ -47,5 +47,6 @@
     "lat": -30.0346,
     "lng": -51.2177
   },
-  "spotify_client_id": "cbd84dbc19c2403fb2508aa6e5bfd9b0"
+  "spotify_client_id": "cbd84dbc19c2403fb2508aa6e5bfd9b0",
+  "abrir_tela_ao_ligar": true
 }

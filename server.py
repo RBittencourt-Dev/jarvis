@@ -69,6 +69,9 @@ import olho
 import proatividade
 import noticias_painel
 import pois
+import radar_ext
+import apresentacoes
+import hardware
 import cofre
 import diagnostico
 import instalacao
@@ -429,6 +432,11 @@ FERRAMENTAS = {
     "listar_pasta": (listar_pasta, False, "Lista uma pasta.", parametro("caminho", "caminho completo da pasta")),
     "ler_arquivo": (ler_arquivo, False, "Lê um arquivo de texto.", parametro("caminho", "caminho completo do arquivo")),
     "lembrar": (lembrar, False, "Guarda pra sempre um fato sobre ele, a empresa ou o Porthon.", parametro("fato", "o fato, numa frase")),
+    "mostrar_holograma": (lambda assunto: mostrar_holograma(assunto), False,
+                          "Mostra um HOLOGRAMA 3D animado na tela do Jarvis: peças do PC dele com dados ao vivo (ram, processador, "
+                          "placa de vídeo, disco, ou 'hardware' pra todas) ou qualquer assunto que dê pra ver em 3D (órgão, planeta, "
+                          "máquina, átomo…). Use sempre que ele pedir pra ver/mostrar/explicar algo físico.",
+                          parametro("assunto", "o que mostrar, ex.: 'memória ram', 'hardware', 'o coração humano'")),
     "executar_comando": (executar_comando, True, "Roda um comando do PowerShell no PC e devolve a saída. Use à vontade "
                          "para fazer o que ele pedir no computador; só o que apaga, formata ou desliga pede autorização.",
                          parametro("comando", "comando PowerShell")),
@@ -569,7 +577,7 @@ FERRAMENTAS.update({
 # claramente pedem um grupo já chegam com ele carregado.
 GRUPOS = {
     "base": ["comando_jarvis", "buscar_na_web", "ler_site", "pesquisar_e_mostrar", "executar_comando", "mostrar_na_tela",
-             "lembrar", "calcular", "ver_registro", "planejar", "procurar_nos_meus_arquivos", "abrir_programa", "abrir_site",
+             "lembrar", "mostrar_holograma", "calcular", "ver_registro", "planejar", "procurar_nos_meus_arquivos", "abrir_programa", "abrir_site",
              "carregar_ferramentas", "pesquisar_google"],
     "arquivos": ["listar_pasta", "ler_arquivo", "criar_arquivo", "criar_planilha", "procurar_arquivo", "mover_arquivo",
                  "renomear_arquivo", "copiar_arquivo", "criar_pasta", "apagar_arquivo", "desfazer"],
@@ -781,6 +789,7 @@ async def pensar(sessao):
     passos, deu_erro = [], False  # o caminho deste pedido: se der certo, vira aprendizado
     falhas = {}  # ferramenta → quantas vezes falhou neste pedido (3 = para de insistir nela)
     plano_atual.clear()
+    comecou = time.time()
     for _ in range(10):
         texto, chamadas = "", []
         try:
@@ -806,6 +815,10 @@ async def pensar(sessao):
         if texto and not texto.endswith((" ", "\n")):
             yield {"trecho": " "}
         for chamada in chamadas:
+            if parar_agora["em"] > comecou:  # ele mandou parar: não executa mais nada deste pedido
+                yield {"trecho": "Parei, chefe."}
+                yield {"fim": True}
+                return
             nome = chamada["function"]["name"]
             args = chamada["function"].get("arguments") or {}
             if precisa_autorizar(nome, args):
@@ -858,7 +871,7 @@ async def pensar(sessao):
 NOMES_DOS_PASSOS = {
     "comando_jarvis": "Executando", "buscar_na_web": "Buscando na web", "ler_site": "Lendo página",
     "pesquisar_e_mostrar": "Pesquisando", "executar_comando": "Rodando no PowerShell", "mostrar_na_tela": "Mostrando",
-    "lembrar": "Guardando na memória", "calcular": "Calculando", "ver_registro": "Lendo o diário", "planejar": "Planejando",
+    "lembrar": "Guardando na memória", "mostrar_holograma": "Montando o holograma", "calcular": "Calculando", "ver_registro": "Lendo o diário", "planejar": "Planejando",
     "procurar_nos_meus_arquivos": "Procurando nos seus arquivos", "abrir_programa": "Abrindo", "abrir_site": "Abrindo site",
     "carregar_ferramentas": "Carregando ferramentas", "ver_tela": "Olhando a tela", "digitar": "Digitando",
     "apertar_teclas": "Apertando teclas", "clicar_em": "Clicando", "rodar_codigo": "Rodando código", "git": "Git",
@@ -1028,10 +1041,12 @@ def em_linhas(sid, eventos, primeiro=None):
                 # "na outra tela"/"aqui" que ele pediu; sem dizer: curto na tela principal, grande na vertical
                 cartao = extensao.com_id(e["cartao"])
                 onde = (sessoes.get(sid) or {}).get("onde") or cartao.get("onde") or extensao.tela_do_cartao(cartao)
+                if onde == "aqui" and not extensao.e_pequeno(cartao) and extensao.tem_palco():
+                    onde = "palco"  # "me mostra aqui X" grande: no centro da principal
                 e = {**e, "cartao": {**cartao, "onde": onde}}
                 if onde != "aqui":
-                    extensao.publicar({"cartao": e["cartao"]})  # pop-up em tempo real na outra tela
-                extensao.lembrar_mostrado("cartao", e["cartao"], "hud" if onde == "aqui" else "extensao")
+                    extensao.publicar({"cartao": e["cartao"]}, extensao.canal_de(onde))  # pop-up em tempo real
+                extensao.lembrar_mostrado("cartao", e["cartao"], extensao.canal_de(onde))
             if e.get("modo"):
                 extensao.publicar({"modo": e["modo"]})
             yield json.dumps(e, ensure_ascii=False) + "\n"
@@ -1662,6 +1677,11 @@ async def conversar(p: Pergunta):
         if escolhido:
             return em_linhas(sid, mostrar_no_globo(sessao, escolhido))
         return em_linhas(sid, oferecer_google(sessao, f"{d['nome']} {p.texto}"))
+    if d and d.get("tipo") == "radar":
+        if re.match(r"^(?:deixa|cancela|esquece|n[aã]o|nada)\b", p.texto.strip(), re.I):
+            sessao["dialogo"] = None
+            return em_linhas(sid, responder_ja("Beleza, deixei o Radar quieto."))
+        return em_linhas(sid, pedido_de_leads(sessao, p.texto, d.get("dados")))
     if d and d.get("tipo") == "reuniao":
         fala = await asyncio.to_thread(reunioes.responder, d, vocabulario.limpar(vocabulario.corrigir(p.texto)))
         return await conversa_de_reuniao(sid, sessao, d, fala)
@@ -1710,8 +1730,12 @@ async def conversar(p: Pergunta):
         return em_linhas(sid, responder_ja("Pronto, chefe."))
     # globo, painéis, notícias, telas: o entendedor interno vem antes das regras antigas de janela/pop-up
     # ("passa isso pra outra tela" caía no "mover janela" e respondia "não achei isso aberto")
-    interno = internos.entender(p.texto)
-    if interno and interno[0] in ("mover", "fechar_mostrado") and extensao.tem_mostrado(300 if interno[0] == "fechar_mostrado" else 1800):
+    interno = internos.no_contexto_hw(p.texto, holo_atual.get("tipo")) or internos.entender(p.texto)
+    # hologramas, câmeras e Radar são sempre dele mesmo: não podem cair no "fechar janela"/"abrir programa" antigos
+    SEMPRE_INTERNO = ("fechar_holo", "apresentacao", "hardware", "hardware_info", "neural", "neural_adicionar", "neural_buscar",
+                      "cameras", "radar_pedido", "radar_buscar", "radar_estado", "radar_parar")
+    if interno and (interno[0] in SEMPRE_INTERNO or
+                    interno[0] in ("mover", "fechar_mostrado") and extensao.tem_mostrado(300 if interno[0] == "fechar_mostrado" else 1800)):
         sessao["ultimo_pedido"] = (p.texto.strip(), time.time())
         return em_linhas(sid, await pedido_interno(sid, sessao, *interno))
     rotina = automacoes.pela_frase(vocabulario.corrigir(p.texto))
@@ -2001,12 +2025,344 @@ async def falar_dos_avioes(sessao, tipo, onde=""):
     yield {"fim": True}
 
 
+radar_vigia = {"tarefa": None}
+holo_atual = {}  # o holograma aberto agora: id, tipo (pra atualizar os dados ao vivo)
+
+
+def _novo_id():
+    return f"holo{int(time.time() * 1000)}"
+
+
+async def apresentar(assunto):
+    """"Me mostra as camadas da Terra" / "as peças de um computador" / "o sistema solar em 3D"."""
+    id_ = _novo_id()
+    holo_atual.clear()
+    extensao.publicar_tela({"apresentacao": {"id": id_, "titulo": assunto, "carregando": True}})
+    yield {"trecho": falas.escolher(["Montando o holograma, chefe.", "Projetando aí.", "Deixa eu montar isso em 3D."]) + " ", "falar_ja": True}
+    try:
+        cena = await apresentacoes.montar(assunto)
+    except Exception as e:
+        extensao.publicar_tela({"fechar_holo": True})
+        yield {"trecho": f"Não consegui montar esse holograma agora: {str(e)[:100]}"}
+        yield {"fim": True}
+        return
+    cena["id"] = id_
+    extensao.publicar_tela({"apresentacao": cena})
+    frases = [cena.get("intro") or cena["titulo"] + "."] + [p["fala"] for p in cena["passos"]]
+    yield {"leitura": {"id": id_, "frases": frases, "indices": [-1, *range(len(cena["passos"]))]}}
+    yield {"fim": True}
+
+
+async def atualizar_holo(id_, tipo):
+    """Enquanto o holograma do hardware estiver aberto, os números do lado mudam ao vivo."""
+    while holo_atual.get("id") == id_:
+        await asyncio.sleep(2)
+        if holo_atual.get("id") != id_:
+            return
+        if time.time() - holo_atual.get("pausa_dados", 0) < 15:
+            continue  # ele pediu temperatura/velocidade: deixa esse painel um tempo na tela
+        try:
+            d = await asyncio.to_thread(hardware.DADOS[tipo])
+        except Exception:
+            continue
+        extensao.publicar_tela({"holo_dados": {"id": id_, "dados": d}})
+
+
+async def holo_hardware(tipo):
+    id_ = _novo_id()
+    holo_atual.clear()
+    holo_atual.update(id=id_, tipo=tipo)
+    extensao.publicar_tela({"apresentacao": {"id": id_, "titulo": {"ram": "Memória RAM", "cpu": "Processador", "gpu": "Vídeo",
+                                                                    "disco": "Armazenamento", "tudo": "Este PC"}[tipo], "carregando": True}})
+    cena, fala = await asyncio.to_thread(hardware.CENAS[tipo])
+    cena["id"] = id_
+    extensao.publicar_tela({"apresentacao": cena})
+    if tipo in hardware.DADOS:
+        tarefas_de_fundo.add(asyncio.create_task(atualizar_holo(id_, tipo)))
+    if len(cena.get("passos") or []) > 1:
+        yield {"leitura": {"id": id_, "frases": [fala, *[p["fala"] for p in cena["passos"]]], "indices": [-1, *range(len(cena["passos"]))]}}
+    else:
+        yield {"leitura": {"id": id_, "frases": [fala], "indices": [0]}}
+    yield {"fim": True}
+
+
+async def ver_cameras(onde):
+    """"Mostra as câmeras ao vivo de Florianópolis": câmeras públicas no globo; clicou, abre a imagem ao vivo."""
+    if onde is None:
+        extensao.publicar({"cameras": {"lista": []}})
+        yield {"trecho": "Câmeras fora do globo, chefe."}
+        yield {"fim": True}
+        return
+    chave = cofre.pegar("windy")
+    if not chave:
+        yield {"trecho": "Pra câmeras ao vivo eu uso a Windy, que só tem câmeras públicas e oficiais. Preciso de uma chave grátis: "
+                         "entra em api.windy.com/keys, cria uma e cola nas Configurações, Privacidade, cofre, com o nome windy."}
+        yield {"fim": True}
+        return
+    lugar = await asyncio.to_thread(olho.area, onde) if onde else {"nome": "aqui perto", **lugares.CASA, "caixa": None}
+    if not lugar:
+        yield {"trecho": f"Não achei {onde} no mapa, chefe."}
+        yield {"fim": True}
+        return
+    raio = 60
+    if lugar.get("caixa"):
+        s_, n_, o_, l_ = lugar["caixa"]
+        raio = max(25, min(250, int(max(n_ - s_, l_ - o_) * 111 / 2)))
+    if not extensao.aberta() and not extensao.tem_palco():
+        extensao.abrir(CONFIG["porta"])
+    extensao.publicar({"mostrar_globo": True})
+    try:
+        lista = await asyncio.to_thread(olho.cameras, chave, lugar["lat"], lugar["lng"], raio)
+    except Exception as e:
+        yield {"trecho": f"A Windy não respondeu: {str(e)[:100]}"}
+        yield {"fim": True}
+        return
+    extensao.publicar({"cameras": {"lista": lista, "lugar": lugar}})
+    ativas = sum(1 for c in lista if c["ativa"])
+    yield {"trecho": (f"{len(lista)} câmeras públicas em {lugar['nome']}, {ativas} transmitindo. Clica em qualquer uma pra ver ao vivo."
+                      if lista else f"Não achei câmera pública em {lugar['nome']}, chefe.")}
+    yield {"fim": True}
+
+
+async def info_hardware(qual):
+    """"E a temperatura?" / "a velocidade" com uma peça na tela: o dado aparece do lado do holograma aberto."""
+    tipo = holo_atual.get("tipo") or "tudo"
+    if qual == "temperatura":
+        t = await asyncio.to_thread(hardware.temperaturas)
+        if not t:
+            yield {"trecho": "O Windows não me deixa ler temperatura sozinho, chefe. Com o LibreHardwareMonitor aberto (é grátis), "
+                             "com o servidor web dele ligado, eu leio processador, placa e disco e mostro aqui ao vivo."}
+            yield {"fim": True}
+            return
+        linhas = t
+        fala = "Temperaturas: " + ", ".join(f"{n} {v}" for n, v in t[:4]) + "."
+    else:
+        linhas = await asyncio.to_thread(hardware.velocidades, tipo)
+        fala = "Velocidades: " + ", ".join(f"{n} {v}" for n, v in linhas[:4]) + "."
+    if holo_atual.get("id"):
+        extensao.publicar_tela({"holo_dados": {"id": holo_atual["id"], "dados": {"titulo": qual.upper(), "linhas": linhas}}})
+        holo_atual["pausa_dados"] = time.time()  # não sobrescreve por uns segundos
+    yield {"trecho": fala}
+    yield {"fim": True}
+
+
+def mostrar_holograma(assunto: str):
+    """Ferramenta do cérebro: qualquer coisa que dê pra ver em 3D (peça do PC com dados ao vivo, ou um assunto)."""
+    t = interpretador._sem_acento(assunto.lower()) if hasattr(interpretador, "_sem_acento") else assunto.lower()
+    tipo = ("tudo" if re.search(r"hardware|pecas do meu|meu pc|meu computador|configurac|spec", t) else
+            "ram" if re.search(r"\bram\b|memoria ram|pente", t) else "cpu" if re.search(r"processador|cpu", t) else
+            "gpu" if re.search(r"placa de video|gpu|video", t) else "disco" if re.search(r"disco|ssd|\bhd\b|armazenamento", t) else None)
+    id_ = _novo_id()
+    holo_atual.clear()
+    if tipo:
+        cena, fala = hardware.CENAS[tipo]()
+        holo_atual.update(id=id_, tipo=tipo)
+        if tipo in hardware.DADOS and LACO.get("loop"):
+            asyncio.run_coroutine_threadsafe(atualizar_holo(id_, tipo), LACO["loop"])
+    else:
+        cena = asyncio.run(apresentacoes.montar(assunto))
+        fala = cena.get("intro") or ""
+    cena.update(id=id_, auto=True)  # sem a voz sincronizada: a tela vai passando as partes sozinha
+    extensao.publicar_tela({"apresentacao": cena})
+    return ("Holograma na tela. Roteiro (fale isto, curto): " + " ".join([fala, *[p["fala"] for p in cena.get("passos", [])]]))[:1500]
+
+
+LACO = {}
+
+
+@app.on_event("startup")
+async def guardar_laco():
+    LACO["loop"] = asyncio.get_running_loop()
+
+
+def _rede_neural(novo=None, achados=None):
+    """A memória do Jarvis em grupos: o que ele sabe do chefe, habilidades, frases aprendidas, conhecimento, caminhos."""
+    fatos = [l[2:] for l in (ARQUIVO_MEMORIA.read_text(encoding="utf-8").splitlines() if ARQUIVO_MEMORIA.exists() else []) if l.startswith("- ")]
+    habil = aprendizado.listar() if hasattr(aprendizado, "listar") else []
+    habil = [h.get("nome", str(h)) if isinstance(h, dict) else str(h) for h in (habil.values() if isinstance(habil, dict) else habil)]
+    frases = [f"{k} → {v}" for k, v in interpretador._aprendidas().items()]
+    docs = [a.stem for a in (RAIZ / "conhecimento").glob("*.md") if a.stem != "memoria"]
+    grupos = [("Sobre você", fatos), ("Habilidades", habil), ("Frases aprendidas", frases), ("Conhecimento", docs)]
+    try:
+        ens, cam = aprendizado.resumo()
+        grupos.append(("Caminhos aprendidos", [f"caminho {i + 1}" for i in range(min(cam, 40))]))
+    except Exception:
+        pass
+    achados = [a.lower() for a in (achados or [])]
+    rede = {"grupos": [{"nome": n, "itens": [{"texto": t, "novo": t == novo or t.lower() in achados} for t in itens[-60:]]}
+                       for n, itens in grupos if itens]}
+    linhas = [(n, str(len(i))) for n, i in grupos]
+    return rede, linhas, fatos + habil + frases + docs
+
+
+async def nucleo_neural(tipo, valor):
+    novo, achados, fala = None, None, ""
+    if tipo == "neural_adicionar":
+        lembrar(valor)
+        novo = next((l[2:] for l in reversed(ARQUIVO_MEMORIA.read_text(encoding="utf-8").splitlines()) if l.startswith("- ")), None)
+        fala = falas.escolher(["Gravado no núcleo, chefe.", "Novo neurônio no ar.", "Aprendido e guardado."]) + f" {valor}."
+    elif tipo == "neural_buscar":
+        _, _, tudo = _rede_neural()
+        for doc in (RAIZ / "conhecimento").glob("*.md"):  # e o que está escrito nos arquivos de conhecimento
+            tudo += [l.strip("-# ").strip() for l in doc.read_text(encoding="utf-8", errors="replace").splitlines() if len(l.strip()) > 12]
+        palavras = [w for w in re.findall(r"\w{3,}", valor.lower()) if w not in ("que", "sobre", "dos", "das", "com", "pra", "para")]
+        achados = list(dict.fromkeys(t for t in tudo if any(w in t.lower() for w in palavras)))[:8]
+        fala = (f"Achei {len(achados)} coisa{'s' if len(achados) != 1 else ''} sobre {valor}: " + "; ".join(achados[:3]) + "."
+                if achados else f"Não tenho nada sobre {valor} no núcleo ainda. Quer que eu grave alguma coisa?")
+    rede, linhas, _ = _rede_neural(novo, achados)
+    total = sum(int(x) for _, x in linhas)
+    if not fala:
+        fala = (f"Núcleo neural aberto: {total} memórias. " + ", ".join(f"{v} em {n.lower()}" for n, v in linhas if v != "0") +
+                ". Pode pedir pra eu acessar, procurar ou gravar coisa nova.")
+    id_ = holo_atual.get("id") if holo_atual.get("tipo") == "neural" else _novo_id()
+    holo_atual.clear()
+    holo_atual.update(id=id_, tipo="neural")
+    painel = {"titulo": "NÚCLEO NEURAL", "linhas": [("Memórias", str(total)), *linhas]}
+    if achados:
+        painel = {"titulo": f"ACESSO · {valor.upper()}", "linhas": [(str(i + 1), a[:60]) for i, a in enumerate(achados)]}
+    extensao.publicar_tela({"apresentacao": {"id": id_, "titulo": "Núcleo neural", "subtitulo": f"{total} MEMÓRIAS · {len(rede['grupos'])} LOBOS",
+                                             "rede": rede, "dados": painel, "intro": fala}})
+    yield {"leitura": {"id": id_, "frases": [fala], "indices": [-1]}}
+    yield {"fim": True}
+
+
+async def extrair_pedido_de_leads(frase, ja=None):
+    """O cérebro entende o pedido do jeito que ele falar: quantidade, nicho e cidade (o que não disse fica null)."""
+    ja = dict(ja or {})
+    pedido = ("Extraia de uma frase do Rafael pedindo leads (empresas pra prospectar no Google Maps): "
+              '{"quantidade": número ou null, "nicho": "tipo de negócio no singular" ou null, "cidade": "cidade/bairro" ou null}. '
+              'Ex.: "busque 10 barbearias" → {"quantidade": 10, "nicho": "barbearia", "cidade": null}; '
+              '"quero uns 20 leads de dentista em Canoas" → {"quantidade": 20, "nicho": "dentista", "cidade": "Canoas"}; '
+              '"garimpa pizzarias em Porto Alegre e Gravataí" → {"quantidade": null, "nicho": "pizzaria", "cidade": "Porto Alegre, Gravataí"}; '
+              '"condomínios no Moinhos de Vento" → {"quantidade": null, "nicho": "condomínio", "cidade": "Moinhos de Vento, Porto Alegre"}.'
+              + (f" Já se sabe: {json.dumps(ja, ensure_ascii=False)} — a frase é a resposta pro que faltava." if ja else "")
+              + f'\nFrase: "{frase}"\nResponda só o JSON.')
+    try:
+        bruto = await cerebro.completar([{"role": "user", "content": pedido}], json_mode=True, temperatura=0, max_tokens=120)
+        novo = json.loads(bruto[bruto.index("{"):bruto.rindex("}") + 1])
+    except Exception:
+        novo = {}
+    for k in ("quantidade", "nicho", "cidade"):
+        if novo.get(k) not in (None, "", 0):
+            ja[k] = novo[k]
+    return ja
+
+
+async def pedido_de_leads(sessao, frase, ja=None):
+    """"Busca 10 leads de barbearia" → se faltar algo pergunta; com tudo, liga o Radar."""
+    dados = await extrair_pedido_de_leads(frase, ja)
+    if not dados.get("nicho"):
+        sessao["dialogo"] = {"tipo": "radar", "dados": dados}
+        yield {"trecho": "Leads de quê, chefe? Me diz o nicho (barbearia, dentista, condomínio…)."}
+        yield {"fim": True}
+        return
+    if not dados.get("cidade"):
+        sessao["dialogo"] = {"tipo": "radar", "dados": dados}
+        yield {"trecho": f"{dados['nicho'].capitalize()} em que cidade, chefe?"}
+        yield {"fim": True}
+        return
+    sessao["dialogo"] = None
+    meta = int(dados.get("quantidade") or 50)
+    async for e in usar_radar("radar_buscar", (dados["nicho"], dados["cidade"], meta)):
+        yield e
+
+
+async def vigiar_radar():
+    """Enquanto a varredura roda: atualiza o painel a cada 3 s, põe cada lead no globo e vai contando em voz alta
+    (primeiro lead, metade da meta, terminou)."""
+    ultimo_status = None
+    falados = set()
+    pinos = {}
+    for _ in range(1200):  # no máximo 1 h
+        try:
+            e = await asyncio.to_thread(radar_ext.estado)
+        except Exception as erro:
+            print("radar:", erro)
+            await asyncio.sleep(5)
+            continue
+        extensao.publicar_tela({"radar": {"id": "radar", **e}})
+        novos = [l for l in e["leads"] if l.get("lat") is not None and l.get("id") not in pinos]
+        for l in novos:
+            pinos[l["id"]] = {"nome": l["nome"], "lat": l["lat"], "lng": l["lng"], "endereco": l.get("cidade") or "", "id": l["id"]}
+        if novos:
+            extensao.publicar({"pois": {"termo": "leads", "area": {"nome": "Radar"}, "itens": list(pinos.values()), "mais": len(pinos) > len(novos)}})
+        meta = e.get("meta") or 0
+        achados = e.get("encontrados") or 0
+        if achados >= 1 and "primeiro" not in falados and e["leads"]:
+            falados.add("primeiro")
+            avisar(f"Primeiro lead: {e['leads'][0]['nome']}.", None, "marcado")
+        if meta and achados >= meta / 2 and "metade" not in falados and achados < meta:
+            falados.add("metade")
+            avisar(f"Metade da meta, chefe: {achados} de {meta}.", None, "marcado")
+        if e["status"] != "rodando":
+            if ultimo_status == "rodando":
+                avisar(f"Chefe, o Radar terminou: {e['encontrados']} leads novos, {e['total']} na lista. "
+                       "Abre o Radar no painel pra importar e disparar.", None, "marcado")
+            return
+        ultimo_status = e["status"]
+        await asyncio.sleep(3)
+
+
+async def usar_radar(tipo, valor):
+    situ = await asyncio.to_thread(radar_ext.situacao)
+    if situ == "sem_extensao":
+        yield {"trecho": "Não achei a extensão do Radar neste PC, chefe (a pasta 7code-radar-leads)."}
+        yield {"fim": True}
+        return
+    if situ == "sem_depuracao":
+        yield {"trecho": "Preciso reabrir minhas janelas pra ligar a ponte com o Radar. Fala \"reinicia o Jarvis\" e tenta de novo."}
+        yield {"fim": True}
+        return
+    if situ == "nao_instalada":
+        yield {"trecho": await asyncio.to_thread(radar_ext.guiar_instalacao)}
+        yield {"fim": True}
+        return
+    if tipo == "radar_parar":
+        await asyncio.to_thread(radar_ext.parar)
+        yield {"trecho": "Parei a varredura do Radar, chefe. O que já achou ficou guardado."}
+        yield {"fim": True}
+        return
+    if tipo == "radar_estado":
+        e = await asyncio.to_thread(radar_ext.estado)
+        extensao.publicar_tela({"radar": {"id": "radar", **e}})
+        if e["status"] == "rodando":
+            yield {"trecho": f"Tá rodando: {e['busca']}, {e['encontrados']} leads novos até agora. Tá na tela."}
+        else:
+            yield {"trecho": f"Sem varredura rodando. Tem {e['total']} leads guardados na extensão."}
+        yield {"fim": True}
+        return
+    o_que, onde, meta = (*valor, 50)[:3]
+    yield {"trecho": f"Ligando o Radar: {meta} leads de {o_que} em {onde}. ", "falar_ja": True}
+    extensao.publicar_tela({"radar": {"id": "radar", "status": "rodando", "mensagem": "Abrindo o Google Maps…", "encontrados": 0,
+                                      "meta": meta, "busca": f"{o_que} em {onde}", "leads": []}})
+    try:
+        r, config = await asyncio.to_thread(radar_ext.iniciar, o_que, onde, meta)
+    except Exception as erro:
+        yield {"trecho": f"O Radar não respondeu: {str(erro)[:120]}"}
+        yield {"fim": True}
+        return
+    if not r.get("ok"):
+        yield {"trecho": f"O Radar recusou: {r.get('erro', 'sem motivo')}"}
+        yield {"fim": True}
+        return
+    if radar_vigia["tarefa"] is None or radar_vigia["tarefa"].done():
+        radar_vigia["tarefa"] = asyncio.create_task(vigiar_radar())
+    painel_ok = await asyncio.to_thread(radar_ext.abrir_painel)
+    nichos = ", ".join(n["rotulo"] for n in config["nichos"])
+    extra = (" O painel do Radar tá aberto: cada lead já vai direto pra lá." if painel_ok
+             else " Abri o painel do Radar, mas ele pediu login: entra uma vez nele que os leads vão sozinhos.")
+    yield {"trecho": f"Varredura começou: {nichos} em {', '.join(config['locais'])}, meta de {config['meta']} leads.{extra} "
+                     "Vou te contando."}
+    yield {"fim": True}
+
+
 async def pedido_interno(sid, sessao, tipo, valor):
     """Globo, mapa, painéis e Olho de Deus: tudo dentro dele, na hora."""
     if tipo in ("abrir_globo", "olho", "camada", "lugar") and not extensao.aberta():
         await asyncio.to_thread(extensao.abrir, CONFIG["porta"])
     if tipo == "abrir_globo":
         extensao.publicar({"selecionar": None})
+        extensao.publicar({"mostrar_globo": True})  # no palco (um monitor só) o globo aparece no centro
         return responder_ja(falas.escolher(["Globo na tela, chefe.", "Aqui o nosso planeta, chefe.", "Globo no ar.",
                                             "Mundo inteiro à sua disposição, chefe."]))
     if tipo == "lugar":
@@ -2044,6 +2400,25 @@ async def pedido_interno(sid, sessao, tipo, valor):
         return pedir_confirmacao(sessao["pendente"])
     if tipo in ("aviao_info", "avioes_lista"):
         return falar_dos_avioes(sessao, tipo, valor)
+    if tipo == "cameras":
+        return ver_cameras(valor)
+    if tipo == "apresentacao":
+        return apresentar(valor)
+    if tipo == "hardware":
+        return holo_hardware(valor)
+    if tipo == "hardware_info":
+        return info_hardware(valor)
+    if tipo in ("neural", "neural_adicionar", "neural_buscar"):
+        return nucleo_neural(tipo, valor)
+    if tipo == "fechar_holo":
+        holo_atual.clear()
+        for canal in ("extensao", "hud", "palco"):
+            extensao.publicar({"fechar_holo": True}, canal)
+        return responder_ja(falas.escolher(["Fechado, chefe.", "Holograma desligado.", "Pronto, sumiu."]))
+    if tipo == "radar_pedido":
+        return pedido_de_leads(sessao, valor)
+    if tipo in ("radar_buscar", "radar_estado", "radar_parar"):
+        return usar_radar(tipo, valor)
     if tipo == "modo_globo":
         extensao.publicar({"modo_globo": valor})
         return responder_ja({"satelite": "Terra de verdade no globo, chefe, sem nuvens, dá pra chegar até a rua. Gira e dá zoom com o mouse.",
@@ -2197,7 +2572,7 @@ async def _rotear(sid, sessao, texto, interpretar=True):
         mudar_config({"proatividade": {**proatividade.config(), "nao_perturbe": ligar}})
         return em_linhas(sid, responder_ja("Não perturbe ligado, chefe. Avisos só na tela, sem voz." if ligar
                                            else "Não perturbe desligado. Volto a te avisar falando."))
-    interno = internos.entender(p.texto)
+    interno = internos.no_contexto_hw(p.texto, holo_atual.get("tipo")) or internos.entender(p.texto)  # contexto do holograma primeiro
     if interno and interno[0] in ("mover", "fechar_mostrado") and not extensao.tem_mostrado(300 if interno[0] == "fechar_mostrado" else 1800):
         interno = None  # nada na tela: "pode fechar" volta a ser despedida, "passa pra outra tela" abre a extensão
     if interno and interno[0] == "filtro" and not (pois.ultima and time.time() - pois.ultima.get("quando", 0) < 600):
@@ -3029,7 +3404,7 @@ def extensao_sinal():
 
 @app.get("/api/extensao/eventos")
 async def extensao_eventos(canal: str = "extensao"):
-    canal = canal if canal in ("extensao", "hud") else "extensao"
+    canal = canal if canal in ("extensao", "hud", "palco") else "extensao"
     return StreamingResponse(extensao.eventos(canal), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
@@ -3064,10 +3439,39 @@ def tela_ouviu():
 def sinal(s: Sinal | None = None):
     """A tela avisa que está aberta. Minimizada não conta: aí o ouvido de segundo plano atende o "Jarvis"."""
     global ultimo_sinal_da_tela
+    vida_das_telas["hud"] = time.time()  # viva, mesmo minimizada
     if s is None or s.visivel:
         ultimo_sinal_da_tela = time.time()
         ouvido_da_tela["estado"] = s.ouvido if s else "ok"
     return {"ok": True}
+
+
+vida_das_telas = {"hud": 0.0}
+
+
+async def telas_andam_juntas():
+    """Fechou uma das duas janelas na mão: a outra fecha junto. (Fechar a lateral por voz — "volta pra tela
+    principal" — não conta: aí ela fecha sozinha de propósito.) Reinício/atualização matam as duas de uma vez."""
+    hud_antes = ext_antes = False
+    while True:
+        await asyncio.sleep(2)
+        hud = time.time() - vida_das_telas["hud"] < 10
+        ext = extensao.aberta()
+        try:
+            if hud_antes and not hud and ext:
+                await asyncio.to_thread(extensao.fechar_janela)
+                ext = False
+            elif ext_antes and not ext and hud and extensao.preferida():
+                await asyncio.to_thread(sistema.fechar_janela)
+                hud = False
+        except Exception as e:
+            print("telas juntas:", e)
+        hud_antes, ext_antes = hud, ext
+
+
+@app.on_event("startup")
+async def ligar_telas_juntas():
+    tarefas_de_fundo.add(asyncio.create_task(telas_andam_juntas()))
 
 
 @app.post("/api/reouvir")
@@ -3079,7 +3483,8 @@ def reouvir():
 
 @app.get("/api/status")
 def status():
-    return {"tela_aberta": time.time() - ultimo_sinal_da_tela < 6, "tela_ouvindo": ouvido_da_tela["estado"] != "morto",
+    return {"tela_aberta": time.time() - ultimo_sinal_da_tela < 6, "tela_viva": time.time() - vida_das_telas["hud"] < 10,
+            "tela_ouvindo": ouvido_da_tela["estado"] != "morto",
             "ouvido_da_tela": ouvido_da_tela["estado"], "tela_ouviu_ha": time.time() - ouvido_da_tela["ouviu_em"],
             "modelo": cerebro.nome_do_cerebro(), "modo": modo_atual(),
             "musica": musica_tocando["agora"], "autenticado": rosto_ja_conferido() or not ARQUIVO_ROSTO.exists() or not CONFIG.get("usar_rosto", True), "casa": {k: lugares.CASA[k] for k in ("lat", "lng")}, "extensao": extensao.aberta(), "usar_extensao": extensao.preferida(),
@@ -3387,6 +3792,40 @@ async def api_aviao(hex: str = "", voo: str = "", reg: str = "", tipo: str = "",
 class Destaque(BaseModel):
     id: str
     i: int
+
+
+class Arrasto(BaseModel):
+    id: str
+    de: str = "extensao"
+    dado: dict | None = None
+
+
+@app.post("/api/holo/fechado")
+def api_holo_fechado(d: dict):
+    """Fechou o holograma no X: para de atualizar os dados."""
+    if d.get("id") == holo_atual.get("id"):
+        holo_atual.clear()
+    return {"ok": True}
+
+
+@app.post("/api/mover_item")
+def api_mover_item(a: Arrasto):
+    """Arrastou um painel/pop-up até a borda: ele passa pra outra tela."""
+    fala = extensao.mover_por_id(a.id, a.de, CONFIG["porta"], a.dado)
+    return {"ok": bool(fala), "fala": fala}
+
+
+parar_agora = {"em": 0.0}
+
+
+@app.post("/api/parar")
+def api_parar():
+    """"Para!" no meio de uma execução: o laço do cérebro desiste no próximo passo, e o que estava na fila sai."""
+    parar_agora["em"] = time.time()
+    for s_ in sessoes.values():
+        s_["pendente"] = None
+    plano_atual.clear()
+    return {"ok": True}
 
 
 @app.post("/api/destacar")

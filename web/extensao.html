@@ -106,6 +106,16 @@
   #trava .sub { font: 12px Consolas, monospace; letter-spacing: .22em; color: var(--apagado); }
   #trava.negado { --ciano: #ff4d4d; --ciano-fraco: #ff4d4d33; }
   #trava.liberado .titulo { animation: pulsa .5s 3; }
+  /* embutida no centro da tela principal: transparente, sem cabeçalho nem medidores; o globo só aparece quando é o assunto */
+  html.embutido, body.embutido { background: transparent !important; }
+  body.embutido > header, body.embutido #painel, body.embutido #trava, body.embutido #fx, body.embutido #estado-ext,
+  body.embutido #ldt, body.embutido #coordenadas { display: none !important; }
+  body.embutido #globo { opacity: 0; pointer-events: none; transition: opacity .5s; }
+  body.embutido.lugar #globo, body.embutido.olho #globo, body.embutido.silhueta #globo, body.embutido.street #globo,
+  body.embutido.globo-ativo #globo { opacity: 1; pointer-events: auto; }
+  body.apresentando #globo { opacity: .15 !important; pointer-events: none !important; }
+  body.embutido main { inset: 8px 8px 0; padding-bottom: 40px; }
+  body.embutido.com-cartoes:not(.lugar) #globo { opacity: 0; }
   #trava .carga { width: min(420px, 70vw); height: 3px; background: var(--ciano-fraco); overflow: hidden; display: none; }
   #trava.carregando .carga { display: block; }
   #trava .carga div { height: 100%; width: 0; background: var(--ciano); box-shadow: 0 0 12px var(--ciano); transition: width .45s ease-out; }
@@ -172,6 +182,10 @@
 <script src="/web/vendor/globe.gl-2.45.3.min.js"></script>
 <script src="/web/vendor/highlight.min.js"></script>
 <script>
+// Esta mesma página roda em dois lugares: na janela lateral (extensão) e EMBUTIDA no centro da tela principal
+// (?embutido=1, o "palco" do HUD). Embutida ela não tem trava, fundo nem cabeçalho, e ouve o canal "palco".
+const EMBUTIDO = new URLSearchParams(location.search).has("embutido");
+if (EMBUTIDO) { document.documentElement.classList.add("embutido"); document.body.classList.add("embutido"); document.body.classList.remove("travado"); }
 let paises = null;
 const $ = (id) => document.getElementById(id);
 const MAXIMO = 4;  // só os pop-ups de agora: os mais velhos saem, nada de histórico
@@ -504,7 +518,7 @@ function remover(ids) {
 }
 
 // ------------------------------------------------------------ tempo real: o servidor empurra tudo
-const fonte = new EventSource("/api/extensao/eventos");
+const fonte = new EventSource("/api/extensao/eventos" + (EMBUTIDO ? "?canal=palco" : ""));
 fonte.onmessage = (m) => {
   const e = JSON.parse(m.data);
   if (e.cartao) cartao(e.cartao);
@@ -648,8 +662,10 @@ setInterval(contarPomodoro, 1000);
 lerPainel();
 
 // avisa que está aberta (o HUD para de pôr cartão em volta do núcleo enquanto isso)
-setInterval(() => fetch("/api/extensao/sinal", { method: "POST" }).catch(() => {}), 2000);
-fetch("/api/extensao/sinal", { method: "POST" });
+if (!EMBUTIDO) {  // só a janela lateral conta como "extensão aberta"
+  setInterval(() => fetch("/api/extensao/sinal", { method: "POST" }).catch(() => {}), 2000);
+  fetch("/api/extensao/sinal", { method: "POST" });
+}
 fetch("/api/status").then((r) => r.json()).then((s) => {
   document.body.classList.toggle("caverna", s.modo === "caverna"); pintar();
   if (s.casa) CASA = s.casa;
@@ -657,7 +673,10 @@ fetch("/api/status").then((r) => r.json()).then((s) => {
 }).catch(() => {});
 setInterval(() => ($("relogio").textContent = new Date().toLocaleTimeString("pt-BR")), 1000);
 </script>
-<script src="/web/extensao2.js?v=2110g"></script>
-<script src="/web/extensao3.js?v=2110k"></script>
+<script src="/web/vendor/three-r128.min.js"></script>
+<script src="/web/extensao2.js?v=2210a"></script>
+<script src="/web/extensao3.js?v=2210a"></script>
+<script src="/web/holograma.js?v=2210a"></script>
+<script src="/web/popups.js?v=2210a"></script>
 </body>
 </html>

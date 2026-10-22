@@ -1,3 +1,18 @@
 Ponha aqui arquivos .md com o que o Jarvis deve saber (ele lê tudo desta pasta).
 Eles ficam só neste PC (fora do git). Pra levar pra outro PC: Configurações → Geral → Exportar/Importar.
 memoria.md é criada sozinha quando você pede pra ele lembrar de algo.
+
+NOVIDADES (22/10/2026)
+- Nome em qualquer lugar da frase: "abre o VS Code, Jarvis". Falando ou executando, "para" cala e cancela.
+- Hologramas 3D: "me mostra as camadas da Terra", "as peças de um computador", "explica o sistema solar em 3D".
+- Hardware ao vivo: "mostra todos os hardwares", "quanto de RAM tá usando", "me mostra o processador";
+  com ele aberto: "só o processador", "e a RAM?", "volta pra todos", "e a velocidade?", "e a temperatura?".
+  Temperatura precisa do LibreHardwareMonitor aberto (grátis) com o servidor web ligado.
+- Núcleo neural: "abre o núcleo neural", "adiciona no núcleo que ...", "o que tem no núcleo sobre ...".
+- Fechar: "fecha o holograma" / "oculta o núcleo neural" / "pode fechar".
+- Radar de Leads: "busque 10 barbearias em Canoas" (pergunta o que faltar), "como tá a busca do radar", "para a busca do radar".
+  Na primeira vez ele abre a página de extensões pra instalar o Radar no navegador dele (uma vez só).
+- Câmeras ao vivo (públicas, Windy): "mostra as câmeras ao vivo de Florianópolis". Precisa da chave grátis "windy" no cofre.
+- Tela principal: conteúdo grande aparece no centro e o núcleo encolhe pro canto. Arrastar um painel até a borda
+  passa ele pra outra tela. Fechar uma das janelas fecha a outra junto.
+- Liga junto com o Windows logo após o login e já abre a tela.

@@ -292,6 +292,7 @@
 
   // ------------------------------------------------------------ "volta o globo ao normal"
   function globoNormal() {
+    document.body.classList.remove("globo-ativo");
     window.olhoCamada && ["avioes", "satelites", "terremotos", "clima", "noticias"].forEach((n) => window.olhoCamada(n, false, null, true));
     limparSelecao();
     pinos = []; window.extrasHtml = []; redesenhar();
@@ -309,6 +310,134 @@
   }
 
   window.globoNormal = globoNormal;
+
+  // ------------------------------------------------------------ câmeras públicas ao vivo (Windy)
+  const cssCam = document.createElement("style");
+  cssCam.textContent = `
+  .cam-pino { width: 16px; height: 16px; border: 2px solid #ff3b3b; border-radius: 3px; background: #ff3b3b33; cursor: pointer;
+    box-shadow: 0 0 10px #ff3b3b; pointer-events: auto; position: relative; animation: cam-pulsa 1.6s ease-in-out infinite; }
+  .cam-pino.parada { border-color: #8aa; background: #8aa3; box-shadow: none; animation: none; }
+  .cam-pino::after { content: ""; position: absolute; right: -6px; top: 3px; border-left: 6px solid currentColor; border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent; color: #ff3b3b; }
+  @keyframes cam-pulsa { 50% { box-shadow: 0 0 22px #ff3b3b; transform: scale(1.15); } }
+  .cartao.camera iframe, .cartao.camera img { width: 100%; aspect-ratio: 16 / 9; border: 1px solid #ff3b3b55; background: #000; display: block; margin-top: 10px; }
+  .cartao.camera .ao-vivo { color: #ff3b3b; font: 11px Consolas, monospace; letter-spacing: .25em; animation: holo-pisca 1.2s infinite; }`;
+  document.head.append(cssCam);
+  function camerasNoGlobo(d) {
+    window.extrasHtml = (window.extrasHtml || []).filter((x) => x.tipo !== "camera");
+    for (const c of d.lista || []) {
+      const el = document.createElement("div");
+      el.className = "cam-pino" + (c.ativa ? "" : " parada"); el.title = c.nome;
+      el.onclick = (ev) => { ev.stopPropagation(); abrirCamera(c); };
+      window.extrasHtml.push({ tipo: "camera", lat: c.lat, lng: c.lng, el });
+    }
+    if (d.lugar && d.lista?.length) {
+      globo.controls().autoRotate = false;
+      globo.pointOfView({ lat: d.lugar.lat, lng: d.lugar.lng, altitude: 0.18 }, 2200);
+      sons.viagem();
+    } else if (!d.lista?.length) sons.fecha();
+    window.redesenharHtml?.();
+  }
+  function abrirCamera(c) {
+    document.querySelector(".cartao.camera")?.remove();
+    const k = document.createElement("article");
+    k.className = "cartao camera tom-alerta"; k.dataset.id = "cam" + c.id;
+    k.innerHTML = `<h3></h3><div class="ao-vivo">● AO VIVO</div><div class="pp-resumo" style="font-size:13px"></div>`;
+    k.querySelector("h3").textContent = c.nome;
+    k.querySelector(".pp-resumo").textContent = c.cidade || "";
+    if (c.player) { const f = document.createElement("iframe"); f.src = c.player; f.allow = "autoplay; fullscreen"; k.append(f); }
+    else if (c.foto) { const i = document.createElement("img"); i.src = c.foto; k.append(i); }
+    lista.prepend(k); sons.popup();
+  }
+
+  // ------------------------------------------------------------ Radar de Leads trabalhando (progresso ao vivo)
+  const ROTULO_SITE = { sem_site: "sem site", rede_social: "só rede social", site_gratuito: "site gratuito", site_proprio: "site próprio" };
+  function painelRadar(r) {
+    let c = document.querySelector('.cartao[data-id="radar"]');
+    const novo = !c;
+    if (novo) {
+      c = document.createElement("article"); c.className = "cartao painel-pesquisa radar-painel"; c.dataset.id = "radar";
+      lista.prepend(c);
+    }
+    const pct = r.meta ? Math.min(100, Math.round((100 * (r.encontrados || 0)) / r.meta)) : 0;
+    c.innerHTML = `<div class="pp-topo"><h3>Radar de Leads · ${r.status === "rodando" ? "varrendo o Google Maps" : (r.status || "parado")}</h3></div>
+      <div class="destaque" style="padding:4px 18px 0">${r.encontrados || 0} leads novos${r.meta ? " de " + r.meta : ""}</div>
+      <div style="margin:8px 18px 0;height:4px;background:var(--ciano-fraco)"><div style="height:100%;width:${pct}%;background:var(--ciano);box-shadow:0 0 10px var(--ciano);transition:width .6s"></div></div>
+      <p class="pp-resumo" style="font-size:14px"></p><ul class="pp-fontes"></ul>`;
+    c.querySelector(".pp-resumo").textContent = [r.busca && `Buscando: ${r.busca}`, r.progresso && `busca ${r.progresso}`, r.mensagem].filter(Boolean).join(" · ");
+    const ul = c.querySelector(".pp-fontes");
+    for (const l of r.leads || []) {
+      const li = document.createElement("li");
+      li.textContent = `${l.nome || "—"} · ${l.cidade || ""} · ${ROTULO_SITE[l.site] || l.site || ""}${l.nota ? " · ★ " + l.nota : ""}`;
+      ul.append(li);
+    }
+    if (novo) { podar(); atualizarEstado(); sons.popup(); }
+  }
+
+  // ------------------------------------------------------------ arrastar um painel até a borda = passa pra outra tela
+  // As duas telas são janelas separadas (o navegador não deixa um elemento atravessar de uma pra outra), então:
+  // segurou e levou até a borda, ele "sai" daqui e o servidor manda aparecer na outra tela.
+  const css2 = document.createElement("style");
+  css2.textContent = `
+  .arrastando { transition: none !important; z-index: 50 !important; opacity: .92; box-shadow: 0 0 40px var(--ciano) !important; cursor: grabbing; }
+  .vai-sair { outline: 2px dashed var(--ciano); outline-offset: 6px; }
+  .vai-sair::after { content: "SOLTE PRA MANDAR PRA OUTRA TELA"; position: absolute; left: 0; right: 0; top: -26px; text-align: center;
+    font: 11px Consolas, monospace; letter-spacing: .2em; color: var(--ciano); }
+  .cartao h3, .pp-topo { cursor: grab; }`;
+  document.head.append(css2);
+  const MARGEM = 46;
+  function arrastavel(el) {
+    if (el.__arrasta) return;
+    el.__arrasta = true;
+    el.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0 || ev.target.closest("button, a, input, textarea, select, iframe, .galeria, .pp-fontes, .nt")) return;
+      const x0 = ev.clientX, y0 = ev.clientY;
+      let ativo = false;
+      const mover = (e) => {
+        const dx = e.clientX - x0, dy = e.clientY - y0;
+        if (!ativo && Math.hypot(dx, dy) < 8) return;
+        if (!ativo) { ativo = true; el.classList.add("arrastando"); el.setPointerCapture?.(ev.pointerId); }
+        el.style.transform = `translate(${dx}px, ${dy}px) scale(.97)`;
+        const borda = e.clientX < MARGEM || e.clientY < MARGEM || e.clientX > innerWidth - MARGEM || e.clientY > innerHeight - MARGEM;
+        el.classList.toggle("vai-sair", borda);
+      };
+      const soltar = async () => {
+        removeEventListener("pointermove", mover); removeEventListener("pointerup", soltar);
+        if (!ativo) return;
+        const sair = el.classList.contains("vai-sair");
+        el.classList.remove("arrastando", "vai-sair");
+        if (!sair) { el.style.transform = ""; return; }
+        el.style.transition = "opacity .25s, transform .25s"; el.style.opacity = "0";
+        sons.viagem();
+        const id = el.dataset.id || "";
+        try {
+          const r = await (await fetch("/api/mover_item", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, de: EMBUTIDO ? "palco" : "extensao" }) })).json();
+          if (!r.ok) { el.style.opacity = ""; el.style.transform = ""; }
+        } catch { el.style.opacity = ""; el.style.transform = ""; }
+      };
+      addEventListener("pointermove", mover); addEventListener("pointerup", soltar);
+    });
+  }
+  new MutationObserver(() => document.querySelectorAll("#lista > .cartao, #sobre-globo > .cartao").forEach(arrastavel))
+    .observe(document.body, { childList: true, subtree: true });
+
+  // ------------------------------------------------------------ embutida: avisa o HUD quando tem algo pra mostrar
+  if (EMBUTIDO) {
+    let antes = null;
+    const conferir = () => {
+      const b = document.body.classList;
+      const ativo = lista.children.length > 0 || ["lugar", "olho", "silhueta", "street", "vendo-pagina", "lendo-pagina",
+        "apresentando", "globo-ativo", "tem-unidade"].some((c) => b.contains(c));
+      if (ativo === antes) return;
+      antes = ativo;
+      try { ativo ? globo.resumeAnimation() : globo.pauseAnimation(); } catch {}  // sem nada no palco, o globo não gasta GPU
+      parent.postMessage({ palco: ativo }, location.origin);
+    };
+    new MutationObserver(conferir).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    new MutationObserver(conferir).observe(lista, { childList: true });
+    setTimeout(conferir, 500);
+  }
 
   // ------------------------------------------------------------ "que avião é esse?" / clique no avião
   function cartaoDoAviao(a) {
@@ -343,6 +472,7 @@
   fonte.addEventListener("message", (m) => {
     const e = JSON.parse(m.data);
     if (e.modo_globo) satelite(e.modo_globo !== "holograma", e.modo_globo === "nuvens" ? true : e.modo_globo === "satelite" ? false : undefined);
+    if (e.mostrar_globo) document.body.classList.add("globo-ativo");
     if (e.globo_normal) globoNormal();
     if (e.pois) mostrarPois(e.pois);
     if (e.noticias) mostrarNoticias(e.noticias);
@@ -352,5 +482,7 @@
     if (e.remover && paginaId && e.remover.includes(paginaId)) fecharPagina();
     if (e.limpar_selecao) limparSelecao();
     if (e.aviao) cartaoDoAviao(e.aviao);
+    if (e.radar) painelRadar(e.radar);
+    if (e.cameras) camerasNoGlobo(e.cameras);
   });
 })();

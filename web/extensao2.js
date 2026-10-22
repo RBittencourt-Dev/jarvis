@@ -384,7 +384,8 @@
       if (imgs[i]) imgs[i].click();
     }
     if (e.fechar_painel) {
-      if (document.body.classList.contains("vendo-pagina")) { /* a parte 3 fecha a página */ }
+      if (document.body.classList.contains("apresentando")) window.fecharHolograma?.();  // "pode fechar" com holograma aberto
+      else if (document.body.classList.contains("vendo-pagina")) { /* a parte 3 fecha a página */ }
       else if (document.body.classList.contains("lendo-pagina")) { document.body.classList.remove("lendo-pagina"); sons.fecha(); }
       else if ($("lupa-ext").classList.contains("aberta")) $("lupa-ext").classList.remove("aberta");
       else {

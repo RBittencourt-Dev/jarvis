@@ -7,7 +7,7 @@
 <link rel="icon" href="/web/marca/jarvis.ico" sizes="any">
 <link rel="icon" href="/web/marca/jarvis-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/web/marca/jarvis-192.png">
-<link rel="stylesheet" href="/web/jarvis.css?v=2110c">
+<link rel="stylesheet" href="/web/jarvis.css?v=2210a">
 <link rel="stylesheet" href="/web/vendor/highlight.css">
 </head>
 <body>
@@ -24,6 +24,9 @@
       <img class="logo" src="/web/marca/sevencode.png" alt="7 SevenCode">
       <span id="relogio"></span>
     </header>
+
+    <!-- palco: o centro da tela principal (a mesma página da extensão, embutida). Com algo nele, o núcleo encolhe. -->
+    <iframe id="palco-hud" src="/extensao?embutido=1" title="Painel central" allow="autoplay; fullscreen; accelerometer; gyroscope"></iframe>
 
     <!-- linhas que ligam cada cartão ao núcleo -->
     <svg id="ligacoes" aria-hidden="true"></svg>
@@ -118,10 +121,11 @@
   </main>
   <script src="/web/vendor/face-api.js"></script>
   <script src="/web/vendor/highlight.min.js"></script>
-  <script src="/web/instalacao.js?v=2110e"></script>
-  <script src="/web/rosto.js?v=2110c"></script>
-  <script src="/web/jarvis.js?v=2110f"></script>
-  <script src="/web/automacoes.js?v=2110c"></script>
-  <script src="/web/configuracoes.js?v=2110c"></script>
+  <script src="/web/instalacao.js?v=2210a"></script>
+  <script src="/web/rosto.js?v=2210a"></script>
+  <script src="/web/jarvis.js?v=2210a"></script>
+<script src="/web/popups.js?v=2210a"></script>
+  <script src="/web/automacoes.js?v=2210a"></script>
+  <script src="/web/configuracoes.js?v=2210a"></script>
 </body>
 </html>
