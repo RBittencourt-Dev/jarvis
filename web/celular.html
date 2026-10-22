@@ -219,7 +219,10 @@ else if (ios) fetch("/api/celular/estado", { method: "POST", headers: { "Content
 // ---------------------------------------------------------------- voz pelo Web Audio, destravado no 1º toque
 // (o iPhone só deixa tocar som que começou num toque; um AudioContext retomado no toque toca o resto sozinho)
 let ctx = null;
-try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}  // toca mesmo com o iPhone no silencioso
+// "playback" = toca mesmo com o iPhone no silencioso, MAS trava o microfone ("AudioSession category is not compatible
+// with audio capture"): na hora de gravar vira "play-and-record" e, fechado o microfone, volta pra "playback"
+function sessaoDeAudio(tipo) { try { if (navigator.audioSession) navigator.audioSession.type = tipo; } catch {} }
+sessaoDeAudio("playback");
 function destravar() {
   ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
   if (ctx.state !== "running") ctx.resume();
@@ -411,13 +414,23 @@ function registrar(o) {
 }
 async function pedirMic() {
   if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error("sem microfone"), { name: "SemSuporte" });
-  return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  sessaoDeAudio("play-and-record");
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch (e) {
+    sessaoDeAudio("playback");
+    throw e;
+  }
+}
+function fecharMic(f) {
+  f?.getTracks().forEach((x) => x.stop());
+  sessaoDeAudio("playback");
 }
 $("ativar-mic").onclick = async () => {
   destravar();
   try {
     const f = await pedirMic();
-    f.getTracks().forEach((x) => x.stop());  // só pra liberar; abre de novo na hora de falar
+    fecharMic(f);  // só pra liberar; abre de novo na hora de falar
     lembrar(true);
     $("permissao").hidden = true;
     escrever("Microfone ativado. Toque no núcleo e fale.", "ele");
@@ -478,7 +491,7 @@ function parar() {
   clearInterval(vigia);
   if (gravador?.state === "recording") gravador.stop();
   // fecha o microfone: com ele aberto o iPhone joga a voz do Jarvis no alto-falante de ligação, baixinho
-  setTimeout(() => { fluxo?.getTracks().forEach((x) => x.stop()); fluxo = null; }, 300);
+  setTimeout(() => { fecharMic(fluxo); fluxo = null; }, 300);
 }
 async function enviarGravacao() {
   const blob = new Blob(pedacos, { type: gravador.mimeType || "audio/mp4" });
