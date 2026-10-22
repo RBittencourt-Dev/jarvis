@@ -55,3 +55,4 @@ conhecimento/*.md
 *.antes*.json
 login-*.json
 !login-*.exemplo.json
+celular.json

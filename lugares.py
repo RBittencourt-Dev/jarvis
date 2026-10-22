@@ -96,8 +96,9 @@ def _conhecidos():
 
 def _nominatim(nome, perto_de_casa=False, varios=False):
     params = {"q": nome, "format": "jsonv2", "limit": 6 if varios else 1, "addressdetails": 1, "namedetails": 1}
-    if perto_de_casa:  # restaurante sem cidade: primeiro procura na região dele
-        params.update(viewbox=f"{CASA['lng'] - 1.5},{CASA['lat'] + 1.5},{CASA['lng'] + 1.5},{CASA['lat'] - 1.5}", bounded=1)
+    if perto_de_casa:  # restaurante sem cidade: primeiro procura na região dele (ou onde o celular está)
+        c = perto_de()
+        params.update(viewbox=f"{c['lng'] - 1.5},{c['lat'] + 1.5},{c['lng'] + 1.5},{c['lat'] - 1.5}", bounded=1)
     try:
         r = httpx.get("https://nominatim.openstreetmap.org/search", headers=CABECALHO, timeout=6, params=params)
         return (r.json() or []) if varios else (r.json() or [None])[0]
@@ -148,6 +149,13 @@ def _montar(achado, nome, qualquer=True):
     return lugar
 
 
+def perto_de():
+    """O "aqui" das buscas: o celular dele (localização de até 20 min), senão a casa."""
+    import celular
+    l = celular.aqui()
+    return {**CASA, "lat": l["lat"], "lng": l["lng"], "cidade": l.get("cidade") or CASA.get("cidade")} if l else CASA
+
+
 def _distancia(a, b):
     return ((a["lat"] - b["lat"]) ** 2 + (a["lng"] - b["lng"]) ** 2) ** 0.5
 
@@ -191,7 +199,7 @@ def opcoes(nome):
     if len(perto) == 1:
         return "um", perto[0]
     if len(perto) > 1:
-        return "varios_perto", sorted(perto, key=lambda l: _distancia(l, CASA))
+        return "varios_perto", sorted(perto, key=lambda l: _distancia(l, perto_de()))
     longe = _sem_repetidos(mundo)
     if not longe:
         return None
@@ -205,7 +213,7 @@ def escolher(nome, resposta, candidatos):
     """A resposta dele à pergunta "qual deles?": "o mais perto", "no Centro", "em Gramado"…"""
     r = _sem_acento(resposta)
     if re.search(r"mais perto|tanto faz|qualquer|o primeiro|daqui|esse mesmo|pode ser", r):
-        return min(candidatos, key=lambda l: _distancia(l, CASA)) if candidatos else None
+        return min(candidatos, key=lambda l: _distancia(l, perto_de())) if candidatos else None
     lugar_dito = r
     while True:
         menor = re.sub(r"^(?:perto\s+d[oa]|l[aá]\s+n[oa]|o|a|os|as|no|na|em|do|da|de|bairro|cidade|que\s+fica)\s+", "", lugar_dito).strip()
@@ -218,7 +226,7 @@ def escolher(nome, resposta, candidatos):
     batem = [c for c in candidatos  # bairro ou cidade de uma das opções
              if lugar_dito and lugar_dito in _sem_acento(f"{c.get('bairro') or ''} {c.get('cidade') or ''} {c['completo']}")]
     if batem:
-        return min(batem, key=lambda l: _distancia(l, CASA))
+        return min(batem, key=lambda l: _distancia(l, perto_de()))
     return procurar(f"{nome}, {lugar_dito}", qualquer=True)
 
 
@@ -282,7 +290,7 @@ def cidades_do_endereco(end):
         l = _endereco_de(a, rua, num)
         if l and l["cidade"] and l["cidade"] not in por_cidade:
             por_cidade[l["cidade"]] = l
-    opcoes = sorted(por_cidade.values(), key=lambda l: _distancia(l, CASA))
+    opcoes = sorted(por_cidade.values(), key=lambda l: _distancia(l, perto_de()))
     return opcoes if len(opcoes) > 1 else None
 
 
@@ -415,12 +423,17 @@ def maps(lugar):
 
 
 def maps_busca(termo, perto=False):
+    import celular
+    l = celular.aqui() if perto else None
+    if l:  # com o celular: em volta de onde ele está, não do IP do PC
+        return f"https://www.google.com/maps/search/{quote_plus(termo)}/@{l['lat']},{l['lng']},15z"
     return f"https://www.google.com/maps/search/{quote_plus(termo + (' perto de mim' if perto else ''))}"
 
 
 def casa():
-    return {"nome": CASA.get("cidade", "Porto Alegre"), "completo": CASA.get("cidade", "Porto Alegre"),
-            "lat": CASA["lat"], "lng": CASA["lng"], "tipo": "city", "ponto": False, "altitude": 0.85}
+    c = perto_de()
+    return {"nome": c.get("cidade", "Porto Alegre"), "completo": c.get("cidade", "Porto Alegre"),
+            "lat": c["lat"], "lng": c["lng"], "tipo": "city", "ponto": False, "altitude": 0.85}
 
 
 def foto(lugar):

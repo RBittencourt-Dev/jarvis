@@ -120,8 +120,9 @@ def buscar(termo, area=None, ao_completar=None):
     if not area:
         import json
         from pathlib import Path
+        import celular
         try:
-            casa = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))["casa"]
+            casa = celular.aqui() or json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))["casa"]
         except Exception:
             casa = {"lat": -30.03, "lng": -51.23}
         area = {"nome": "perto de você", "caixa": _caixa_perto(casa["lat"], casa["lng"])} if cat else {"nome": "no Brasil", "caixa": BRASIL}

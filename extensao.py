@@ -306,6 +306,8 @@ def mostrar(titulo: str, texto: str = "", itens=None):
 
 def abrir(porta):
     """Abre a extensão em tela cheia na tela vertical (se já estiver aberta, só lembra a escolha)."""
+    if origem.get() == "celular":
+        return ""  # o celular tem o palco dele; a janela do PC fica quieta
     lembrar_escolha(True)
     if aberta():
         return "A extensão já tá aberta na outra tela, chefe."

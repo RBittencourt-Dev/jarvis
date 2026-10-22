@@ -617,6 +617,12 @@ FRASES += [
     ("feche o spotify", "janela|fechar"),
     # 22/10: falas programadas e Instagram
     ("todo dia às 18h fala hora de ir embora", "falas_programadas criar 18:00"),
+    ("me mostra meu celular", "celular holograma"),
+    ("como é o meu iphone", "celular holograma"),
+    ("quanto de espaço tô usando no celular", "celular espaco"),
+    ("tô usando 180 giga no celular", "celular guardar_uso 180.0"),
+    ("onde eu tô", "celular onde"),
+    ("onde tá meu celular", "celular onde"),
     ("de segunda a sexta às 7 e meia diz bom dia chefe", "falas_programadas criar 07:30"),
     ("quais são as minhas falas programadas", "falas_programadas listar"),
     ("me lembra às 15h de ligar pro rihan", "lembretes"),

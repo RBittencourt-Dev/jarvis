@@ -34,6 +34,7 @@ import pomodoro
 import sistemas
 import automacoes
 import cerebro
+import celular
 import claude_ponte
 import ferramentas_extra
 import extensao
@@ -933,7 +934,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (falas_programadas, instagram, lembretes, pomodoro, anotacoes, noticias, sistemas)
+RECURSOS = (celular, falas_programadas, instagram, lembretes, pomodoro, anotacoes, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
@@ -3626,8 +3627,62 @@ def inicio(request: Request):
 
 
 @app.get("/celular")
-def celular():
+def pagina_do_celular():  # (não pode chamar "celular": é o nome do módulo)
     return FileResponse(RAIZ / "web" / "celular.html")
+
+
+@app.post("/api/celular/estado")
+async def celular_estado(request: Request):
+    """Localização (tela do celular, a cada pouco) e bateria (Atalho da Siri). Vale como o "aqui" das buscas."""
+    try:
+        d = await request.json()
+    except ValueError:
+        d = {}
+    return celular.receber(d if isinstance(d, dict) else {})
+
+
+SIM_SIRI = re.compile(r"^(?:sim|pode|pode sim|confirmo|manda|claro|isso|vai)\b", re.I)
+NAO_SIRI = re.compile(r"^(?:n[aã]o|cancela|deixa|esquece)\b", re.I)
+
+
+@app.post("/api/celular/atalho")
+async def celular_atalho(request: Request):
+    """Pela Siri ("E aí, Jarvis"): o Atalho do iPhone dita o pedido, manda pra cá e a Siri fala o texto que voltar.
+    Corpo: {"texto": "...", "bateria": 80, "carregando": false} (ou só o texto puro). Conta como pedido do celular."""
+    bruto = (await request.body()).decode("utf-8", "ignore").strip()
+    try:
+        d = json.loads(bruto) if bruto.startswith("{") else {"texto": bruto}
+    except ValueError:
+        d = {"texto": bruto}
+    if d.get("bateria") not in (None, ""):
+        celular.receber({"bateria": d["bateria"], "carregando": str(d.get("carregando")).lower() in ("1", "true", "sim", "yes")})
+    texto = str(d.get("texto") or "").strip()
+    if not texto:
+        return Response("Fala comigo, chefe.", media_type="text/plain; charset=utf-8")
+    sid = "siri"
+    sessao = sessoes.setdefault(sid, {"mensagens": [], "pendente": None, "celular": True})
+    if sessao.get("pendente") and (SIM_SIRI.match(texto) or NAO_SIRI.match(texto)):
+        resposta = await decidir(Decisao(sessao=sid, autorizado=bool(SIM_SIRI.match(texto))))
+    else:
+        resposta = await conversar(Pergunta(sessao=sid, texto=texto, celular=True))
+    partes = []
+    if isinstance(resposta, StreamingResponse):
+        async for pedaco in resposta.body_iterator:
+            for linha in (pedaco.decode() if isinstance(pedaco, bytes) else pedaco).splitlines():
+                try:
+                    e = json.loads(linha)
+                except ValueError:
+                    continue
+                if e.get("trecho"):
+                    partes.append(e["trecho"])
+                if e.get("leitura"):
+                    partes.extend(e["leitura"].get("frases") or [])
+                if e.get("pendente"):
+                    partes.append((e["pendente"].get("fala") or "Confirma?") + " Me chama de novo e diz sim ou não.")
+                if e.get("erro"):
+                    partes.append("Deu um erro: " + str(e["erro"])[:120])
+    fala = re.sub(r"\s+", " ", " ".join(partes)).strip() or "Feito, chefe."
+    return Response(fala[:1500], media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/celular/ouvir")

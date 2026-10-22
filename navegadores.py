@@ -71,6 +71,11 @@ def abrir(url, navegador=None, janela_nova=False, tela="padrao"):
     tela: "esta" (horizontal), "outra" (vertical), None (onde o navegador quiser) ou "padrao" (config tela_dos_sites).
     Com tela, abre janela nova e leva ela pra lá em segundo plano, sem segurar a resposta.
     """
+    import extensao
+    if extensao.origem.get() == "celular":
+        # pedido feito no celular: o link aparece lá, num botão (o iPhone só abre app/site com um toque dele)
+        extensao.publicar({"link": {"url": url}})
+        return
     if tela == "padrao":
         tela = TELA_DOS_SITES or None
     exe = executavel(navegador) or executavel(PADRAO)
