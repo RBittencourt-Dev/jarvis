@@ -615,6 +615,20 @@ FRASES += [
     ("deixa eu ver o globo", "interno abrir_globo"),
     ("mostra aí o globo", "interno abrir_globo"),
     ("feche o spotify", "janela|fechar"),
+    # 22/10: falas programadas e Instagram
+    ("todo dia às 18h fala hora de ir embora", "falas_programadas criar 18:00"),
+    ("de segunda a sexta às 7 e meia diz bom dia chefe", "falas_programadas criar 07:30"),
+    ("quais são as minhas falas programadas", "falas_programadas listar"),
+    ("me lembra às 15h de ligar pro rihan", "lembretes"),
+    ("fala pro rihan que o deploy subiu", "whatsapp quem=Rihan"),
+    ("pesquisa a conta porthon.app no instagram", "instagram perfil porthon.app"),
+    ("abre o insta do arroba porthon ponto app", "instagram perfil"),
+    ("mostra o story do neymarjr", "instagram story neymarjr"),
+    ("abre o direct", "instagram direct"),
+    ("mostra minhas mensagens do insta", "instagram direct"),
+    ("abre os reels do instagram", "instagram pagina reels"),
+    ("abre o instagram", "abrir"),
+    ("deixa eu ver o story do neymarjr", "instagram story"),
 ]
 
 

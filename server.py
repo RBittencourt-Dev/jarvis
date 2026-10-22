@@ -54,6 +54,8 @@ import sistema
 import spotify
 import vocabulario
 import sinonimos
+import falas_programadas
+import instagram
 import pronuncia as pronuncia_
 import telas
 import web
@@ -479,7 +481,8 @@ FERRAMENTAS = {
                        {**parametro("nome", "nome do arquivo"), "abas": {"type": "object", "description":
                         'abas da planilha: {"Nome da aba": [["Cabeçalho1", "Cabeçalho2"], ["valor", "valor"], ...]}'}}),
     "comando_jarvis": (None, False, "Executa uma habilidade pronta do Jarvis, escrita como comando curto: "
-                       "Spotify, WhatsApp, painel/caixa/leads/CRM/reuniões, Porthon, janelas e telas, volume, modo caverna, "
+                       "Spotify, WhatsApp, Instagram (perfil, story, direct, reels), falas programadas ('todo dia às 18h fala X'), "
+                       "painel/caixa/leads/CRM/reuniões, Porthon, janelas e telas, volume, modo caverna, "
                        "fechar/minimizar as janelas que você abriu ('minimiza os popups'), fechar aba ('fecha a aba do youtube no opera'). "
                        "Ex.: 'toca Development', 'manda pro Jesus: já tô indo', 'quanto tem no caixa', "
                        "'passa o spotify pra outra tela'.", parametro("comando", "o comando, em português")),
@@ -930,7 +933,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (lembretes, pomodoro, anotacoes, noticias, sistemas)
+RECURSOS = (falas_programadas, instagram, lembretes, pomodoro, anotacoes, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
@@ -1582,6 +1585,10 @@ async def conversa_de_whatsapp(sid, sessao, d, fala):
                               "args": {"mensagem": d["texto"]}, "fala": fala}
         return em_linhas(sid, pedir_confirmacao(sessao["pendente"]))
     sessao["dialogo"] = None if d.get("etapa") == "cancelado" else d
+    if d.get("etapa") == "escolher" and d.get("opcoes"):  # os contatos achados no WhatsApp, numerados na tela
+        return em_linhas(sid, responder_ja(fala, [{"titulo": "WhatsApp · qual deles?", "destaque": d.get("como_disse") or "",
+                                                   "linhas": [f"{i}. {o['nome']}" + (" (contato)" if o["tipo"] == "contato" else "")
+                                                              for i, o in enumerate(d["opcoes"], 1)]}]))
     return em_linhas(sid, responder_ja(fala))
 
 
@@ -2921,6 +2928,14 @@ async def relogio_das_automacoes():
             await automacao_sozinha(rotina)
     while True:
         agora = datetime.now()
+        for fala in falas_programadas.do_minuto(agora):  # fala sozinho no horário (tela fechada: o segundo plano fala)
+            chave = ("fala", fala["id"], f"{agora:%Y-%m-%d %H:%M}")
+            if chave not in feitas:
+                feitas.add(chave)
+                texto = falas_programadas.preencher(fala["texto"], agora)
+                novidades_de_leads.append({"fala": texto, "cartao": extensao.com_id(
+                    {"titulo": "Fala programada", "destaque": fala["hora"], "texto": texto})})
+                registro.anotar("fala programada", texto, tipo="aviso")
         for rotina in automacoes.do_minuto(agora):
             chave = (rotina["id"], f"{agora:%Y-%m-%d %H:%M}")
             if chave not in feitas:
@@ -2935,6 +2950,32 @@ async def relogio_das_automacoes():
 @app.on_event("startup")
 async def ligar_relogio_das_automacoes():
     tarefas_de_fundo.add(asyncio.create_task(relogio_das_automacoes()))
+
+
+@app.get("/api/falas-programadas")
+def listar_falas_programadas():
+    return {"falas": falas_programadas.todas()}
+
+
+@app.post("/api/falas-programadas")
+def salvar_fala_programada(f: dict):
+    try:
+        return falas_programadas.salvar(f)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/falas-programadas/{id_}")
+def apagar_fala_programada(id_: str):
+    falas_programadas.apagar(id_)
+    return {"ok": True}
+
+
+@app.post("/api/falas-programadas/testar")
+def testar_fala_programada(f: dict):
+    """Botão "ouvir agora" da tela: fala a frase já (do jeito que vai sair no horário)."""
+    novidades_de_leads.append({"fala": falas_programadas.preencher(str(f.get("texto") or "")), "cartao": None})
+    return {"ok": True}
 
 
 @app.get("/api/automacoes")

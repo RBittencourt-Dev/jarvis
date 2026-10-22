@@ -3,7 +3,7 @@
 (() => {
   const ABAS = [
     ["geral", "Geral"], ["modelos", "Modelos"], ["voz", "Voz"], ["proatividade", "Proatividade"], ["memoria", "Memória"],
-    ["privacidade", "Privacidade"], ["automacoes", "Automações"], ["conectores", "Conectores"], ["instalacao", "Instalação"],
+    ["privacidade", "Privacidade"], ["automacoes", "Automações"], ["falas", "Falas programadas"], ["conectores", "Conectores"], ["instalacao", "Instalação"],
   ];
   const painel = $("configuracoes"), corpo = $("cfg-corpo"), abas = $("cfg-abas"), botao = $("abrir-configuracoes");
   let dados = null, abaAtual = "geral";
@@ -172,6 +172,53 @@
           campo("Ligado agora", chave(p.nao_perturbe, (v) => salvarConfig({ proatividade: { nao_perturbe: v } })),
             "Também por voz: “ativa o não perturbe”. Avisos viram pop-up mudo."),
           campo("Silêncio automático", h("div", { className: "cfg-linha" }, "das", de, "às", ate))),
+      ];
+    },
+
+    // falas programadas: num horário ele FALA sozinho (mesmo com a tela fechada, pelo segundo plano)
+    falas() {
+      const DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+      const lista = h("ul", { className: "cfg-itens" }, "Carregando…");
+      const quando = (f) => f.data ? `${f.data.slice(8, 10)}/${f.data.slice(5, 7)} às ${f.hora} (uma vez)`
+        : (f.dias.length === 7 ? "todo dia" : f.dias.map((d) => DIAS[d]).join(", ")) + ` às ${f.hora}`;
+      const carregar = async () => {
+        const { falas } = await api("/api/falas-programadas");
+        lista.innerHTML = "";
+        if (!falas.length) lista.append(h("li", {}, h("div", {}, h("small", {}, "Nenhuma ainda. Crie aqui embaixo ou fale: “todo dia às 18h fala hora de ir embora”."))));
+        for (const f of falas.sort((a, b) => a.hora.localeCompare(b.hora))) {
+          const ativa = chave(f.ativa, async (v) => { await api("/api/falas-programadas", "POST", { ...f, ativa: v }); aviso(v ? "Ligada." : "Desligada."); });
+          const ouvir = h("button", { className: "secundario", textContent: "Ouvir" });
+          ouvir.onclick = () => api("/api/falas-programadas/testar", "POST", { texto: f.texto });
+          const apagar = h("button", { className: "secundario", textContent: "Apagar" });
+          apagar.onclick = async () => { await api("/api/falas-programadas/" + f.id, "DELETE"); carregar(); };
+          lista.append(h("li", {}, ativa, h("div", {}, h("strong", {}, f.texto), h("small", {}, quando(f))), ouvir, apagar));
+        }
+      };
+      carregar().catch((e) => (lista.textContent = "Erro: " + e.message));
+      const texto = h("input", { placeholder: "O que ele vai falar. Ex.: São {hora}, chefe. Hora de ir embora." });
+      const hora = h("input", { type: "time", value: "18:00" });
+      const marcas = DIAS.map((d, i) => { const c = h("input", { type: "checkbox", checked: true, className: "cfg-chave" }); c.dataset.dia = i;
+                                          return h("span", { className: "cfg-linha" }, c, d); });
+      const umaVez = h("input", { type: "date" });
+      const criar = h("button", { textContent: "Programar fala" });
+      criar.onclick = async () => {
+        const dias = marcas.map((m) => m.firstChild).filter((c) => c.checked).map((c) => +c.dataset.dia);
+        try {
+          await api("/api/falas-programadas", "POST", { texto: texto.value, hora: hora.value, dias, data: umaVez.value || null });
+          texto.value = ""; umaVez.value = ""; aviso("Programado."); carregar();
+        } catch (e) { aviso("Não salvei: " + e.message, true); }
+      };
+      const testar = h("button", { className: "secundario", textContent: "Ouvir agora" });
+      testar.onclick = () => texto.value.trim() && api("/api/falas-programadas/testar", "POST", { texto: texto.value });
+      return [
+        secao("Falas programadas", h("p", { className: "cfg-texto" },
+          "No horário ele fala sozinho, com a tela aberta ou fechada (o PC precisa estar ligado). Dá pra usar {hora}, {data} e {dia} na frase."), lista),
+        secao("Nova fala",
+          campo("Frase", texto),
+          campo("Horário", hora),
+          campo("Dias", h("div", { className: "cfg-linha" }, ...marcas)),
+          campo("Só uma vez, no dia", umaVez, "Se escolher um dia aqui, os dias da semana são ignorados e ela some depois de falada."),
+          h("div", { className: "botoes" }, criar, testar)),
       ];
     },
 

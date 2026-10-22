@@ -17,6 +17,8 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import quote
 
+import zap_tela  # 22/10: acha os contatos no próprio WhatsApp e ele escolhe qual
+
 RAIZ = Path(__file__).parent
 ARQUIVO_CONTATOS = RAIZ / "contatos.json"
 DDD_PADRAO = "51"
@@ -182,9 +184,17 @@ def proximo_passo(d, leads=None):
             d["salvo_como"] = contato.get("salvo_como")
             d["verificado"] = contato.get("verificado", True)
         else:
-            d["etapa"] = "quem_e"
             d["como_disse"] = d["quem"]
-            return f"Não sei quem é {_como_chamar(d)}. Como está salvo no WhatsApp, ou qual o número?"
+            opcoes = zap_tela.procurar(d["quem"]) if zap_tela.disponivel() else None
+            if opcoes and len(opcoes) == 1:
+                d.update(quem=opcoes[0]["nome"], salvo_como=opcoes[0]["nome"], verificado=False, achado=True)
+            elif opcoes:
+                d["etapa"], d["opcoes"] = "escolher", opcoes
+                lista = "; ".join(f"{i}, {o['nome']}" for i, o in enumerate(opcoes, 1))
+                return f"Achei {len(opcoes)} no seu WhatsApp: {lista}. Qual deles?"
+            else:
+                d["etapa"] = "quem_e"
+                return f"Não achei {_como_chamar(d)} no WhatsApp. Como está salvo lá, ou qual o número?"
     if not d.get("texto"):
         d["etapa"] = "texto"
         return f"E qual a mensagem pro {d['quem']}?"
@@ -220,6 +230,12 @@ def responder(d, fala_dele, leads=None):
                 return "Não entendi, chefe. Me diz o nome como está no WhatsApp, ou o número com DDD."
             contato = guardar_contato(d["como_disse"], salvo_como=salvo)
             d.update(salvo_como=salvo, quem=salvo, verificado=contato.get("verificado", False))
+    elif d["etapa"] == "escolher":
+        escolhido = escolher(d.get("opcoes") or [], fala_dele)
+        if not escolhido:
+            return "Qual deles, chefe? Pode dizer o número ou o nome."
+        d.update(quem=escolhido["nome"], salvo_como=escolhido["nome"], verificado=False, achado=True)
+        d.pop("opcoes", None)
     elif d["etapa"] == "texto":
         d["texto"] = fala_dele.strip()
     elif d["etapa"] == "conferir":
@@ -232,6 +248,23 @@ def responder(d, fala_dele, leads=None):
         d["etapa"] = "quem_e"
         return "Então não mandei. Me passa o número, com DDD, que eu gravo certinho."
     return proximo_passo(d, leads)
+
+
+ORDINAIS = {"primeiro": 1, "primeira": 1, "um": 1, "1": 1, "segundo": 2, "segunda": 2, "dois": 2, "2": 2, "terceiro": 3,
+            "terceira": 3, "tres": 3, "3": 3, "quarto": 4, "quarta": 4, "quatro": 4, "4": 4, "quinto": 5, "quinta": 5,
+            "cinco": 5, "5": 5, "sexto": 6, "sexta": 6, "seis": 6, "6": 6, "ultimo": -1, "ultima": -1}
+
+
+def escolher(opcoes, fala):
+    """"o segundo", "o 2", "o Rihan Bittencourt", "o do crepes" → a opção (ou None)."""
+    t = _chave(re.sub(r"^(?:[eé]\s+)?(?:o|a|esse|essa|n[uú]mero|op[cç][aã]o)\s+", "", fala.strip(" .!?"), flags=re.I))
+    for palavra in t.split():
+        if palavra in ORDINAIS and len(t.split()) <= 3:
+            n = ORDINAIS[palavra]
+            return opcoes[-1] if n == -1 else opcoes[n - 1] if n <= len(opcoes) else None
+    palavras = [p for p in re.sub(r"^(?:d[oa]|de)\s+", "", t).split() if len(p) > 1]
+    bate = [o for o in opcoes if palavras and all(p in _chave(o["nome"]) for p in palavras)]
+    return bate[0] if len(bate) == 1 else None
 
 
 def _janela_da_frente():
@@ -288,6 +321,14 @@ def enviar(d):
             _tecla(0x0D)
             return f"Mensagem enviada pro {d['quem']}, chefe."
         return f"Deixei a mensagem pronta no WhatsApp pro {d['quem']}, mas não consegui confirmar a janela. É só apertar Enter."
+    if zap_tela.disponivel():
+        # acha a conversa com esse nome EXATO, confere na caixa de mensagem que é ela, escreve, confere e envia
+        ok, fala = zap_tela.enviar(d["salvo_como"], d["texto"])
+        if ok:
+            guardar_contato(d.get("como_disse") or d["quem"], salvo_como=d["salvo_como"], verificado=True)
+            if d.get("achado") and _chave(d.get("como_disse") or "") != _chave(d["salvo_como"]):
+                fala += f" E aprendi: {_como_chamar(d)} é {d['salvo_como']}. Da próxima vez vou direto."
+        return fala
     os.startfile("whatsapp:")
     if not _esperar_whatsapp():
         return "Não consegui abrir o WhatsApp, chefe. Ele está instalado?"
