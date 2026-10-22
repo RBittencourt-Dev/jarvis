@@ -88,6 +88,23 @@
   #mic { flex: none; width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--ciano); color: var(--ciano);
          background: rgba(57, 208, 255, .1); display: grid; place-items: center; }
   #mic svg { width: 24px; height: 24px; }
+  /* aviso "ativar o microfone": só aparece se ele ainda NÃO está liberado (igual o de notificações do Porthon) */
+  #permissao { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px;
+               background: rgba(1, 6, 12, .78); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  #permissao[hidden] { display: none; }
+  #permissao .caixa { width: min(380px, 100%); padding: 22px 20px; border-radius: 18px; text-align: center;
+                      background: linear-gradient(160deg, #0c2236, #06121d); border: 1px solid var(--borda);
+                      box-shadow: 0 0 40px rgba(57, 208, 255, .2); }
+  #permissao .icone-mic { width: 64px; height: 64px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center;
+                          border: 2px solid var(--ciano); color: var(--ciano); box-shadow: 0 0 24px rgba(57, 208, 255, .45); }
+  #permissao .icone-mic svg { width: 30px; height: 30px; }
+  #permissao h2 { margin: 0 0 6px; font-size: 19px; }
+  #permissao p { margin: 0 0 16px; color: var(--fraco); font-size: 14px; }
+  #permissao button { width: 100%; padding: 14px; border-radius: 12px; border: 0; font-size: 16px; font-weight: 600;
+                      background: var(--ciano); color: #03080f; }
+  #permissao .depois { margin-top: 8px; background: transparent; color: var(--fraco); font-weight: 400; }
+  #perm-ajuda { text-align: left; color: var(--texto) !important; background: rgba(255, 92, 108, .1); border: 1px solid rgba(255, 92, 108, .35);
+                border-radius: 10px; padding: 10px 12px; white-space: pre-line; }
   /* deitado (paisagem): núcleo à esquerda, conversa à direita */
   @media (orientation: landscape) and (max-height: 520px) {
     :root { --nucleo: min(40vh, 220px); }
@@ -113,6 +130,17 @@
   <main id="conversa"></main>
 </div>
 <div id="confirmar" hidden><button class="sim" data-sim="1">Sim, pode</button><button data-sim="">Não</button></div>
+<div id="permissao" hidden role="dialog" aria-modal="true" aria-labelledby="perm-titulo">
+  <div class="caixa">
+    <div class="icone-mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+    <h2 id="perm-titulo">Ativar o microfone</h2>
+    <p>Pra falar com o Jarvis pelo celular. Toque no botão e, quando o iPhone perguntar, escolha <b>Permitir</b>.</p>
+    <p id="perm-ajuda" hidden></p>
+    <button id="ativar-mic">Ativar microfone</button>
+    <button id="perm-depois" class="depois">Agora não (vou só escrever)</button>
+  </div>
+</div>
 <footer>
   <input id="texto" placeholder="Ou escreva aqui…" enterkeyhint="send" autocomplete="off">
   <button id="mic" aria-label="Falar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -346,11 +374,73 @@ $("texto").addEventListener("keydown", (e) => {
 
 // ---------------------------------------------------------------- microfone: toca pra gravar, para no silêncio
 let gravador = null, fluxo = null, pedacos = [], vigia = null;
+// ---------------------------------------------------------------- permissão do microfone
+// O aviso só aparece se o microfone AINDA não está liberado; liberado, nunca aparece. Se o iPhone negar, ele mostra
+// o caminho certo pra liberar (Safari, app da tela de início ou navegador de dentro do WhatsApp/Instagram).
+const DENTRO_DE_APP = /FBAN|FBAV|Instagram|WhatsApp|Line\//i.test(navigator.userAgent);
+const NA_TELA_DE_INICIO = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+const lembrar = (v) => { try { v ? localStorage.setItem("mic-ok", "1") : localStorage.removeItem("mic-ok"); } catch {} };
+const lembrado = () => { try { return localStorage.getItem("mic-ok") === "1"; } catch { return false; } };
+
+async function estadoDoMic() {
+  try { return (await navigator.permissions.query({ name: "microphone" })).state; } catch { return null; }
+}
+function ajudaDoMic(erro) {
+  if (!navigator.mediaDevices?.getUserMedia || DENTRO_DE_APP)
+    return "Você abriu o Jarvis por dentro de outro app (WhatsApp, Instagram…), e lá o microfone não funciona.\n" +
+           "Toque nos ••• / no ícone da bússola e escolha “Abrir no Safari”. Ou copie o link e cole no Safari.";
+  if (erro === "NotFoundError") return "O iPhone não achou nenhum microfone. Tira o fone Bluetooth/USB e tente de novo.";
+  if (erro === "NotReadableError") return "Outro app está usando o microfone (ligação, gravador, Siri). Fecha ele e tente de novo.";
+  if (NA_TELA_DE_INICIO)
+    return "O iPhone recusou o microfone pro app da tela de início.\n1. Ajustes → Safari → Microfone → Permitir\n" +
+           "2. Feche o Jarvis (arraste pra cima) e abra de novo.\nSe não voltar: apague o ícone e adicione de novo pelo Safari.";
+  return "O Safari recusou o microfone.\n1. Toque no “aA” (ou no cadeado) na barra de endereço → Ajustes do Site → Microfone → Permitir\n" +
+         "2. Ou: Ajustes do iPhone → Safari → Microfone → Permitir\nDepois toque em “Ativar microfone” de novo.";
+}
+function mostrarPermissao(erro) {
+  const ajuda = $("perm-ajuda");
+  ajuda.hidden = !erro;
+  if (erro) ajuda.textContent = ajudaDoMic(erro);
+  $("ativar-mic").textContent = erro ? "Tentar de novo" : "Ativar microfone";
+  $("permissao").hidden = false;
+}
+async function pedirMic() {
+  if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error("sem microfone"), { name: "SemSuporte" });
+  return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+}
+$("ativar-mic").onclick = async () => {
+  destravar();
+  try {
+    const f = await pedirMic();
+    f.getTracks().forEach((x) => x.stop());  // só pra liberar; abre de novo na hora de falar
+    lembrar(true);
+    $("permissao").hidden = true;
+    escrever("Microfone ativado. Toque no núcleo e fale.", "ele");
+  } catch (e) {
+    lembrar(false);
+    mostrarPermissao(e.name || "NotAllowedError");
+  }
+};
+$("perm-depois").onclick = () => { $("permissao").hidden = true; };
+(async () => {
+  const st = await estadoDoMic();
+  if (st === "granted") return lembrar(true);  // já liberado: o aviso não aparece
+  if (st === "denied") return mostrarPermissao("NotAllowedError");
+  if (st === null && lembrado()) return;  // sem como perguntar (Safari antigo) e já funcionou antes
+  if (DENTRO_DE_APP || !navigator.mediaDevices?.getUserMedia) return mostrarPermissao("SemSuporte");
+  mostrarPermissao();
+})();
+navigator.permissions?.query({ name: "microphone" }).then((p) => {
+  p.onchange = () => { if (p.state === "granted") { lembrar(true); $("permissao").hidden = true; } };
+}).catch(() => {});
+
 async function comecar() {
   try {
-    fluxo = fluxo || await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-  } catch {
-    return escrever("O microfone está bloqueado. No iPhone: Ajustes → Safari → Microfone → Permitir (ou toque no ‘aA’ da barra).", "erro");
+    fluxo = await pedirMic();
+    lembrar(true);
+  } catch (e) {
+    lembrar(false);
+    return mostrarPermissao(e.name || "NotAllowedError");
   }
   const tipo = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || "";
   gravador = new MediaRecorder(fluxo, tipo ? { mimeType: tipo } : {});
@@ -379,6 +469,8 @@ async function comecar() {
 function parar() {
   clearInterval(vigia);
   if (gravador?.state === "recording") gravador.stop();
+  // fecha o microfone: com ele aberto o iPhone joga a voz do Jarvis no alto-falante de ligação, baixinho
+  setTimeout(() => { fluxo?.getTracks().forEach((x) => x.stop()); fluxo = null; }, 300);
 }
 async function enviarGravacao() {
   const blob = new Blob(pedacos, { type: gravador.mimeType || "audio/mp4" });
