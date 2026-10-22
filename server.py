@@ -3452,21 +3452,43 @@ vida_das_telas = {"hud": 0.0}
 async def telas_andam_juntas():
     """Fechou uma das duas janelas na mão: a outra fecha junto. (Fechar a lateral por voz — "volta pra tela
     principal" — não conta: aí ela fecha sozinha de propósito.) Reinício/atualização matam as duas de uma vez."""
-    hud_antes = ext_antes = False
+    # Olha os PROCESSOS das janelas (cada uma tem o perfil dela), não o sinal da página: o sinal some por uns
+    # segundos enquanto o globo carrega e isso já fechou tudo por engano. Só age se sumiu em duas olhadas seguidas.
+    import psutil
+
+    def processos(perfil):
+        achados = []
+        for pr in psutil.process_iter(["name", "cmdline"]):
+            try:
+                if pr.info["name"] in ("chrome.exe", "msedge.exe") and any(perfil in a for a in pr.info["cmdline"] or []):
+                    achados.append(pr)
+            except (psutil.Error, TypeError):
+                pass
+        return achados
+
+    antes = {"hud": False, "ext": False}
+    sumiu = {"hud": 0, "ext": 0}
     while True:
         await asyncio.sleep(2)
-        hud = time.time() - vida_das_telas["hud"] < 10
-        ext = extensao.aberta()
         try:
-            if hud_antes and not hud and ext:
-                await asyncio.to_thread(extensao.fechar_janela)
-                ext = False
-            elif ext_antes and not ext and hud and extensao.preferida():
-                await asyncio.to_thread(sistema.fechar_janela)
-                hud = False
+            hud_p = await asyncio.to_thread(processos, ".perfil-navegador")
+            ext_p = await asyncio.to_thread(processos, ".perfil-extensao")
+            agora = {"hud": bool(hud_p), "ext": bool(ext_p)}
+            for k in agora:
+                sumiu[k] = sumiu[k] + 1 if antes[k] and not agora[k] else 0
+            if sumiu["hud"] >= 2 and agora["ext"]:
+                for pr in ext_p:
+                    pr.kill()
+                agora["ext"] = False
+            elif sumiu["ext"] >= 2 and agora["hud"] and extensao.preferida():
+                for pr in hud_p:
+                    pr.kill()
+                agora["hud"] = False
+            for k in agora:  # "antes" só esquece a janela depois de confirmar que sumiu
+                if agora[k] or sumiu[k] >= 2 or not antes[k]:
+                    antes[k] = agora[k]
         except Exception as e:
             print("telas juntas:", e)
-        hud_antes, ext_antes = hud, ext
 
 
 @app.on_event("startup")
