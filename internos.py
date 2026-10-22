@@ -73,7 +73,8 @@ AMPLIAR = re.compile(J + r"(?:amplia|ampliar|aumenta|abre|mostra|me\s+mostra|zoo
                      r"(?:\s+(?:grande|maior|em\s+tela\s+cheia))?" + FIM)
 FECHAR_PAINEL = re.compile(J + r"(?:fecha|fechar|tira|some\s+com)\s+(?:esse|este|o|a|essa)\s+"
                            r"(?:painel|pesquisa|leitura|foto|imagem|plano|resultado)" + FIM)
-FECHAR_TUDO = re.compile(J + r"(?:fecha|limpa|tira)\s+(?:todos\s+os\s+pain[eé]is|tudo\s+da\s+tela|a\s+tela\s+toda)" + FIM)
+FECHAR_TUDO = re.compile(J + r"(?:fecha|fechar|limpa|limpar|tira|apaga)\s+(?:todos\s+os\s+pain[eé]is|tudo\s+da\s+tela|a\s+tela\s+toda|"
+                         r"(?:a\s+|o\s+|essa\s+|esse\s+)?(?:interface|hud)|tudo(?:\s+(?:isso|a[ií]))?)" + FIM)  # "fecha tudo que você abriu" no PC = as janelas (popup)
 FIXAR = re.compile(J + r"(?:fixa|fixar|prende|segura|deixa)\s+(?:esse|este|o)\s+painel(?:\s+(?:a[ií]|na\s+tela|fixo))?" + FIM)
 # notícias contadas com foto e página da fonte (noticias_painel.py)
 NOTICIAS = re.compile(

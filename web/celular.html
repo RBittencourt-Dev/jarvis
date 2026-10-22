@@ -58,10 +58,15 @@
   html.palco-ativo .palco { left: calc(100% - var(--nucleo) * .17 - 4px); top: calc(var(--nucleo) * .17 + 4px);
                             transform: translate(-50%, -50%) scale(.34); z-index: 3; }
   html.palco-ativo #estado { display: none; }
-  html.palco-ativo #conversa { max-height: 22%; }
+  html.palco-ativo #conversa { max-height: 20%; }
+  /* X pra fechar o que está aberto (canto de cima à esquerda; à direita fica o núcleo pequeno) */
+  #fechar-palco { position: absolute; top: 6px; left: 6px; z-index: 4; width: 40px; height: 40px; border-radius: 50%;
+                  border: 1px solid var(--ciano); background: rgba(3, 8, 15, .8); color: var(--ciano); font-size: 18px;
+                  display: none; place-items: center; }
+  html.palco-ativo #fechar-palco { display: grid; }
 
   /* conversa: as últimas falas por cima da parte de baixo do meio */
-  #conversa { position: absolute; left: 0; right: 0; bottom: 0; max-height: 40%; overflow-y: auto; z-index: 3;
+  #conversa { position: absolute; left: 0; right: 0; bottom: 0; max-height: 30%; overflow-y: auto; z-index: 3;
               display: flex; flex-direction: column; gap: 8px; padding: 18px 0 6px; -webkit-overflow-scrolling: touch;
               -webkit-mask-image: linear-gradient(transparent, #000 18px); mask-image: linear-gradient(transparent, #000 18px); }
   .fala { max-width: 86%; padding: 9px 13px; border-radius: 16px; white-space: pre-wrap; word-wrap: break-word; font-size: 15px; }
@@ -119,6 +124,7 @@
 <header><img src="/web/marca/jarvis-192.png" alt=""><b>JARVIS</b><span id="relogio"></span></header>
 <div id="meio">
   <iframe id="palco" src="/extensao?embutido=1&celular=1" title="Hologramas e painéis" allow="autoplay; fullscreen; accelerometer; gyroscope"></iframe>
+  <button id="fechar-palco" aria-label="Fechar">✕</button>
   <div class="palco">
     <canvas id="onda" aria-hidden="true"></canvas>
     <section class="nucleo" id="nucleo" title="Toque no núcleo pra falar">
@@ -155,11 +161,16 @@ function estado(classe, texto) {
   $("estado").textContent = texto;
 }
 setInterval(() => { $("relogio").textContent = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); }, 1000);
+$("fechar-palco").onclick = () => {
+  $("palco").contentWindow.postMessage({ limpar: true }, location.origin);
+  document.documentElement.classList.remove("palco-ativo");
+};
 // o palco embutido avisa quando tem algo (holograma, globo, painel): o núcleo vai pro canto
 addEventListener("message", (e) => {
   if (e.origin === location.origin && typeof e.data?.palco === "boolean") document.documentElement.classList.toggle("palco-ativo", e.data.palco);
 });
 function escrever(texto, quem) {
+  if (quem === "eu") $("conversa").replaceChildren();  // só a última pergunta e a resposta dela ficam na tela
   const d = document.createElement("div");
   d.className = "fala " + quem;
   d.textContent = texto;
@@ -196,6 +207,7 @@ function botaoDeLink(url, texto) {
 const avisos = new EventSource("/api/extensao/eventos?canal=celular");
 avisos.onmessage = (m) => {
   const e = JSON.parse(m.data);
+  if (e.limpar_palco) { $("conversa").replaceChildren(); document.documentElement.classList.remove("palco-ativo"); }
   if (!e.link) return;
   const d = document.createElement("div");
   d.className = "cartao";

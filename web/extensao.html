@@ -553,8 +553,19 @@ function remover(ids) {
 // ------------------------------------------------------------ tempo real: o servidor empurra tudo
 // ?celular: o palco da tela do celular, que recebe uma cópia de tudo que as telas do PC mostram
 const fonte = new EventSource("/api/extensao/eventos" + (EMBUTIDO ? "?canal=" + (new URLSearchParams(location.search).has("celular") ? "celular" : "palco") : ""));
+// No celular a tela é pequena: um assunto por vez. Chegou coisa nova (globo, notícia, holograma, painel…), o que estava
+// antes some. (O holograma manda 2 eventos com o mesmo id — "montando" e o pronto —: isso não é assunto novo.)
+const CELULAR = EMBUTIDO && new URLSearchParams(location.search).has("celular");
+const ASSUNTO_NOVO = ["cartao", "globo", "noticias", "pagina", "painel", "radar", "pois", "streetview", "cameras", "aviao",
+                      "leitura_pagina", "painel_fotos", "olho"];
+let holoNoPalco = null;
+function assuntoNovo(e) {
+  if (e.apresentacao) { const novo = e.apresentacao.id !== holoNoPalco; holoNoPalco = e.apresentacao.id; return novo; }
+  return ASSUNTO_NOVO.some((k) => e[k]);
+}
 fonte.onmessage = (m) => {
   const e = JSON.parse(m.data);
+  if (CELULAR && (e.limpar_palco || assuntoNovo(e))) { window.limparPalco?.(); if (!e.apresentacao) holoNoPalco = null; }
   if (e.cartao) cartao(e.cartao);
   if (e.globo) irPara(e.globo);
   if (e.globo_opcoes) marcarOpcoes(e.globo_opcoes);

@@ -311,6 +311,17 @@
 
   window.globoNormal = globoNormal;
 
+  // "fecha tudo" / "limpa a interface" e o X do celular: some com tudo que ele abriu (holograma, página, painéis, globo)
+  window.limparPalco = () => {
+    window.fecharHolograma?.();
+    fecharPagina();
+    document.body.classList.remove("lendo-pagina");
+    $("lupa-ext")?.classList.remove("aberta");
+    if (typeof lista !== "undefined") [...lista.children].forEach((el) => el.remove());
+    globoNormal();
+  };
+  addEventListener("message", (e) => { if (e.origin === location.origin && e.data?.limpar) window.limparPalco(); });
+
   // ------------------------------------------------------------ câmeras públicas ao vivo (Windy)
   const cssCam = document.createElement("style");
   cssCam.textContent = `
