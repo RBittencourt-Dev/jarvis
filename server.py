@@ -1693,8 +1693,8 @@ async def conversar(p: Pergunta):
     if p.celular:
         sessao["celular"] = True
     extensao.origem.set("celular" if sessao.get("celular") else "pc")
-    if sessao.get("celular") and (internos.FECHAR_TUDO.match(vocabulario.limpar(p.texto.strip())) or
-                                  re.match(r"^(?:jarvis[ ,]*)?(?:fecha|fechar|limpa|limpar|tira|apaga)\s+tudo\b", p.texto.strip(), re.I)):
+    if sessao.get("celular") and (internos.LIMPAR_CELULAR.match(p.texto.strip())
+                                  or internos.LIMPAR_CELULAR.match(vocabulario.limpar(p.texto.strip()))):
         # no celular "fecha tudo"/"limpa a tela" é o que ELE abriu lá; no PC "fecha tudo" fecha os pop-ups do Windows
         extensao.publicar({"limpar_palco": True})
         return em_linhas(sid, responder_ja("Limpei a tela, chefe."))
