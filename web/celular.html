@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jarvis">
+<meta name="theme-color" content="#03080f">
+<link rel="apple-touch-icon" href="/web/marca/jarvis-192.png">
+<link rel="icon" href="/web/marca/jarvis-192.png">
+<title>Jarvis</title>
+<!-- Tela leve do celular (pelo Tailscale). O iPhone não deixa o microfone ouvindo o tempo todo nem som tocar sem
+     toque: aqui é TOCAR pra falar. A gravação vai pro PC (/api/celular/ouvir → Whisper), a resposta vem do mesmo
+     /api/conversar da tela do PC, e a voz toca num áudio só, destravado no primeiro toque. -->
+<style>
+  :root { --fundo: #03080f; --ciano: #39d0ff; --texto: #d8f3ff; --fraco: #6f93a8; --cartao: rgba(57, 208, 255, .07);
+          --borda: rgba(57, 208, 255, .25); --vermelho: #ff5c6c; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--fundo); color: var(--texto);
+               font: 16px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; height: 100dvh;
+         padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom); overflow: hidden; }
+  header { display: flex; align-items: center; gap: 10px; padding: 14px 0 8px; }
+  header img { width: 30px; height: 30px; border-radius: 8px; }
+  header b { font-size: 18px; letter-spacing: .14em; }
+  #estado { margin-left: auto; font-size: 13px; color: var(--fraco); }
+  #conversa { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 8px 0 16px;
+              -webkit-overflow-scrolling: touch; }
+  .fala { max-width: 86%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; word-wrap: break-word; }
+  .eu { align-self: flex-end; background: rgba(57, 208, 255, .18); border-bottom-right-radius: 4px; }
+  .ele { align-self: flex-start; background: var(--cartao); border: 1px solid var(--borda); border-bottom-left-radius: 4px; }
+  .erro { align-self: center; color: var(--vermelho); font-size: 14px; text-align: center; }
+  .cartao { align-self: stretch; background: var(--cartao); border: 1px solid var(--borda); border-radius: 14px; padding: 12px 14px; }
+  .cartao h3 { margin: 0 0 4px; font-size: 13px; color: var(--ciano); text-transform: uppercase; letter-spacing: .08em; }
+  .cartao .destaque { font-size: 22px; font-weight: 600; margin: 2px 0 6px; }
+  .cartao div.l { font-size: 14px; padding: 3px 0; border-top: 1px solid rgba(57, 208, 255, .1); }
+  .cartao img { width: 100%; border-radius: 10px; margin-top: 6px; }
+  #confirmar { display: flex; gap: 10px; padding-bottom: 10px; }
+  #confirmar[hidden] { display: none; }
+  #confirmar button { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid var(--borda); font-size: 16px;
+                      background: var(--cartao); color: var(--texto); }
+  #confirmar .sim { background: rgba(57, 208, 255, .25); }
+  footer { display: flex; align-items: center; gap: 12px; padding: 10px 0 14px; }
+  #texto { flex: 1; min-width: 0; padding: 13px 14px; border-radius: 24px; border: 1px solid var(--borda);
+           background: rgba(255, 255, 255, .04); color: var(--texto); font-size: 16px; outline: none; }
+  #mic { flex: none; width: 76px; height: 76px; border-radius: 50%; border: 2px solid var(--ciano);
+         background: radial-gradient(circle, rgba(57, 208, 255, .35), rgba(57, 208, 255, .05) 70%);
+         box-shadow: 0 0 calc(14px + var(--nivel, 0) * 40px) rgba(57, 208, 255, .6); color: var(--texto);
+         display: grid; place-items: center; transition: transform .15s; }
+  #mic svg { width: 32px; height: 32px; }
+  #mic:active { transform: scale(.94); }
+  body.gravando #mic { border-color: var(--vermelho); background: radial-gradient(circle, rgba(255, 92, 108, .45), rgba(255, 92, 108, .05) 70%);
+                        box-shadow: 0 0 calc(14px + var(--nivel, 0) * 60px) rgba(255, 92, 108, .7); }
+  body.pensando #mic { animation: pulso 1.2s infinite; }
+  body.falando #mic { box-shadow: 0 0 34px rgba(57, 208, 255, .9); }
+  @keyframes pulso { 50% { opacity: .5; } }
+  #dica { text-align: center; color: var(--fraco); font-size: 13px; margin: -4px 0 4px; }
+  @media (min-width: 700px) { body { max-width: 640px; margin: 0 auto; } }
+</style>
+</head>
+<body>
+<header><img src="/web/marca/jarvis-192.png" alt=""><b>JARVIS</b><span id="estado">Toque pra falar</span></header>
+<main id="conversa"></main>
+<div id="confirmar" hidden><button class="sim" data-sim="1">Sim, pode</button><button data-sim="">Não</button></div>
+<p id="dica">Toque no círculo, fale, e toque de novo (ou só pare de falar)</p>
+<footer>
+  <input id="texto" placeholder="Ou escreva aqui…" enterkeyhint="send" autocomplete="off">
+  <button id="mic" aria-label="Falar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+</footer>
+<script>
+const $ = (id) => document.getElementById(id);
+let sessao = null, ocupado = false;
+
+function estado(classe, texto) {
+  document.body.className = classe || "";
+  $("estado").textContent = texto;
+}
+function escrever(texto, quem) {
+  const d = document.createElement("div");
+  d.className = "fala " + quem;
+  d.textContent = texto;
+  $("conversa").append(d);
+  d.scrollIntoView({ block: "end", behavior: "smooth" });
+  return d;
+}
+function cartao(c) {
+  const d = document.createElement("div");
+  d.className = "cartao";
+  if (c.titulo) d.append(Object.assign(document.createElement("h3"), { textContent: c.titulo }));
+  if (c.destaque) d.append(Object.assign(document.createElement("div"), { className: "destaque", textContent: c.destaque }));
+  (c.linhas || []).slice(0, 12).forEach((l) => d.append(Object.assign(document.createElement("div"),
+    { className: "l", textContent: typeof l === "string" ? l : (l.texto || l.nome || JSON.stringify(l)) })));
+  if (c.imagem) d.append(Object.assign(document.createElement("img"), { src: c.imagem, alt: "" }));
+  $("conversa").append(d);
+  d.scrollIntoView({ block: "end", behavior: "smooth" });
+}
+
+// ---------------------------------------------------------------- voz pelo Web Audio, destravado no 1º toque
+// (o iPhone só deixa tocar som que começou num toque; um AudioContext retomado no toque toca o resto sozinho)
+let ctx = null;
+try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}  // toca mesmo com o iPhone no silencioso
+function destravar() {
+  ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state !== "running") ctx.resume();
+  const b = ctx.createBufferSource();  // um "nada" tocado dentro do toque: termina de destravar no iOS
+  b.buffer = ctx.createBuffer(1, 1, 22050);
+  b.connect(ctx.destination);
+  b.start(0);
+}
+const fila = [];
+let tocandoFila = false, tocando = null;
+function falar(frase) {
+  frase = (frase || "").replace(/[*#_`]/g, "").trim();
+  if (!frase) return;
+  // já pede o áudio enquanto a frase anterior toca
+  fila.push(fetch("/api/voz?texto=" + encodeURIComponent(frase)).then((r) => r.arrayBuffer())
+    .then((buf) => new Promise((ok, erro) => ctx.decodeAudioData(buf, ok, erro))).catch(() => null));
+  if (!tocandoFila) tocarFila();
+}
+async function tocarFila() {
+  tocandoFila = true;
+  while (fila.length) {
+    const audio = await fila.shift();
+    if (!audio || !tocandoFila) continue;
+    estado("falando", "Falando");
+    await new Promise((ok) => {
+      tocando = ctx.createBufferSource();
+      tocando.buffer = audio;
+      tocando.connect(ctx.destination);
+      tocando.onended = ok;
+      tocando.start(0);
+    });
+    tocando = null;
+  }
+  tocandoFila = false;
+  if (!ocupado) estado("", "Toque pra falar");
+}
+function calar() {
+  fila.length = 0;
+  tocandoFila = false;
+  try { tocando?.stop(); } catch {}
+}
+
+// ---------------------------------------------------------------- conversa (mesmo /api/conversar da tela do PC)
+async function chamar(url, corpo) {
+  ocupado = true;
+  estado("pensando", "Pensando");
+  let texto = "", falado = 0, bolha = null;
+  const mostrar = () => {
+    if (!bolha) bolha = escrever("", "ele");
+    bolha.textContent = texto.trim();
+    bolha.scrollIntoView({ block: "end" });
+  };
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+    const leitor = r.body.getReader(), dec = new TextDecoder();
+    let resto = "";
+    for (;;) {
+      const { value, done } = await leitor.read();
+      if (done) break;
+      resto += dec.decode(value, { stream: true });
+      const linhas = resto.split("\n");
+      resto = linhas.pop();
+      for (const linha of linhas.filter(Boolean)) {
+        const e = JSON.parse(linha);
+        if (e.sessao) sessao = e.sessao;
+        if (e.cartao) cartao(e.cartao);
+        if (e.entendido) { const m = [...document.querySelectorAll(".fala.eu")].pop(); if (m) m.textContent = e.entendido; }
+        if (e.erro) escrever("Falha: " + e.erro, "erro");
+        if (e.leitura) {
+          falar(texto.slice(falado)); falado = texto.length;
+          e.leitura.frases.forEach((f, i) => { texto += (texto ? " " : "") + f; falado = texto.length; falar(f);
+                                              if (e.leitura.cartoes?.[i]) cartao(e.leitura.cartoes[i]); });
+          mostrar();
+        }
+        if (e.trecho) {
+          texto += e.trecho;
+          mostrar();
+          // a primeira frase já sai falando; o resto vai junto no fim
+          if (!falado || e.falar_ja) {
+            const corte = e.falar_ja ? [texto.slice(falado)] : texto.slice(falado).match(/^[\s\S]{20,}?[.!?;:\n]\s/);
+            if (corte) { falar(corte[0]); falado += corte[0].length; }
+          }
+        }
+        if (e.pendente) {
+          $("confirmar").hidden = false;
+          falar(e.pendente.fala || "Confirma, chefe?");
+        }
+      }
+    }
+    falar(texto.slice(falado));
+  } catch (e) {
+    escrever("Não falei com o PC: " + e.message + ". O PC está ligado com o Jarvis aberto?", "erro");
+  }
+  ocupado = false;
+  if (!tocandoFila) estado("", "Toque pra falar");
+}
+function perguntar(texto) {
+  texto = (texto || "").trim();
+  if (!texto) return;
+  escrever(texto, "eu");
+  chamar("/api/conversar", { sessao, texto, alternativas: [] });
+}
+document.querySelectorAll("#confirmar button").forEach((b) => b.onclick = () => {
+  destravar();
+  $("confirmar").hidden = true;
+  escrever(b.dataset.sim ? "Sim" : "Não", "eu");
+  chamar("/api/decidir", { sessao, autorizado: !!b.dataset.sim });
+});
+$("texto").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  destravar();
+  perguntar(e.target.value);
+  e.target.value = "";
+  e.target.blur();
+});
+
+// ---------------------------------------------------------------- microfone: toca pra gravar, para no silêncio
+let gravador = null, fluxo = null, pedacos = [], vigia = null;
+async function comecar() {
+  try {
+    fluxo = fluxo || await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch {
+    return escrever("O microfone está bloqueado. No iPhone: Ajustes → Safari → Microfone → Permitir (ou toque no ‘aA’ da barra).", "erro");
+  }
+  const tipo = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || "";
+  gravador = new MediaRecorder(fluxo, tipo ? { mimeType: tipo } : {});
+  pedacos = [];
+  gravador.ondataavailable = (e) => e.data.size && pedacos.push(e.data);
+  gravador.onstop = enviarGravacao;
+  gravador.start(250);
+  estado("gravando", "Ouvindo…");
+  // para sozinho depois de ~1,3 s de silêncio (e no máximo 25 s)
+  const fonte = ctx.createMediaStreamSource(fluxo), an = ctx.createAnalyser();
+  an.fftSize = 512;
+  fonte.connect(an);
+  const buf = new Uint8Array(an.fftSize);
+  const inicio = Date.now();
+  let falou = false, quieto = Date.now();
+  vigia = setInterval(() => {
+    an.getByteTimeDomainData(buf);
+    let pico = 0;
+    for (const v of buf) pico = Math.max(pico, Math.abs(v - 128));
+    document.documentElement.style.setProperty("--nivel", Math.min(1, pico / 50).toFixed(2));
+    if (pico > 14) { falou = true; quieto = Date.now(); }
+    const agora = Date.now();
+    if ((falou && agora - quieto > 1300) || agora - inicio > 25000 || (!falou && agora - inicio > 7000)) parar();
+  }, 80);
+}
+function parar() {
+  clearInterval(vigia);
+  document.documentElement.style.setProperty("--nivel", 0);
+  if (gravador?.state === "recording") gravador.stop();
+}
+async function enviarGravacao() {
+  const blob = new Blob(pedacos, { type: gravador.mimeType || "audio/mp4" });
+  estado("pensando", "Entendendo");
+  try {
+    const r = await fetch("/api/celular/ouvir", { method: "POST", headers: { "Content-Type": blob.type.split(";")[0] }, body: blob });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || r.status);
+    if (!j.texto) { estado("", "Não ouvi nada. Toque e fale"); return; }
+    perguntar(j.texto);
+  } catch (e) {
+    escrever("Não entendi o áudio: " + e.message, "erro");
+    estado("", "Toque pra falar");
+  }
+}
+$("mic").onclick = () => {
+  destravar();
+  if (gravador?.state === "recording") return parar();
+  if (tocandoFila) calar();  // tocou enquanto ele fala: cala e ouve
+  if (ocupado) return;
+  comecar();
+};
+escrever("Pronto, chefe. Toque no círculo e fale comigo.", "ele");
+</script>
+</body>
+</html>

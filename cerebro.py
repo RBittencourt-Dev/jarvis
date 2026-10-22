@@ -326,7 +326,7 @@ def ver(imagens_b64, pergunta):
 
 # ------------------------------------------------------------------ ouvido (transcrição)
 
-def transcrever(wav: bytes, dica=None, extras=()):
+def transcrever(wav: bytes, dica=None, extras=(), arquivo=("fala.wav", "audio/wav")):
     """Áudio WAV → texto em português, pelo Whisper grande da Groq. None se não der (sem chave/sem internet).
     dica="" = sem dica nenhuma (para conferir se ele disse mesmo "Jarvis", sem empurrar a palavra)."""
     if not chave("groq"):
@@ -339,7 +339,7 @@ def transcrever(wav: bytes, dica=None, extras=()):
             continue
         try:
             r = httpx.post(URL_GROQ + "/audio/transcriptions", headers=_cabecalho("groq"), timeout=20,
-                           files={"file": ("fala.wav", wav, "audio/wav")},
+                           files={"file": (arquivo[0], wav, arquivo[1])},  # o celular manda .m4a/.webm
                            data={"model": modelo, "language": "pt", "temperature": "0", "response_format": "json",
                                  **({"prompt": dica} if dica else {})})
             if r.status_code == 429:

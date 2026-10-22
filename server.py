@@ -20,7 +20,7 @@ from urllib.parse import quote_plus
 
 import edge_tts
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -3608,9 +3608,35 @@ def favicon():
     return FileResponse(RAIZ / "web" / "marca" / "jarvis.ico")
 
 
+CELULAR = re.compile(r"iPhone|iPad|iPod|Android.*Mobile", re.I)
+
+
 @app.get("/")
-def inicio():
+def inicio(request: Request):
+    # pelo Tailscale, do celular: a tela leve (botão de falar; o iPhone não deixa o microfone ouvindo direto
+    # nem som tocar sem toque). /?pc força a tela do PC.
+    if CELULAR.search(request.headers.get("user-agent", "")) and "pc" not in request.query_params:
+        return FileResponse(RAIZ / "web" / "celular.html")
     return FileResponse(RAIZ / "web" / "index.html")
+
+
+@app.get("/celular")
+def celular():
+    return FileResponse(RAIZ / "web" / "celular.html")
+
+
+@app.post("/api/celular/ouvir")
+async def celular_ouvir(request: Request):
+    """O áudio gravado no celular (m4a no iPhone, webm no Android) → texto, pelo mesmo Whisper do segundo plano."""
+    audio = await request.body()
+    if len(audio) < 1500:
+        return {"texto": ""}
+    tipo = request.headers.get("content-type", "audio/mp4").split(";")[0]
+    nome = "fala." + {"audio/webm": "webm", "audio/ogg": "ogg", "audio/wav": "wav", "audio/mpeg": "mp3"}.get(tipo, "m4a")
+    texto = await asyncio.to_thread(cerebro.transcrever, audio, None, (), (nome, tipo))
+    if texto is None:
+        raise HTTPException(503, "Não consegui transcrever (sem chave da Groq ou sem internet).")
+    return {"texto": texto}
 
 
 # ================================================================ API das telas novas
