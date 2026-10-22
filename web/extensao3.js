@@ -312,13 +312,16 @@
   window.globoNormal = globoNormal;
 
   // "fecha tudo" / "limpa a interface" e o X do celular: some com tudo que ele abriu (holograma, página, painéis, globo)
-  window.limparPalco = () => {
-    window.fecharHolograma?.();
-    fecharPagina();
-    document.body.classList.remove("lendo-pagina");
-    $("lupa-ext")?.classList.remove("aberta");
-    if (typeof lista !== "undefined") [...lista.children].forEach((el) => el.remove());
-    globoNormal();
+  // manterGlobo: o assunto novo É no globo (outro lugar, aviões…): tira o resto mas não reinicia o globo.
+  // Cada passo isolado: se um falhar, os outros (e o que vem depois, como o irPara) seguem.
+  window.limparPalco = (manterGlobo = false) => {
+    const passo = (f) => { try { f(); } catch (e) { window.avisarErro?.("limparPalco: " + e.message); } };
+    if (document.body.classList.contains("apresentando")) passo(() => window.fecharHolograma?.());
+    passo(fecharPagina);
+    passo(() => document.body.classList.remove("lendo-pagina"));
+    passo(() => $("lupa-ext")?.classList.remove("aberta"));
+    passo(() => { if (typeof lista !== "undefined") { [...lista.children].forEach((el) => el.remove()); atualizarEstado(); } });  // sem a marca "com-cartoes" o globo aparece
+    if (!manterGlobo) passo(globoNormal);
   };
   addEventListener("message", (e) => { if (e.origin === location.origin && e.data?.limpar) window.limparPalco(); });
 

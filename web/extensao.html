@@ -556,16 +556,27 @@ const fonte = new EventSource("/api/extensao/eventos" + (EMBUTIDO ? "?canal=" + 
 // No celular a tela é pequena: um assunto por vez. Chegou coisa nova (globo, notícia, holograma, painel…), o que estava
 // antes some. (O holograma manda 2 eventos com o mesmo id — "montando" e o pronto —: isso não é assunto novo.)
 const CELULAR = EMBUTIDO && new URLSearchParams(location.search).has("celular");
-const ASSUNTO_NOVO = ["cartao", "globo", "noticias", "pagina", "painel", "radar", "pois", "streetview", "cameras", "aviao",
-                      "leitura_pagina", "painel_fotos", "olho"];
+const ASSUNTO_NOVO = ["cartao", "noticias", "pagina", "painel", "radar", "leitura_pagina", "painel_fotos"];
+// assunto novo que é NO globo: tira o resto (holograma, notícia…) e deixa o globo seguir pro lugar novo
+const NO_GLOBO = ["globo", "globo_opcoes", "mostrar_globo", "pois", "streetview", "cameras", "aviao", "olho", "olho_camada"];
 let holoNoPalco = null;
 function assuntoNovo(e) {
   if (e.apresentacao) { const novo = e.apresentacao.id !== holoNoPalco; holoNoPalco = e.apresentacao.id; return novo; }
   return ASSUNTO_NOVO.some((k) => e[k]);
 }
+// erro no palco do celular vem pra mim (celular-log.txt): no iPhone não tem console pra olhar
+window.avisarErro = (msg) => CELULAR && fetch("/api/celular/log", { method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ onde: "palco", erro: String(msg).slice(0, 400) }) }).catch(() => {});
+if (CELULAR) addEventListener("error", (ev) => window.avisarErro(`${ev.message} @${(ev.filename || "").split("/").pop()}:${ev.lineno}`));
 fonte.onmessage = (m) => {
   const e = JSON.parse(m.data);
-  if (CELULAR && (e.limpar_palco || assuntoNovo(e))) { window.limparPalco?.(); if (!e.apresentacao) holoNoPalco = null; }
+  if (CELULAR) {
+    try {
+      if (e.limpar_palco || assuntoNovo(e)) window.limparPalco?.();
+      else if (NO_GLOBO.some((k) => e[k])) { window.limparPalco?.(true); document.body.classList.add("globo-ativo"); }
+      if (!e.apresentacao && (e.limpar_palco || assuntoNovo(e) || NO_GLOBO.some((k) => e[k]))) holoNoPalco = null;
+    } catch (erro) { window.avisarErro("troca de assunto: " + erro.message); }
+  }
   if (e.cartao) cartao(e.cartao);
   if (e.globo) irPara(e.globo);
   if (e.globo_opcoes) marcarOpcoes(e.globo_opcoes);
@@ -719,9 +730,9 @@ fetch("/api/status").then((r) => r.json()).then((s) => {
 setInterval(() => ($("relogio").textContent = new Date().toLocaleTimeString("pt-BR")), 1000);
 </script>
 <script src="/web/vendor/three-r128.min.js"></script>
-<script src="/web/extensao2.js?v=2210a"></script>
-<script src="/web/extensao3.js?v=2210a"></script>
-<script src="/web/holograma.js?v=2210a"></script>
-<script src="/web/popups.js?v=2210a"></script>
+<script src="/web/extensao2.js?v=2210e"></script>
+<script src="/web/extensao3.js?v=2210e"></script>
+<script src="/web/holograma.js?v=2210e"></script>
+<script src="/web/popups.js?v=2210e"></script>
 </body>
 </html>
