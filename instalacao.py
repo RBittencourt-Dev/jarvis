@@ -466,4 +466,7 @@ def reiniciar(atraso=0):
     """Fecha e abre o Jarvis de novo (reiniciar.ps1), sem segurar quem pediu."""
     script = RAIZ / "reiniciar.ps1"
     subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", str(script),
-                      "-Atraso", str(int(atraso))], cwd=RAIZ, creationflags=0x00000008 | SEM_JANELA)  # DETACHED
+                      "-Atraso", str(int(atraso))], cwd=RAIZ,
+                     # grupo próprio, sem janela. NÃO usar DETACHED_PROCESS: sem console o PowerShell fecha na hora e
+                     # não reinicia nada (achado em 22/10: o "atualiza o Jarvis" baixava e não reiniciava)
+                     creationflags=0x00000200 | SEM_JANELA)

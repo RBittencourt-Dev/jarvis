@@ -31,6 +31,7 @@ import aprendizado
 import lembretes
 import noticias
 import pomodoro
+import timer
 import sistemas
 import automacoes
 import cerebro
@@ -936,7 +937,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, lembretes, pomodoro, anotacoes, noticias, sistemas)
+RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, timer, lembretes, pomodoro, anotacoes, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
@@ -1007,6 +1008,16 @@ async def relogio_dos_avisos():
                     avisar(fala, cartao, "marcado")
             except Exception as e:
                 print("aviso falhou:", recurso.__name__, e)
+        try:  # timer: avisa no aparelho que pediu (o do celular toca no celular, não no PC)
+            for fala, cartao, origem_ in await asyncio.to_thread(timer.vencidos):
+                if origem_ == "celular":
+                    marca = extensao.origem.set("celular")
+                    extensao.publicar({"aviso": {"fala": fala, "cartao": cartao}})
+                    extensao.origem.reset(marca)
+                else:
+                    avisar(fala, cartao, "marcado")
+        except Exception as e:
+            print("aviso falhou: timer", e)
         if time.time() - ultima_vigia > 300:
             ultima_vigia = time.time()
             try:
@@ -2983,6 +2994,17 @@ async def api_7planner_entrar(l: Login7):
         raise HTTPException(401, str(e))
     except Exception as e:
         raise HTTPException(502, f"Não consegui falar com o 7planner: {str(e)[:120]}")
+
+
+@app.get("/api/timers")
+def timers_na_tela(origem: str = "pc"):
+    """A contagem que aparece na tela (web/timers.js), só a deste aparelho."""
+    return timer.situacao("celular" if origem == "celular" else "pc")
+
+
+@app.delete("/api/timers/{id_}")
+def cancelar_timer(id_: str):
+    return {"ok": timer.cancelar_por_id(id_)}
 
 
 @app.delete("/api/7planner")

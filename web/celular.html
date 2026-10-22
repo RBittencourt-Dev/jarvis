@@ -208,6 +208,16 @@ const avisos = new EventSource("/api/extensao/eventos?canal=celular");
 avisos.onmessage = (m) => {
   const e = JSON.parse(m.data);
   if (e.limpar_palco) { $("conversa").replaceChildren(); document.documentElement.classList.remove("palco-ativo"); }
+  if (e.aviso) {  // timer que zerou (pedido aqui no celular)
+    $("conversa").replaceChildren();
+    const d = document.createElement("div");
+    d.className = "cartao";
+    d.textContent = e.aviso.fala;
+    $("conversa").append(d);
+    if (ctx) falar(e.aviso.fala);
+    try { navigator.vibrate?.([300, 150, 300]); } catch {}
+    return;
+  }
   if (!e.link) return;
   const d = document.createElement("div");
   d.className = "cartao";
@@ -528,5 +538,6 @@ $("nucleo").onclick = $("mic").onclick = () => {
 };
 escrever("Pronto, chefe. Toque no núcleo e fale comigo.", "ele");
 </script>
+<script src="/web/timers.js?v=2210f" data-onde="cel"></script>
 </body>
 </html>
