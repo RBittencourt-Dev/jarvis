@@ -433,10 +433,15 @@ async function chamar(url, corpo) {
     if (!bolha) { escrever(""); bolha = $("conversa").lastElementChild; }
     bolha.textContent += pedaco;
   });
-  // se a resposta demorar, ele fala alguma coisa em vez de ficar mudo (frases com áudio pronto: saem na hora)
+  // se a resposta demorar, ele fala alguma coisa em vez de ficar mudo (frases com áudio pronto: saem na hora).
+  // A frase combina com o pedido (/api/espera): "me mostra meu PC" → "Montando as peças do seu PC"; papo → fica quieto.
+  let esperaCerta = null;
+  if (corpo?.texto) fetch("/api/espera?texto=" + encodeURIComponent(corpo.texto)).then((r) => r.json())
+    .then((j) => { esperaCerta = j; }).catch(() => {});
   const espera = setTimeout(() => {
     if (!texto && emAndamento === meu && $("autorizacao").hidden) {
-      voz.adicionar(sortear(ESPERAS));
+      const frase = esperaCerta ? esperaCerta.frase : sortear(ESPERAS);
+      if (frase) voz.adicionar(frase);
       // falou "um instante" e a resposta ainda não veio: o radar volta a girar até ela chegar
       voz.terminar().then(() => {
         if (!texto && emAndamento === meu && $("autorizacao").hidden) {

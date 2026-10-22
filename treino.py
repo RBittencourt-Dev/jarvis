@@ -576,8 +576,45 @@ CONTEXTO = [
 PRONUNCIA = [
     ("Abrindo Painel 7SevenCode, senhor.", "Abrindo Painel SevenCode, senhor."),
     ("O caixa da 7 SevenCode está em dia.", "O caixa da SevenCode está em dia."),
-    ("a 7code faz sites", "a SevenCode faz sites"),
+    ("a 7code faz o site", "a SevenCode faz o sáite"),
     ("O Porthon está no ar.", "O Pórton está no ar."),
+    # 22/10: peças do PC e termos em inglês do jeito que ele fala
+    ("Seu Ryzen 5 5600GT tem 6 cores e 12 threads.", "Seu Ráizen 5 5600 gê tê tem 6 núcleos e 12 trédis."),
+    ("Rodando a 3.6 GHz.", "Rodando a 3,6 gigahertz."),
+    ("Um SSD de 1 TB.", "Um ésse ésse dê de 1 tera."),
+    ("Pergunta pro Claude no Chrome.", "Pergunta pro Clôd no Crôume."),
+    ("Abrindo o Spotify.", "Abrindo o Spótifai."),
+]
+
+# 22/10: o mesmo pedido falado de jeitos diferentes tem que dar no MESMO caminho (sinonimos.py)
+FRASES += [
+    ("me mostra meu pc", "interno hardware tudo"),
+    ("mostra meu computador", "interno hardware tudo"),
+    ("deixa eu ver meu pc", "interno hardware tudo"),
+    ("como é o meu pc", "interno hardware tudo"),
+    ("mostra aí o meu setup", "interno hardware tudo"),
+    ("exibe o hardware", "interno hardware tudo"),
+    ("tu pode me mostrar o processador", "interno hardware cpu"),
+    ("deixa eu ver a memória ram", "interno hardware ram"),
+    ("quero ver a placa de vídeo", "interno hardware gpu"),
+    ("bota o processador na tela", "interno hardware cpu"),
+    ("consegue me mostrar as peças do pc", "interno hardware tudo"),
+    ("deixa eu ver as notícias de hoje", "interno noticias"),
+    ("quero ver as notícias", "interno noticias"),
+    ("mostra aí as notícias", "interno noticias"),
+    ("será que tu consegue abrir o spotify", "abrir spotify"),
+    ("abra o spotify", "abrir spotify"),
+    ("dá pra abrir o spotify", "abrir spotify"),
+    ("você pode abrir o spotify por favor", "abrir spotify"),
+    ("eu queria que você tocasse work", "tocar"),
+    ("bora tocar development", "tocar"),
+    ("quero ouvir development", "tocar"),
+    ("deixa eu ver quanto tem no caixa", "painel|consulta"),
+    ("tu pode ver quanto tem no caixa", "painel|consulta"),
+    ("consegue me mostrar o japão no globo", "globo japão"),
+    ("deixa eu ver o globo", "interno abrir_globo"),
+    ("mostra aí o globo", "interno abrir_globo"),
+    ("feche o spotify", "janela|fechar"),
 ]
 
 

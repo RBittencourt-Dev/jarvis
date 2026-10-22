@@ -105,9 +105,51 @@ def variar(texto):
     return texto
 
 
+# Espera que COMBINA com o pedido (22/10: ele pedia "me mostra meu PC" e ouvia "Calibrando os neurônios de silício").
+# (regra, frases): a primeira que bater vale. Frases None = papo/cumprimento: fica calado (só o som de pensar).
+ESPERAS_POR_ASSUNTO = [
+    (r"\b(?:tudo bem|tudo certo|e a[ií]|beleza|bom dia|boa tarde|boa noite|como vai|como (?:tu )?t[aá]s?\b(?! o| a)|"
+     r"t[aá] a[ií]|oi|ol[aá]|valeu|obrigad)", None),
+    (r"^(?:jarvis[ ,]*)?(?:abre|liga|inicia|entra)\b", ["Abrindo, chefe.", "Já abro.", "Um segundo, abrindo."]),
+    (r"^(?:jarvis[ ,]*)?(?:fecha|minimiza|desliga|tira)\b", ["Já fecho, chefe.", "Fechando."]),
+    (r"\b(?:pc|computador|processador|cpu|mem[oó]ria|ram|placa de v[ií]deo|gpu|ssd|disco|hd|pe[cç]as|hardware|setup|temperatura)\b",
+     ["Lendo o seu hardware, chefe.", "Montando as peças do seu PC.", "Já te mostro o PC por dentro.", "Conferindo as peças."]),
+    (r"not[ií]cia|manchete|o que (?:t[aá]|est[aá]) (?:rolando|acontecendo)",
+     ["Puxando as notícias, chefe.", "Vendo o que tá rolando.", "Buscando as manchetes."]),
+    (r"\b(?:toca|tocar|m[uú]sica|playlist|spotify|ouvir|som)\b", ["Já vai, chefe.", "Escolhendo o som.", "Preparando a música."]),
+    (r"whats|\bzap\b|mensagem|manda pr[ao]|fala pr[ao]", ["Preparando a mensagem.", "Já vejo isso no WhatsApp."]),
+    (r"\b(?:caixa|leads?|reuni|crm|radar|clientes?|faturamento|cobran)", PAINEL),
+    (r"porthon|condom[ií]nio|morador|encomenda|portaria|placa", ["Consultando o Porthon, chefe.", "Deixa eu olhar o Porthon."]),
+    (r"\b(?:globo|mapa|onde fica|cidade|pa[ií]s|estado|bairro|rua|avenida|perto)\b|street view|aqui perto",
+     ["Localizando no globo, chefe.", "Girando o globo.", "Achando no mapa."]),
+    (r"\b(?:tempo|clima|previs[aã]o|chover|chuva|temperatura|frio|calor)\b", ["Olhando a previsão, chefe.", "Vendo o tempo."]),
+    (r"cota[cç][aã]o|d[oó]lar|euro|bitcoin", ["Vendo a cotação, chefe."]),
+    (r"\b(?:c[oó]digo|script|programa[cç][aã]o|bug|erro|commit|deploy|git)\b", ["Olhando o código, chefe.", "Deixa eu analisar isso."]),
+    (r"\b(?:arquivo|pasta|documento|planilha)s?\b", ["Procurando nos seus arquivos.", "Deixa eu achar isso."]),
+    (r"\btela\b|print", ["Dando uma olhada na tela.", "Deixa eu ver a tela."]),
+    (r"^(?:jarvis[ ,]*)?(?:pesquisa|procura|busca|o que [eé]|quem [eé]|quem foi|me fala (?:sobre|de|do|da)|me explica|explica)",
+     ["Pesquisando, chefe.", "Vou atrás disso.", "Buscando isso pra ti."]),
+    (r"^(?:jarvis[ ,]*)?(?:me mostra|mostra)\b", ["Já te mostro, chefe.", "Preparando pra te mostrar.", "Um instante, já aparece."]),
+    (r"\?\s*$|^(?:jarvis[ ,]*)?(?:o que|como|por ?que|qual|quais|quanto|quantos|quem|quando|onde|ser[aá])\b",
+     ["Hum, deixa eu pensar.", "Boa pergunta. Deixa eu pensar.", "Deixa eu ver isso, chefe."]),
+]
+NEUTRAS = ["Um instante.", "Só um momento, chefe.", "Já vejo isso.", "Deixa comigo.", "Já tô nisso, chefe."]
+
+
+def espera_para(texto):
+    """A frase de espera que combina com o pedido, ou None (papo: melhor ficar quieto do que falar "processando")."""
+    t = (texto or "").strip().lower()
+    for regra, frases in ESPERAS_POR_ASSUNTO:
+        if re.search(regra, t, re.I):
+            return escolher(frases, regra) if frases else None
+    return escolher(NEUTRAS, "neutras")
+
+
 def todas_fixas():
     """Todas as frases fixas (o servidor gera o áudio delas no startup)."""
-    saida = set(CHAMADO + ESPERAS + DEMORANDO + MUSICA + PAINEL + DE_NADA + CANCELADO + PRONTO)
+    saida = set(CHAMADO + ESPERAS + DEMORANDO + MUSICA + PAINEL + DE_NADA + CANCELADO + PRONTO + NEUTRAS)
+    for _, frases in ESPERAS_POR_ASSUNTO:
+        saida.update(frases or ())
     for lista in TROCAS.values():
         saida.update(lista)
     return sorted(saida)

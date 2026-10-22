@@ -151,6 +151,39 @@
   #sobre-globo .satelite::after { width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: var(--ciano); box-shadow: 0 0 10px var(--ciano); }
   #sobre-globo .credito { position: absolute; right: 8px; bottom: 6px; font: 10px Consolas, monospace; color: #fffa; text-shadow: 0 0 4px #000; }
   #sobre-globo .maps { margin-top: 8px; color: var(--ciano); font-size: 13px; letter-spacing: .15em; text-transform: uppercase; }
+
+  /* ---------------------------------------------------- 22/10: responsivo (a lateral pode ser deitada, pequena ou a única tela) */
+  /* tela DEITADA: o globo fica inteiro à esquerda e os pop-ups numa coluna à direita (em pé eles empilham por cima) */
+  @media (orientation: landscape) {
+    body:not(.embutido).com-cartoes:not(.lugar) main { left: auto; width: min(44vw, 760px); padding: 4px 24px 120px; }
+    body:not(.embutido).com-cartoes:not(.lugar) #globo { inset: 56px min(44vw, 760px) 0 0; width: auto; height: auto;
+      border-radius: 0; box-shadow: none; }
+    body:not(.embutido).com-cartoes:not(.lugar) #coordenadas { display: block; }
+    #sobre-globo { top: 64px; }
+    #street { bottom: 60px; }
+  }
+  /* embutida (palco) e deitada e larga: pop-ups em duas colunas */
+  @media (orientation: landscape) and (min-width: 1100px) {
+    body.embutido.com-cartoes:not(.lugar) main { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  /* tela baixa: fotos e anel menores */
+  @media (max-height: 820px) {
+    #sobre-globo img { height: 200px; } #sobre-globo .satelite img { height: 300px; }
+    #trava .anel { width: 150px; height: 150px; } #trava .titulo { font-size: 24px; }
+    #silhueta .nome { bottom: 60px; font-size: 32px; }
+  }
+  /* tela estreita (janela pequena, celular) */
+  @media (max-width: 700px) {
+    header { padding: 12px 16px; letter-spacing: .2em; }
+    main { padding: 4px 16px 200px; }
+    .cartao { padding: 14px 16px; } .cartao .destaque { font-size: 24px; } .cartao .texto { font-size: 15px; }
+    .galeria { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } .galeria img { height: 140px; }
+    #painel { right: 16px; width: 160px; }
+    body.com-cartoes:not(.lugar) #globo { width: 160px; height: 160px; right: 12px; bottom: 12px; }
+    #silhueta .nome { font-size: 24px; letter-spacing: .2em; }
+    #trava .titulo { font-size: 20px; letter-spacing: .25em; }
+    #street { left: 8px; right: 8px; top: 52px; bottom: 40px; }
+  }
 </style>
 </head>
 <body class="travado">

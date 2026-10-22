@@ -324,3 +324,32 @@ body.palco-ativo #conversa { bottom: 18px; }
 #paineis .cartao.arrastando { transition: none !important; z-index: 50; box-shadow: 0 0 40px var(--ciano); cursor: grabbing; }
 #paineis .cartao.vai-sair { outline: 2px dashed var(--ciano); outline-offset: 6px; }
 #paineis .cartao h3 { cursor: grab; }
+
+/* ============================================================ 22/10: responsivo — tela em pé, janela pequena, um monitor só */
+/* tela principal EM PÉ: o palco ocupa a largura toda e os cartões viram uma faixa de duas colunas embaixo */
+@media (orientation: portrait) and (min-width: 901px) {
+  #palco-hud { width: 94vw; height: 62vh; top: 44%; }
+  body.palco-ativo .palco { left: 70px; top: 70px; transform: translate(-50%, -50%) scale(.28); }
+  body.palco-ativo .cartao.v0, body.palco-ativo .cartao.v1, body.palco-ativo .cartao.v2, body.palco-ativo .cartao.v3,
+  body.palco-ativo .cartao.v4, body.palco-ativo .cartao.v5 { width: 45vw; }
+  body.palco-ativo .cartao.v1, body.palco-ativo .cartao.v3, body.palco-ativo .cartao.v5 { left: 3vw; right: auto; }
+  body.palco-ativo .cartao.v0, body.palco-ativo .cartao.v2, body.palco-ativo .cartao.v4 { right: 3vw; left: auto; }
+  body.palco-ativo .cartao.v1, body.palco-ativo .cartao.v0 { top: 77vh; }
+  body.palco-ativo .cartao.v3, body.palco-ativo .cartao.v2, body.palco-ativo .cartao.v5, body.palco-ativo .cartao.v4 { top: 86vh; }
+  body.palco-ativo .cartao .texto { max-height: 3em; }
+}
+/* tela deitada mas baixa (notebook 1366x768, janela não maximizada) */
+@media (orientation: landscape) and (max-height: 820px) and (min-width: 901px) {
+  #palco-hud { height: 72vh; top: 46%; width: min(1240px, 72vw); }
+  body.palco-ativo .cartao.v0, body.palco-ativo .cartao.v1, body.palco-ativo .cartao.v2, body.palco-ativo .cartao.v3,
+  body.palco-ativo .cartao.v4, body.palco-ativo .cartao.v5 { width: min(300px, 20vw); }
+  .fala { font-size: 16px; }
+}
+/* janela estreita / celular: o palco vira um bloco do tamanho da tela, por cima, e o núcleo encolhe no canto */
+@media (max-width: 900px) {
+  #palco-hud { position: fixed; left: 8px; right: 8px; top: 64px; bottom: 120px; width: auto; height: auto; transform: none; }
+  body.palco-ativo #palco-hud { transform: none; }
+  body.palco-ativo .palco { position: fixed; left: 8px; top: 8px; transform: scale(.3); transform-origin: 0 0; z-index: 4; }
+  body.palco-ativo #paineis { display: none; }
+  #pagina-hud { inset: 8px 8px 80px; }
+}

@@ -53,6 +53,8 @@ import reunioes
 import sistema
 import spotify
 import vocabulario
+import sinonimos
+import pronuncia as pronuncia_
 import telas
 import web
 import whatsapp
@@ -473,7 +475,7 @@ FERRAMENTAS = {
                          **parametro("itens", "itens de lista separados por ; (opcional, pode ser vazio)")}),
     "ler_site": (ferramentas_extra.ler_site, False, "Lê o texto de uma página da internet.", parametro("url", "endereço")),
     "criar_planilha": (ferramentas_extra.criar_planilha, False, "Cria uma planilha Excel (.xlsx) em Documentos\\Jarvis "
-                       "e devolve o caminho. Depois abra com executar_comando: Start-Process '<caminho>'.",
+                       "e abre ela pronta pra ele.",
                        {**parametro("nome", "nome do arquivo"), "abas": {"type": "object", "description":
                         'abas da planilha: {"Nome da aba": [["Cabeçalho1", "Cabeçalho2"], ["valor", "valor"], ...]}'}}),
     "comando_jarvis": (None, False, "Executa uma habilidade pronta do Jarvis, escrita como comando curto: "
@@ -576,7 +578,7 @@ FERRAMENTAS.update({
 # A base vai sempre; o resto o cérebro carrega pelo SENTIDO (carregar_ferramentas). Como atalho, frases que
 # claramente pedem um grupo já chegam com ele carregado.
 GRUPOS = {
-    "base": ["comando_jarvis", "buscar_na_web", "ler_site", "pesquisar_e_mostrar", "executar_comando", "mostrar_na_tela",
+    "base": ["comando_jarvis", "buscar_na_web", "ler_site", "pesquisar_e_mostrar", "mostrar_na_tela",
              "lembrar", "mostrar_holograma", "calcular", "ver_registro", "planejar", "procurar_nos_meus_arquivos", "abrir_programa", "abrir_site",
              "carregar_ferramentas", "pesquisar_google"],
     "arquivos": ["listar_pasta", "ler_arquivo", "criar_arquivo", "criar_planilha", "procurar_arquivo", "mover_arquivo",
@@ -585,8 +587,17 @@ GRUPOS = {
              "area_de_transferencia", "brilho"],
     "programacao": ["rodar_codigo", "git", "editar_arquivo", "mostrar_codigo", "ler_arquivo", "listar_pasta", "criar_arquivo"],
     "aprender": ["aprender_habilidade", "esquecer_habilidade", "criar_automacao"],
+    "powershell": ["executar_comando"],
 }
+# 22/10: ele pedia "me mostra meu PC" e o cérebro saía rodando PowerShell. O PowerShell só vem quando o pedido é
+# coisa técnica do Windows; pro resto existe habilidade pronta (comando_jarvis) e ferramenta própria.
+PEDIDO_TECNICO = re.compile(
+    r"power\s*shell|terminal|\bcmd\b|prompt de comando|linha de comando|\bcomando\b|script|processo|servi[cç]o|driver|"
+    r"\bip\b|ipconfig|\bdns\b|\bping\b|\bporta\s+\d|instal|desinstal|winget|vari[aá]vel de ambiente|regedit|registro do windows|"
+    r"atualiza(?:r|[cç][aã]o)? (?:o|do) windows|tarefa agendada|inicializa[cç][aã]o|bateria|drivers?|\bbios\b|"
+    r"espa[cç]o (?:livre|em disco)|limpa(?:r)? (?:a )?(?:lixeira|tempor[aá]rios|cache)|desfragment|vers[aã]o do (?:windows|python|node)", re.I)
 ATALHO_DE_GRUPO = [
+    ("powershell", PEDIDO_TECNICO),
     ("arquivos", re.compile(r"arquivo|pasta|planilha|documento|renome|mov[ae]|copi[ae]|apag|lixeira|desfa[zç]|\.(?:txt|md|py|js|pdf|docx|xlsx)\b", re.I)),
     ("tela", re.compile(r"\btela\b|print|digit|escrev[ea] (?:a[ií]|isso|no|na)|clica|clique|aperta|janela|copiad|cola\b|"
                         r"[aá]rea de transfer|brilho", re.I)),
@@ -696,10 +707,13 @@ Números como se fala: "1.331", "R$ 175,70". Diga sempre "SevenCode" (nunca "7 S
 Hoje é {hoje}. PC Windows, área de trabalho em {Path.home() / "Desktop"}. A fala dele vem de reconhecimento de voz
 e pode ter palavra trocada (ele mistura inglês: leads, deploy, commit): entenda pelo contexto.
 COMO AGIR: você tem poder total no PC (ele autorizou). Quando ele pedir, FAÇA com as ferramentas, sem pedir licença;
-o sistema pede o "sim" sozinho no que é perigoso. Antes de usar ferramenta, solte uma frase curtinha ("Deixa comigo, chefe.").
-Raciocine pelo objetivo dele e se vire: PowerShell (executar_comando), buscar_na_web e ler_site para fato atual,
+o sistema pede o "sim" sozinho no que é perigoso. Antes de usar ferramenta, solte uma frase curtinha que diga O QUE você vai fazer, ligada ao pedido dele ("Já te mostro as peças, chefe.", "Vou atrás das notícias."); nada genérico tipo "processando".
+Raciocine pelo objetivo dele e se vire: buscar_na_web e ler_site para fato atual,
 ver_tela quando ele falar do que está na tela, digitar/apertar_teclas na janela dele, criar_planilha (e abra depois),
-calcular para qualquer conta. Spotify, WhatsApp, painel, leads, CRM, reuniões, Porthon, janelas, abas e volume:
+calcular para qualquer conta. "Mostra/deixa eu ver/quero ver X" = MOSTRAR dentro de você (mostrar_holograma, pesquisar_e_mostrar,
+mostrar_na_tela ou comando_jarvis com a frase dele), nunca rodar comando. PowerShell (executar_comando) é o ÚLTIMO recurso:
+só pra coisa técnica do Windows que nenhuma outra ferramenta faz, e só se ele pediu isso. Na dúvida: comando_jarvis com a frase dele.
+Spotify, WhatsApp, painel, leads, CRM, reuniões, Porthon, janelas, abas e volume:
 comando_jarvis. Spotify (tocar, pausar, trocar): SÓ quando ele pedir música; sugerir pode, tocar só depois do "sim".
 Se falhar, tente outro caminho. Nunca diga que fez o que não fez. Nunca revele senhas ou chaves.
 TUDO DENTRO DE VOCÊ: o globo, o mapa, os painéis, as notícias e o Olho de Deus são SEUS (não são apps do PC).
@@ -821,6 +835,14 @@ async def pensar(sessao):
                 return
             nome = chamada["function"]["name"]
             args = chamada["function"].get("arguments") or {}
+            if nome == "executar_comando" and not PEDIDO_TECNICO.search(sessao.get("pedido") or ""):
+                # pediu pra mostrar/abrir/tocar e o cérebro foi pro PowerShell: não roda, manda ele usar a habilidade certa
+                sessao["mensagens"].append({"role": "tool", "tool_call_id": chamada.get("id"), "content":
+                    "NÃO executado: ele não pediu nada de PowerShell. Use comando_jarvis com a frase dele "
+                    f"(\"{(sessao.get('pedido') or '')[:120]}\"), mostrar_holograma, pesquisar_e_mostrar ou abrir_programa."})
+                passos.append({"ferramenta": nome, "args": args})
+                deu_erro = True
+                continue
             if precisa_autorizar(nome, args):
                 sessao["pendente"] = {"nome": nome, "args": args, "tool_call_id": chamada.get("id")}
                 yield {"pendente": {"nome": nome, "args": args}}
@@ -1368,6 +1390,7 @@ def vira_comando(texto):
 
 def rota_de(texto, alternativas=(), assunto=None, foco=None):
     """Que caminho o pedido tomaria, SEM executar nada. É o que o treino.py confere."""
+    texto, alternativas = sinonimos.normalizar(texto), [sinonimos.normalizar(a) for a in alternativas]
     texto = vocabulario.melhor_alternativa([texto, *alternativas], vira_comando)
     texto = contexto.resolver(texto, foco) or texto
     if extensao.ABRIR.match(vocabulario.corrigir(texto)) or extensao.FECHAR.match(vocabulario.corrigir(texto)):
@@ -1658,6 +1681,11 @@ MOSTRAR_ONDE = re.compile(
 async def conversar(p: Pergunta):
     sid = p.sessao if p.sessao in sessoes else str(uuid.uuid4())
     sessao = sessoes.setdefault(sid, {"mensagens": [], "pendente": None})
+    # "deixa eu ver X", "tu pode me mostrar X", "abra X"… → um jeito só (no meio de um diálogo a fala vai como foi dita:
+    # pode ser o texto de uma mensagem)
+    if not sessao.get("dialogo"):
+        p = Pergunta(sessao=p.sessao, texto=sinonimos.normalizar(vocabulario.corrigir(p.texto)),
+                     alternativas=[sinonimos.normalizar(vocabulario.corrigir(a)) for a in p.alternativas])
     # falou em pedaços ("fecha as abas" … "do YouTube" … "no Chrome"): junta com o pedido anterior
     juntado = juntar_com_o_anterior(sessao, p.texto)
     if juntado:
@@ -3236,12 +3264,19 @@ def frases_da_tela():
     return {"esperas": falas.ESPERAS, "chamado": falas.CHAMADO, "demorando": falas.DEMORANDO}
 
 
+@app.get("/api/espera")
+def espera_do_pedido(texto: str = ""):
+    """A frase de espera que combina com o que ele falou ("me mostra meu PC" → "Montando as peças do seu PC")."""
+    return {"frase": falas.espera_para(sinonimos.normalizar(vocabulario.corrigir(texto)))}
+
+
 @app.on_event("startup")
 async def preparar_frases_fixas():
     """Gera de antemão o áudio das frases que ele sempre fala: a primeira vez também sai na hora."""
     async def gerar():
         PASTA_DE_VOZ.mkdir(exist_ok=True)
         for frase in FRASES_FIXAS:
+            frase = pronuncia(frase)  # igual ao /api/voz: o arquivo guardado é o da frase já com a pronúncia certa
             destino = arquivo_de_voz(frase)
             if destino.exists():
                 continue
@@ -3262,10 +3297,8 @@ tarefas_de_fundo = set()
 
 
 def pronuncia(texto):
-    """Como as palavras soam: o Rafael chama a empresa só de "SevenCode", nunca "sete SevenCode"."""
-    texto = re.sub(r"\b7\s*-?\s*(?:seven\s*code|sevencode|code)\b", "SevenCode", texto, flags=re.I)
-    texto = re.sub(r"\bseven\s*code\b", "SevenCode", texto, flags=re.I)
-    return re.sub(r"\bporthon\b", "Pórton", texto, flags=re.I)  # ele fala "PÓR-ton", com a força no começo
+    """Como as palavras soam: "SevenCode" (nunca "sete SevenCode"), "Pórton", "Ráizen", "trédis"… (tabela em pronuncia.py)."""
+    return pronuncia_.falar(texto)
 
 
 @app.get("/api/voz")

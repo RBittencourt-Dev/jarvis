@@ -81,7 +81,12 @@ def criar_planilha(nome: str, abas: dict, pasta: str = ""):
             largura = max((len(str(c.value)) for c in coluna if c.value is not None), default=8)
             aba.column_dimensions[get_column_letter(i)].width = min(60, largura + 3)
     livro.save(arquivo)
-    return str(arquivo)
+    try:  # já abre pra ele (antes o cérebro abria pelo PowerShell)
+        import os
+        os.startfile(arquivo)
+        return f"{arquivo} (já aberta na tela)"
+    except OSError:
+        return str(arquivo)
 
 
 def _numero(v):

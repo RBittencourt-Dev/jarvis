@@ -47,6 +47,13 @@ FIXOS = [
     (r"\b(?:vs|v s|vê esse|ve esse)\s*code\b", "VS Code"),
     (r"\b(?:deploi|diploi|deployar)\b", "deploy"),
     (r"\b(?:comitar|comit|commitá)\b", "commit"),
+    # 22/10: peças do PC do jeito que o Chrome escreve o que ele fala
+    (r"\b(?:r[aá]izen|raisen|raizem|rizen|risen|r[aá]isen)\b", "Ryzen"),
+    (r"\b(?:tr[eé]ds|tr[eé]dis|tredes|treads)\b", "threads"),
+    (r"\b(?:gi\s*force|dji\s*force|ji\s*force|geforce)\b", "GeForce"),
+    (r"\b(?:radeom|radion|rad[eê]on)\b", "Radeon"),
+    (r"\b(?:king\s*ston|kingstom)\b", "Kingston"),
+    (r"\b(?:envidia|en\s*vidia|nvídia)\b", "NVIDIA"),
 ]
 
 # termos dele que o Chrome em português costuma estragar (só palavras de 5+ letras: as curtas

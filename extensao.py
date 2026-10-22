@@ -184,6 +184,10 @@ def mover_item(item, destino, porta):
         alvo = "extensao"
     else:
         alvo = _na_principal(item)
+    if alvo == "extensao" and not aberta() and not telas.monitor("outra"):
+        alvo = _na_principal(item)  # PC com um monitor só: tudo fica na principal
+        if alvo == item["canal"]:
+            return "Só tem uma tela ligada, chefe. Já tá aqui."
     if alvo == item["canal"]:
         return "Já tá nessa tela, chefe."
     if alvo == "extensao" and not aberta():
@@ -286,7 +290,7 @@ def mostrar(titulo: str, texto: str = "", itens=None):
     if isinstance(itens, str):
         itens = [i.strip() for i in re.split(r"\n|;", itens) if i.strip()]
     publicar({"cartao": com_id({"titulo": titulo, "texto": texto, "linhas": list(itens or [])[:30]})})
-    return "Mostrei na outra tela."
+    return "Mostrei na outra tela." if aberta() else "Mostrei na tela."
 
 
 # ------------------------------------------------------------------ janela
