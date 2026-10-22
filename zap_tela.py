@@ -144,14 +144,21 @@ def _resultados(w):
     if not grade.Exists(1):
         return []
     achados, secao = [], "conversa"
-    for item in grade.GetChildren():
-        nome = (item.Name or "").strip()
-        if _sa(nome) in SECOES:
-            secao = SECOES[_sa(nome)]
+    try:
+        filhos = grade.GetChildren()
+    except Exception:
+        return []
+    for item in filhos:
+        try:  # a lista se refaz enquanto lê (item some no meio): pula, a próxima volta do _buscar relê
+            nome = (item.Name or "").strip()
+            if _sa(nome) in SECOES:
+                secao = SECOES[_sa(nome)]
+                continue
+            if secao is None or not nome:
+                continue  # resultado de MENSAGEM (texto achado numa conversa): não é contato
+            achados.append({"nome": _titulo(item), "tipo": secao, "_item": item})
+        except Exception:
             continue
-        if secao is None or not nome:
-            continue  # resultado de MENSAGEM (texto achado numa conversa): não é contato
-        achados.append({"nome": _titulo(item), "tipo": secao, "_item": item})
     return achados
 
 
