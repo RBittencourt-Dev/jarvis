@@ -113,6 +113,7 @@ async function verificarIdentidade() {
     // já conferiu desde que o PC ligou: entra direto, sem câmera
     const ficha = await (await fetch("/api/rosto")).json();
     if (ficha.ja_conferido) { portao.el.hidden = true; return false; }
+    portao.el.hidden = false;
     portao.texto("Carregando reconhecimento facial…");
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri("/web/models"),
