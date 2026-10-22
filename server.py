@@ -1362,6 +1362,7 @@ class Pergunta(BaseModel):
     sessao: str | None = None
     texto: str
     alternativas: list[str] = []  # outras versões do que o Chrome ouviu
+    celular: bool = False  # veio da tela do celular: o que mostrar vai só pra ela
 
 
 class Decisao(BaseModel):
@@ -1688,11 +1689,14 @@ MOSTRAR_ONDE = re.compile(
 async def conversar(p: Pergunta):
     sid = p.sessao if p.sessao in sessoes else str(uuid.uuid4())
     sessao = sessoes.setdefault(sid, {"mensagens": [], "pendente": None})
+    if p.celular:
+        sessao["celular"] = True
+    extensao.origem.set("celular" if sessao.get("celular") else "pc")
     # "deixa eu ver X", "tu pode me mostrar X", "abra X"… → um jeito só (no meio de um diálogo a fala vai como foi dita:
     # pode ser o texto de uma mensagem)
     if not sessao.get("dialogo"):
         p = Pergunta(sessao=p.sessao, texto=sinonimos.normalizar(vocabulario.corrigir(p.texto)),
-                     alternativas=[sinonimos.normalizar(vocabulario.corrigir(a)) for a in p.alternativas])
+                     alternativas=[sinonimos.normalizar(vocabulario.corrigir(a)) for a in p.alternativas], celular=p.celular)
     # falou em pedaços ("fecha as abas" … "do YouTube" … "no Chrome"): junta com o pedido anterior
     juntado = juntar_com_o_anterior(sessao, p.texto)
     if juntado:
@@ -1703,7 +1707,7 @@ async def conversar(p: Pergunta):
     if onde:
         sessao["onde"] = "outra" if onde.group("outra") else "aqui"
         p = Pergunta(sessao=p.sessao, texto=onde.group("pedido"), alternativas=[])
-        if sessao["onde"] == "outra" and not extensao.aberta():
+        if sessao["onde"] == "outra" and not extensao.aberta() and not sessao.get("celular"):
             extensao.abrir(CONFIG["porta"])  # abre já: os pop-ups desta resposta esperam ela conectar
     d = sessao.get("dialogo")
     if d and d.get("tipo") == "lugar":
@@ -3081,6 +3085,7 @@ async def decidir(d: Decisao):
     if not sessao or not sessao["pendente"]:
         raise HTTPException(404, "Nada esperando autorização.")
     pend, sessao["pendente"] = sessao["pendente"], None
+    extensao.origem.set("celular" if sessao.get("celular") else "pc")
     if "correcao" in pend:
         # "sim" ensina a correção; "não" ensina a não insistir. Depois segue com o pedido.
         vocabulario.confirmar(pend["correcao"], d.autorizado)
@@ -3478,7 +3483,7 @@ def extensao_sinal():
 
 @app.get("/api/extensao/eventos")
 async def extensao_eventos(canal: str = "extensao"):
-    canal = canal if canal in ("extensao", "hud", "palco") else "extensao"
+    canal = canal if canal in ("extensao", "hud", "palco", "celular") else "extensao"
     return StreamingResponse(extensao.eventos(canal), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 

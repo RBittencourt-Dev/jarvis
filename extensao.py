@@ -7,6 +7,7 @@ o HUD da tela principal não põe cartão em volta do núcleo (vão todos pra c�
 Cada pop-up tem id e assunto: "fecha o pop-up da BMW" fecha só aquele (na extensão ou no HUD).
 """
 import asyncio
+import contextvars
 import json
 import re
 import subprocess
@@ -24,7 +25,10 @@ TITULO = "J.A.R.V.I.S. · Extensão"
 URL = "http://127.0.0.1:{porta}/extensao"
 PERFIL = RAIZ / ".perfil-extensao"  # perfil próprio: o Chrome respeita posição e tela cheia (janela nova num perfil já aberto ignora)
 
-_ouvintes = {"extensao": set(), "hud": set(), "palco": set()}  # palco = o centro da tela principal (iframe no HUD)  # filas (asyncio.Queue) de quem está com a página aberta
+_ouvintes = {"extensao": set(), "hud": set(), "palco": set(), "celular": set()}  # palco = o centro da tela principal (iframe no HUD)  # filas (asyncio.Queue) de quem está com a página aberta
+# de onde veio o pedido que está rodando agora ("pc" | "celular"). O servidor marca no começo do pedido e o valor
+# segue junto pras ferramentas (asyncio.to_thread copia o contexto), então publicar() sabe pra qual tela mandar.
+origem = contextvars.ContextVar("origem", default="pc")
 _laco = {"loop": None}   # o loop do servidor, pra publicar de dentro de threads (ferramentas)
 _sinal = {"em": 0.0}
 _esperando = []          # (quando, evento) publicados com a extensão ainda abrindo
@@ -84,6 +88,11 @@ def publicar(evento, canal="extensao"):
     """Manda um evento pra extensão (ou pro HUD) de qualquer thread."""
     loop = _laco["loop"]
     if not loop:
+        return
+    if origem.get() == "celular":
+        # pedido feito no celular: o que ele mostra vai SÓ pro celular (pedido dele: "2 Jarvis", um não replica no outro)
+        for fila in list(_ouvintes["celular"]):
+            loop.call_soon_threadsafe(fila.put_nowait, evento)
         return
     if canal == "extensao" and not _ouvintes["extensao"] and not aberta() and _ouvintes["palco"]:
         canal = "palco"  # sem a tela lateral (PC de um monitor, ou fechada): o globo e os painéis vão pro centro da principal

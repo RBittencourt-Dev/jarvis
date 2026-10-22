@@ -50,7 +50,16 @@
   @keyframes holo-varre { to { top: 100%; } }
   @keyframes holo-entra { from { opacity: 0; transform: translateY(8px); filter: brightness(2); } }
   #holo .h-dados { animation: holo-entra .6s ease-out; }
-  @keyframes holo-pisca { 50% { opacity: .35; } }`;
+  @keyframes holo-pisca { 50% { opacity: .35; } }
+  /* celular / tela estreita: tudo dentro da margem, dados embaixo, letras menores */
+  @media (max-width: 700px) {
+    #holo .h-titulo { top: 10px; font-size: 14px; letter-spacing: .18em; padding: 0 44px; }
+    #holo .h-titulo small { font-size: 9px; letter-spacing: .2em; }
+    #holo .h-rot { font-size: 10px; padding: 2px 6px; letter-spacing: .04em; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; }
+    #holo .h-dados { top: auto; bottom: 64px; left: 10px; right: 10px; width: auto; max-height: 32%; overflow-y: auto; font-size: 11px; padding: 8px 10px; }
+    #holo .h-texto { bottom: 10px; width: calc(100% - 24px); font-size: 14px; }
+    #holo .h-fechar { top: 6px; right: 6px; }
+  }`;
   document.head.append(css);
 
   // ------------------------------------------------------------ sons do holograma (sintetizados)
@@ -134,7 +143,11 @@
 
   function redimensionar() {
     const w = el.clientWidth || innerWidth, h = el.clientHeight || innerHeight;
-    ren.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix();
+    ren.setSize(w, h, false); cam.aspect = w / h;
+    // tela em pé (celular): abre o ângulo pra largura caber inteira, o holograma não corta dos lados
+    const largura = 2 * Math.atan(Math.tan((38 / 2) * Math.PI / 180) * 1.3);
+    cam.fov = cam.aspect < 1.3 ? Math.min(100, 2 * Math.atan(Math.tan(largura / 2) / cam.aspect) * 180 / Math.PI) : 38;
+    cam.updateProjectionMatrix();
     svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   }
 
@@ -384,7 +397,7 @@
   function rotulos() {
     const w = el.clientWidth, h = el.clientHeight, cx = w / 2;
     const painel = el.querySelector(".h-dados");
-    const limiteDir = painel.classList.contains("ver") ? painel.offsetLeft - 16 : w - 16;  // rótulo não invade o painel de dados
+    const limiteDir = painel.classList.contains("ver") && w > 700 ? painel.offsetLeft - 16 : w - 8;  // rótulo não invade o painel de dados (no celular ele fica embaixo)
     const lados = { esq: [], dir: [] };
     for (const p of pecas) {
       tmp.copy(p.ancora || new T.Vector3()).applyEuler(p.g.rotation);
@@ -398,10 +411,11 @@
       lista.sort((a, b) => a.y - b.y);
       let ultimoY = -1e9;
       for (const r of lista) {
-        const ty = Math.max(r.y, ultimoY + 30); ultimoY = ty;
+        const ty = Math.max(40, Math.min(h - 40, Math.max(r.y, ultimoY + 30))); ultimoY = ty;  // nunca sai por cima/baixo
         let tx = lado === "esq" ? Math.min(r.x - 60, cx - w * 0.2) : Math.max(r.x + 60, cx + w * 0.2);
         if (lado === "dir") tx = Math.min(tx, limiteDir - (r.p.rot.offsetWidth || 160));
-        else tx = Math.max(tx, (r.p.rot.offsetWidth || 160) + 12);
+        else tx = Math.max(tx, (r.p.rot.offsetWidth || 160) + 8);
+        tx = Math.max(8, Math.min(w - 8, tx));
         r.p.rot.style.left = tx + "px"; r.p.rot.style.top = ty + "px";
         r.p.rot.classList.toggle("esq", lado === "esq");
         r.p.rot.style.display = r.visivel ? "" : "none";

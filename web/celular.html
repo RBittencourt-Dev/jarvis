@@ -15,56 +15,102 @@
      toque: aqui é TOCAR pra falar. A gravação vai pro PC (/api/celular/ouvir → Whisper), a resposta vem do mesmo
      /api/conversar da tela do PC, e a voz toca num áudio só, destravado no primeiro toque. -->
 <style>
-  :root { --fundo: #03080f; --ciano: #39d0ff; --texto: #d8f3ff; --fraco: #6f93a8; --cartao: rgba(57, 208, 255, .07);
-          --borda: rgba(57, 208, 255, .25); --vermelho: #ff5c6c; }
+  :root { --fundo: #03080f; --ciano: #39d0ff; --ciano-fraco: #39d0ff33; --texto: #d8f3ff; --fraco: #6f93a8;
+          --cartao: rgba(57, 208, 255, .07); --borda: rgba(57, 208, 255, .25); --vermelho: #ff5c6c; --nivel: 0;
+          --nucleo: min(56vw, 30vh, 300px); }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--fundo); color: var(--texto);
                font: 16px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; }
-  body { display: flex; flex-direction: column; height: 100dvh;
-         padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom); overflow: hidden; }
-  header { display: flex; align-items: center; gap: 10px; padding: 14px 0 8px; }
-  header img { width: 30px; height: 30px; border-radius: 8px; }
-  header b { font-size: 18px; letter-spacing: .14em; }
-  #estado { margin-left: auto; font-size: 13px; color: var(--fraco); }
-  #conversa { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 8px 0 16px;
-              -webkit-overflow-scrolling: touch; }
-  .fala { max-width: 86%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; word-wrap: break-word; }
+  body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
+         padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+         background: radial-gradient(ellipse at 50% 40%, #0a2133 0%, var(--fundo) 65%); }
+  header { display: flex; align-items: center; gap: 10px; padding: 12px 0 6px; z-index: 3; }
+  header img { width: 28px; height: 28px; border-radius: 8px; }
+  header b { font-size: 16px; letter-spacing: .3em; color: var(--ciano); }
+  #relogio { margin-left: auto; font-size: 13px; color: var(--fraco); font-variant-numeric: tabular-nums; }
+
+  /* o meio: núcleo no centro; o palco (hologramas, globo, painéis) cobre o meio quando tem algo */
+  #meio { position: relative; flex: 1; min-height: 0; }
+  .palco { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); display: flex; flex-direction: column;
+           align-items: center; z-index: 1; transition: left .5s, top .5s, transform .5s; }
+  #onda { position: absolute; left: 50%; top: calc(var(--nucleo) / 2); width: calc(var(--nucleo) * 1.8); height: calc(var(--nucleo) * 1.8);
+          transform: translate(-50%, -50%); pointer-events: none; }
+  .nucleo { position: relative; width: var(--nucleo); height: var(--nucleo); cursor: pointer; }
+  .anel, .centro { position: absolute; border-radius: 50%; inset: 0; }
+  .a1 { border: 2px solid var(--ciano-fraco); border-top-color: var(--ciano); animation: gira 6s linear infinite; }
+  .a2 { inset: 10%; border: 5px dotted var(--ciano-fraco); animation: gira 14s linear infinite reverse; }
+  .a3 { inset: 21%; border: 2px solid var(--ciano); border-left-color: transparent; border-right-color: transparent; animation: gira 3s linear infinite; }
+  .centro { inset: 27%; background: radial-gradient(circle, #39d0ff66 0%, #39d0ff22 45%, transparent 72%);
+            box-shadow: 0 0 calc(30px + var(--nivel) * 70px) var(--ciano); }
+  .sete { position: absolute; left: 50%; top: 50%; width: 36%; height: 36%; pointer-events: none;
+          transform: translate(-50%, -50%) scale(calc(1 + var(--nivel) * .28));
+          filter: drop-shadow(0 0 6px var(--ciano)) drop-shadow(0 0 calc(12px + var(--nivel) * 28px) var(--ciano)); }
+  body.gravando { --ciano: #ff5c6c; --ciano-fraco: #ff5c6c33; }
+  body.gravando .centro, body.pensando .centro { animation: pulsa 1.2s ease-in-out infinite; }
+  @keyframes gira { to { transform: rotate(360deg); } }
+  @keyframes pulsa { 50% { transform: scale(1.12); } }
+  #estado { margin: 14px 0 0; font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--ciano); text-align: center; }
+
+  #palco { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 2; background: transparent;
+           opacity: 0; pointer-events: none; transition: opacity .5s; border-radius: 16px; }
+  html.palco-ativo #palco { opacity: 1; pointer-events: auto; }
+  /* com algo no palco, o núcleo encolhe pro canto de cima (igual no PC) */
+  html.palco-ativo .palco { left: calc(100% - var(--nucleo) * .17 - 4px); top: calc(var(--nucleo) * .17 + 4px);
+                            transform: translate(-50%, -50%) scale(.34); z-index: 3; }
+  html.palco-ativo #estado { display: none; }
+  html.palco-ativo #conversa { max-height: 22%; }
+
+  /* conversa: as últimas falas por cima da parte de baixo do meio */
+  #conversa { position: absolute; left: 0; right: 0; bottom: 0; max-height: 40%; overflow-y: auto; z-index: 3;
+              display: flex; flex-direction: column; gap: 8px; padding: 18px 0 6px; -webkit-overflow-scrolling: touch;
+              -webkit-mask-image: linear-gradient(transparent, #000 18px); mask-image: linear-gradient(transparent, #000 18px); }
+  .fala { max-width: 86%; padding: 9px 13px; border-radius: 16px; white-space: pre-wrap; word-wrap: break-word; font-size: 15px; }
   .eu { align-self: flex-end; background: rgba(57, 208, 255, .18); border-bottom-right-radius: 4px; }
-  .ele { align-self: flex-start; background: var(--cartao); border: 1px solid var(--borda); border-bottom-left-radius: 4px; }
+  .ele { align-self: flex-start; background: rgba(6, 18, 29, .85); border: 1px solid var(--borda); border-bottom-left-radius: 4px; }
   .erro { align-self: center; color: var(--vermelho); font-size: 14px; text-align: center; }
-  .cartao { align-self: stretch; background: var(--cartao); border: 1px solid var(--borda); border-radius: 14px; padding: 12px 14px; }
-  .cartao h3 { margin: 0 0 4px; font-size: 13px; color: var(--ciano); text-transform: uppercase; letter-spacing: .08em; }
-  .cartao .destaque { font-size: 22px; font-weight: 600; margin: 2px 0 6px; }
+  .cartao { align-self: stretch; background: rgba(6, 18, 29, .9); border: 1px solid var(--borda); border-left: 3px solid var(--ciano);
+            border-radius: 12px; padding: 10px 13px; }
+  .cartao h3 { margin: 0 0 4px; font-size: 12px; color: var(--ciano); text-transform: uppercase; letter-spacing: .12em; }
+  .cartao .destaque { font-size: 22px; font-weight: 300; color: var(--ciano); margin: 2px 0 6px; }
   .cartao div.l { font-size: 14px; padding: 3px 0; border-top: 1px solid rgba(57, 208, 255, .1); }
   .cartao img { width: 100%; border-radius: 10px; margin-top: 6px; }
-  #confirmar { display: flex; gap: 10px; padding-bottom: 10px; }
+
+  #confirmar { display: flex; gap: 10px; padding: 8px 0 2px; }
   #confirmar[hidden] { display: none; }
   #confirmar button { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid var(--borda); font-size: 16px;
                       background: var(--cartao); color: var(--texto); }
   #confirmar .sim { background: rgba(57, 208, 255, .25); }
-  footer { display: flex; align-items: center; gap: 12px; padding: 10px 0 14px; }
-  #texto { flex: 1; min-width: 0; padding: 13px 14px; border-radius: 24px; border: 1px solid var(--borda);
+  footer { display: flex; align-items: center; gap: 10px; padding: 10px 0 12px; z-index: 3; }
+  #texto { flex: 1; min-width: 0; padding: 12px 14px; border-radius: 22px; border: 1px solid var(--borda);
            background: rgba(255, 255, 255, .04); color: var(--texto); font-size: 16px; outline: none; }
-  #mic { flex: none; width: 76px; height: 76px; border-radius: 50%; border: 2px solid var(--ciano);
-         background: radial-gradient(circle, rgba(57, 208, 255, .35), rgba(57, 208, 255, .05) 70%);
-         box-shadow: 0 0 calc(14px + var(--nivel, 0) * 40px) rgba(57, 208, 255, .6); color: var(--texto);
-         display: grid; place-items: center; transition: transform .15s; }
-  #mic svg { width: 32px; height: 32px; }
-  #mic:active { transform: scale(.94); }
-  body.gravando #mic { border-color: var(--vermelho); background: radial-gradient(circle, rgba(255, 92, 108, .45), rgba(255, 92, 108, .05) 70%);
-                        box-shadow: 0 0 calc(14px + var(--nivel, 0) * 60px) rgba(255, 92, 108, .7); }
-  body.pensando #mic { animation: pulso 1.2s infinite; }
-  body.falando #mic { box-shadow: 0 0 34px rgba(57, 208, 255, .9); }
-  @keyframes pulso { 50% { opacity: .5; } }
-  #dica { text-align: center; color: var(--fraco); font-size: 13px; margin: -4px 0 4px; }
-  @media (min-width: 700px) { body { max-width: 640px; margin: 0 auto; } }
+  #mic { flex: none; width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--ciano); color: var(--ciano);
+         background: rgba(57, 208, 255, .1); display: grid; place-items: center; }
+  #mic svg { width: 24px; height: 24px; }
+  /* deitado (paisagem): núcleo à esquerda, conversa à direita */
+  @media (orientation: landscape) and (max-height: 520px) {
+    :root { --nucleo: min(40vh, 220px); }
+    .palco { left: 28%; top: 50%; }
+    #conversa { left: 55%; top: 0; max-height: none; }
+    html.palco-ativo #conversa { left: 65%; max-height: none; }
+  }
+  @media (min-width: 700px) and (orientation: portrait) { body { max-width: 700px; margin: 0 auto; } }
 </style>
 </head>
 <body>
-<header><img src="/web/marca/jarvis-192.png" alt=""><b>JARVIS</b><span id="estado">Toque pra falar</span></header>
-<main id="conversa"></main>
+<header><img src="/web/marca/jarvis-192.png" alt=""><b>JARVIS</b><span id="relogio"></span></header>
+<div id="meio">
+  <iframe id="palco" src="/extensao?embutido=1&celular=1" title="Hologramas e painéis" allow="autoplay; fullscreen; accelerometer; gyroscope"></iframe>
+  <div class="palco">
+    <canvas id="onda" aria-hidden="true"></canvas>
+    <section class="nucleo" id="nucleo" title="Toque no núcleo pra falar">
+      <div class="anel a1"></div><div class="anel a2"></div><div class="anel a3"></div><div class="centro"></div>
+      <img class="sete" src="/web/marca/sete.png" alt="">
+    </section>
+    <p id="estado">Toque no núcleo pra falar</p>
+  </div>
+  <main id="conversa"></main>
+</div>
 <div id="confirmar" hidden><button class="sim" data-sim="1">Sim, pode</button><button data-sim="">Não</button></div>
-<p id="dica">Toque no círculo, fale, e toque de novo (ou só pare de falar)</p>
 <footer>
   <input id="texto" placeholder="Ou escreva aqui…" enterkeyhint="send" autocomplete="off">
   <button id="mic" aria-label="Falar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -78,6 +124,11 @@ function estado(classe, texto) {
   document.body.className = classe || "";
   $("estado").textContent = texto;
 }
+setInterval(() => { $("relogio").textContent = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); }, 1000);
+// o palco embutido avisa quando tem algo (holograma, globo, painel): o núcleo vai pro canto
+addEventListener("message", (e) => {
+  if (e.origin === location.origin && typeof e.data?.palco === "boolean") document.documentElement.classList.toggle("palco-ativo", e.data.palco);
+});
 function escrever(texto, quem) {
   const d = document.createElement("div");
   d.className = "fala " + quem;
@@ -110,6 +161,41 @@ function destravar() {
   b.connect(ctx.destination);
   b.start(0);
 }
+let an = null;
+function analisador() {
+  if (!an) { an = ctx.createAnalyser(); an.fftSize = 256; an.smoothingTimeConstant = 0.75; an.connect(ctx.destination); }
+  return an;
+}
+// onda em volta do núcleo (igual a do PC): segue a voz dele, ou a sua enquanto grava
+const volumes = new Uint8Array(128);
+let micAn = null;
+function animarOnda() {
+  const tela = $("onda");
+  const lado = Math.round(tela.clientWidth * devicePixelRatio);
+  if (lado && tela.width !== lado) tela.width = tela.height = lado;
+  const g = tela.getContext("2d");
+  g.clearRect(0, 0, lado, lado);
+  const fonte = document.body.classList.contains("gravando") ? micAn : (tocando ? an : null);
+  if (fonte) fonte.getByteFrequencyData(volumes); else volumes.fill(0);
+  const barras = 72, meio = lado / 2, raio = lado / 3.6, tempo = Date.now() / 600;
+  const cor = getComputedStyle(document.body).getPropertyValue("--ciano").trim() || "#39d0ff";
+  let soma = 0;
+  g.strokeStyle = cor; g.shadowColor = cor; g.shadowBlur = 8; g.lineWidth = Math.max(2, lado / 240);
+  for (let i = 0; i < barras; i++) {
+    const v = volumes[Math.floor((i < barras / 2 ? i : barras - i) * 1.4)] / 255;
+    soma += v;
+    const tam = raio * (0.02 + 0.015 * Math.sin(tempo + i / 4) + v * 0.55);
+    const ang = (i / barras) * Math.PI * 2 - Math.PI / 2;
+    g.globalAlpha = 0.35 + v * 0.65;
+    g.beginPath();
+    g.moveTo(meio + Math.cos(ang) * raio, meio + Math.sin(ang) * raio);
+    g.lineTo(meio + Math.cos(ang) * (raio + tam), meio + Math.sin(ang) * (raio + tam));
+    g.stroke();
+  }
+  document.documentElement.style.setProperty("--nivel", Math.min(1, (soma / barras) * 2.2).toFixed(3));
+  requestAnimationFrame(animarOnda);
+}
+requestAnimationFrame(animarOnda);
 const fila = [];
 let tocandoFila = false, tocando = null;
 function falar(frase) {
@@ -129,14 +215,14 @@ async function tocarFila() {
     await new Promise((ok) => {
       tocando = ctx.createBufferSource();
       tocando.buffer = audio;
-      tocando.connect(ctx.destination);
+      tocando.connect(analisador());
       tocando.onended = ok;
       tocando.start(0);
     });
     tocando = null;
   }
   tocandoFila = false;
-  if (!ocupado) estado("", "Toque pra falar");
+  if (!ocupado) estado("", "Toque no núcleo pra falar");
 }
 function calar() {
   fila.length = 0;
@@ -168,7 +254,7 @@ async function chamar(url, corpo) {
       for (const linha of linhas.filter(Boolean)) {
         const e = JSON.parse(linha);
         if (e.sessao) sessao = e.sessao;
-        if (e.cartao) cartao(e.cartao);
+        if (e.cartao && (!e.cartao.onde || e.cartao.onde === "aqui")) cartao(e.cartao);  // os grandes vão pro palco
         if (e.entendido) { const m = [...document.querySelectorAll(".fala.eu")].pop(); if (m) m.textContent = e.entendido; }
         if (e.erro) escrever("Falha: " + e.erro, "erro");
         if (e.leitura) {
@@ -197,13 +283,13 @@ async function chamar(url, corpo) {
     escrever("Não falei com o PC: " + e.message + ". O PC está ligado com o Jarvis aberto?", "erro");
   }
   ocupado = false;
-  if (!tocandoFila) estado("", "Toque pra falar");
+  if (!tocandoFila) estado("", "Toque no núcleo pra falar");
 }
 function perguntar(texto) {
   texto = (texto || "").trim();
   if (!texto) return;
   escrever(texto, "eu");
-  chamar("/api/conversar", { sessao, texto, alternativas: [] });
+  chamar("/api/conversar", { sessao, texto, alternativas: [], celular: true });
 }
 document.querySelectorAll("#confirmar button").forEach((b) => b.onclick = () => {
   destravar();
@@ -235,17 +321,17 @@ async function comecar() {
   gravador.start(250);
   estado("gravando", "Ouvindo…");
   // para sozinho depois de ~1,3 s de silêncio (e no máximo 25 s)
-  const fonte = ctx.createMediaStreamSource(fluxo), an = ctx.createAnalyser();
-  an.fftSize = 512;
-  fonte.connect(an);
-  const buf = new Uint8Array(an.fftSize);
+  const fonte = ctx.createMediaStreamSource(fluxo);
+  micAn = ctx.createAnalyser();
+  micAn.fftSize = 256;
+  fonte.connect(micAn);
+  const buf = new Uint8Array(micAn.fftSize);
   const inicio = Date.now();
   let falou = false, quieto = Date.now();
   vigia = setInterval(() => {
-    an.getByteTimeDomainData(buf);
+    micAn.getByteTimeDomainData(buf);
     let pico = 0;
     for (const v of buf) pico = Math.max(pico, Math.abs(v - 128));
-    document.documentElement.style.setProperty("--nivel", Math.min(1, pico / 50).toFixed(2));
     if (pico > 14) { falou = true; quieto = Date.now(); }
     const agora = Date.now();
     if ((falou && agora - quieto > 1300) || agora - inicio > 25000 || (!falou && agora - inicio > 7000)) parar();
@@ -253,7 +339,6 @@ async function comecar() {
 }
 function parar() {
   clearInterval(vigia);
-  document.documentElement.style.setProperty("--nivel", 0);
   if (gravador?.state === "recording") gravador.stop();
 }
 async function enviarGravacao() {
@@ -267,17 +352,17 @@ async function enviarGravacao() {
     perguntar(j.texto);
   } catch (e) {
     escrever("Não entendi o áudio: " + e.message, "erro");
-    estado("", "Toque pra falar");
+    estado("", "Toque no núcleo pra falar");
   }
 }
-$("mic").onclick = () => {
+$("nucleo").onclick = $("mic").onclick = () => {
   destravar();
   if (gravador?.state === "recording") return parar();
   if (tocandoFila) calar();  // tocou enquanto ele fala: cala e ouve
   if (ocupado) return;
   comecar();
 };
-escrever("Pronto, chefe. Toque no círculo e fale comigo.", "ele");
+escrever("Pronto, chefe. Toque no núcleo e fale comigo.", "ele");
 </script>
 </body>
 </html>

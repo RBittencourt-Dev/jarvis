@@ -551,7 +551,8 @@ function remover(ids) {
 }
 
 // ------------------------------------------------------------ tempo real: o servidor empurra tudo
-const fonte = new EventSource("/api/extensao/eventos" + (EMBUTIDO ? "?canal=palco" : ""));
+// ?celular: o palco da tela do celular, que recebe uma cópia de tudo que as telas do PC mostram
+const fonte = new EventSource("/api/extensao/eventos" + (EMBUTIDO ? "?canal=" + (new URLSearchParams(location.search).has("celular") ? "celular" : "palco") : ""));
 fonte.onmessage = (m) => {
   const e = JSON.parse(m.data);
   if (e.cartao) cartao(e.cartao);
