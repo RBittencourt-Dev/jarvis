@@ -348,9 +348,92 @@ def _git(*args, timeout=60):
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
+# ------------------------------------------------------------------ atualização SEM Git (PC instalado pelo zip)
+# O PC do colégio foi instalado pelo Jarvis-Instalador.zip: sem .git, o "git pull" não existe. Aí ele baixa o pacote
+# do GitHub (repositório RBittencourt-Dev/jarvis, ramo main) e copia por cima. O que é DESTE PC não está no pacote
+# (config.json, cofre, dados/, .venv, memória…), então nada disso é tocado. A versão instalada fica em versao.txt.
+REPO = "RBittencourt-Dev/jarvis"
+VERSAO = RAIZ / "versao.txt"
+
+
+def _cabecalho_github():
+    import cofre
+    token = cofre.pegar("github_jarvis") or cofre.pegar("github")  # repositório privado: token só de leitura
+    return {"Accept": "application/vnd.github+json", **({"Authorization": f"Bearer {token}"} if isinstance(token, str) and token else {})}
+
+
+def _sem_git():
+    return not (shutil.which("git") and (RAIZ / ".git").exists())
+
+
+def _verificar_pelo_zip():
+    atual = VERSAO.read_text(encoding="utf-8").strip() if VERSAO.exists() else ""
+    try:
+        r = httpx.get(f"https://api.github.com/repos/{REPO}/commits/main", headers=_cabecalho_github(), timeout=20)
+        if r.status_code == 404:
+            return {"ok": False, "texto": "Não consigo ver o repositório do Jarvis daqui (ele é privado). Precisa de um token "
+                                          "do GitHub só de leitura no cofre deste PC, com o nome github_jarvis."}
+        r.raise_for_status()
+        novo = r.json()["sha"]
+    except Exception as e:
+        return {"ok": False, "texto": f"Não consegui falar com o GitHub: {str(e)[:160]}"}
+    if novo == atual:
+        return {"ok": True, "novas": 0, "novidades": [], "texto": "O Jarvis já está na versão mais nova."}
+    novidades = []
+    if atual:
+        try:
+            c = httpx.get(f"https://api.github.com/repos/{REPO}/compare/{atual}...{novo}", headers=_cabecalho_github(), timeout=20).json()
+            novidades = [x["commit"]["message"].splitlines()[0] for x in reversed(c.get("commits") or [])]
+        except Exception:
+            pass
+    n = len(novidades) or 1
+    return {"ok": True, "novas": n, "novidades": novidades[:15] or ["versão nova do Jarvis"], "sha": novo,
+            "texto": f"{n} atualização(ões) disponível(is)."}
+
+
+def _atualizar_pelo_zip():
+    v = _verificar_pelo_zip()
+    if not v["ok"] or not v.get("novas"):
+        return {"ok": v["ok"], "texto": v["texto"]}
+    DOWNLOADS.mkdir(parents=True, exist_ok=True)
+    pacote = DOWNLOADS / "jarvis-atualizacao.zip"
+    try:
+        with httpx.stream("GET", f"https://api.github.com/repos/{REPO}/zipball/{v['sha']}", headers=_cabecalho_github(),
+                          follow_redirects=True, timeout=180) as r:
+            r.raise_for_status()
+            with open(pacote, "wb") as f:
+                for parte in r.iter_bytes():
+                    f.write(parte)
+    except Exception as e:
+        return {"ok": False, "texto": f"Não consegui baixar a atualização: {str(e)[:160]}"}
+    mudou = []
+    with zipfile.ZipFile(pacote) as z:
+        for info in z.infolist():
+            nome = info.filename.split("/", 1)[1] if "/" in info.filename else ""  # tira a pasta "RBittencourt-Dev-jarvis-abc123/"
+            if not nome or info.is_dir():
+                continue
+            destino = RAIZ / nome
+            dados = z.read(info)
+            if destino.exists() and destino.read_bytes() == dados:
+                continue
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            destino.write_bytes(dados)
+            mudou.append(nome)
+    pacote.unlink(missing_ok=True)
+    VERSAO.write_text(v["sha"], encoding="utf-8")
+    if "requirements.txt" in mudou:  # bibliotecas novas: instala antes de reiniciar
+        t = _tarefa("bibliotecas")
+        try:
+            _bibliotecas(t)
+            t.update(estado="ok", pct=100)
+        except Exception as e:
+            return {"ok": False, "texto": f"Atualizei o código, mas as bibliotecas falharam: {e}"}
+    return {"ok": True, "texto": "Atualizado.", "arquivos": mudou}
+
+
 def verificar_atualizacao():
-    if not shutil.which("git") or not (RAIZ / ".git").exists():
-        return {"ok": False, "texto": "Sem Git nesta pasta: instale o Git e baixe o Jarvis com git clone pra receber atualizações."}
+    if _sem_git():
+        return _verificar_pelo_zip()
     codigo, saida = _git("fetch", "--quiet")
     if codigo != 0:
         return {"ok": False, "texto": f"Não consegui falar com o GitHub: {saida[:160]}"}
@@ -362,6 +445,8 @@ def verificar_atualizacao():
 
 
 def atualizar():
+    if _sem_git():
+        return _atualizar_pelo_zip()
     antes = _git("rev-parse", "HEAD")[1]
     codigo, saida = _git("pull", "--ff-only", timeout=180)
     if codigo != 0:

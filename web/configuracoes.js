@@ -3,7 +3,7 @@
 (() => {
   const ABAS = [
     ["geral", "Geral"], ["modelos", "Modelos"], ["voz", "Voz"], ["proatividade", "Proatividade"], ["memoria", "Memória"],
-    ["privacidade", "Privacidade"], ["automacoes", "Automações"], ["falas", "Falas programadas"], ["conectores", "Conectores"], ["instalacao", "Instalação"],
+    ["privacidade", "Privacidade"], ["automacoes", "Automações"], ["falas", "Falas programadas"], ["conectores", "Conectores"], ["planner", "7planner"], ["abertura", "Abertura"], ["instalacao", "Instalação"],
   ];
   const painel = $("configuracoes"), corpo = $("cfg-corpo"), abas = $("cfg-abas"), botao = $("abrir-configuracoes");
   let dados = null, abaAtual = "geral";
@@ -176,6 +176,66 @@
     },
 
     // falas programadas: num horário ele FALA sozinho (mesmo com a tela fechada, pelo segundo plano)
+    abertura() {
+      // o resumo que ele fala na 1ª abertura do dia ("Todos os sistemas online…") e quando pedem "os dados de hoje"
+      const DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+      const a = { porthon: true, painel: true, planner: true, avisos: [], ...(dados.abertura || {}) };
+      const salvar = () => salvarConfig({ abertura: a });
+      const liga = (k, rotulo, dica) => campo(rotulo, chave(a[k], (v) => { a[k] = v; salvar(); }), dica);
+      const lista = h("ul", { className: "cfg-itens" });
+      const desenhar = () => {
+        lista.innerHTML = "";
+        if (!a.avisos.length) lista.append(h("li", {}, h("div", {}, h("small", {}, "Nenhum aviso. Crie aqui embaixo: ele fala junto com o resumo do dia."))));
+        a.avisos.forEach((x, i) => {
+          const apagar = h("button", { className: "secundario", textContent: "Apagar" });
+          apagar.onclick = () => { a.avisos.splice(i, 1); salvar(); desenhar(); };
+          const dias = (x.dias && x.dias.length < 7) ? x.dias.map((d) => DIAS[d]).join(", ") : "todo dia";
+          lista.append(h("li", {}, h("div", {}, h("strong", {}, x.texto), h("small", {}, dias)), apagar));
+        });
+      };
+      desenhar();
+      const texto = h("input", { placeholder: "Ex.: Conferir os Chromebooks carregando antes das 7h" });
+      const marcas = DIAS.map((d, i) => { const c = h("input", { type: "checkbox", checked: i < 5, className: "cfg-chave" }); return [c, h("span", { className: "cfg-linha" }, c, d)]; });
+      const add = h("button", { textContent: "Adicionar aviso" });
+      add.onclick = () => {
+        if (!texto.value.trim()) return aviso("Escreva o aviso.", true);
+        a.avisos.push({ texto: texto.value.trim(), dias: marcas.map(([c], i) => (c.checked ? i : -1)).filter((i) => i >= 0), ativo: true });
+        texto.value = ""; salvar(); desenhar();
+      };
+      return [
+        secao("O que entra no resumo do dia", h("p", { className: "cfg-texto" },
+          "Na primeira abertura depois de ligar o PC ele fala “Todos os sistemas online” e passa estes dados. Também quando você pede “os dados de hoje”. Vale só para ESTE PC."),
+          liga("planner", "Agenda do 7planner de hoje", "Precisa estar conectado na aba 7planner."),
+          liga("porthon", "Porthon (andamento e números)"),
+          liga("painel", "Painel da 7 SevenCode (caixa, reuniões, leads)", "Só aparece se este PC tiver o login do painel.")),
+        secao("Avisos diários", lista, campo("Aviso", texto), h("div", {}, ...marcas.map(([, l]) => l)), add),
+      ];
+    },
+    planner() {
+      // o login do 7planner (o app de agendas do colégio): vira um token no cofre deste PC, a senha não fica salva
+      const estado = h("p", { className: "cfg-texto" }, "Carregando…");
+      const email = h("input", { type: "email", placeholder: "teu email do 7planner", autocomplete: "username" });
+      const senha = h("input", { type: "password", placeholder: "tua senha do 7planner", autocomplete: "current-password" });
+      const entrar = h("button", { textContent: "Conectar" });
+      const sair = h("button", { className: "secundario", textContent: "Desconectar" });
+      const form = h("div", {}, campo("Email", email), campo("Senha", senha, "Usada só agora pra conectar; não fica guardada."), entrar);
+      const ver = async () => {
+        const q = await api("/api/7planner");
+        estado.textContent = q.conectado ? `Conectado como ${q.nome || q.email}. Pode perguntar: “o que tem no Seven Planner amanhã?”, “agenda do auditório hoje”.`
+                                          : "Não conectado. Entre com a mesma conta que você usa no site do 7planner.";
+        form.hidden = q.conectado; sair.hidden = !q.conectado;
+      };
+      entrar.onclick = async () => {
+        entrar.disabled = true;
+        try { await api("/api/7planner", "POST", { email: email.value, senha: senha.value }); senha.value = ""; aviso("7planner conectado."); ver(); }
+        catch (e) { aviso("Não conectou: " + e.message, true); }
+        entrar.disabled = false;
+      };
+      sair.onclick = async () => { await api("/api/7planner", "DELETE"); aviso("Desconectado."); ver(); };
+      ver().catch((e) => (estado.textContent = "Erro: " + e.message));
+      return [secao("7planner (Seven Planner)", estado, form, sair,
+                    h("p", { className: "cfg-texto" }, "O Jarvis só LÊ as agendas (Marketing, Chromebooks, Laboratório, Maker, Artes e Auditório), com o que a tua conta enxerga. Não marca nem cancela nada."))];
+    },
     falas() {
       const DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
       const lista = h("ul", { className: "cfg-itens" }, "Carregando…");

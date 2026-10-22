@@ -885,14 +885,17 @@ setInterval(() => ($("relogio").textContent = new Date().toLocaleTimeString("pt-
 (async () => {
   // PC novo: o assistente de instalação vem antes de tudo (só aparece se faltar algo essencial)
   if (window.assistenteDeInstalacao) await window.assistenteDeInstalacao();
-  const primeiraDoDia = await verificarIdentidade();
+  await verificarIdentidade();
   ocupado = true;
   // enquanto os dados da abertura carregam, "Jarvis" já interrompe: cancela a abertura e vai direto pro pedido
   const meu = { voz: { cancelar() {} }, controlador: new AbortController() };
   emAndamento = meu;
   ouvir();
   let blocos = [{ fala: "Todos os sistemas online, chefe. O que vamos fazer hoje?" }];
-  try { ({ blocos, sessao } = await (await fetch("/api/abertura" + (primeiraDoDia ? "" : "?curta=true"), { signal: meu.controlador.signal })).json()); } catch {}
+  // quem decide se é a 1ª abertura desde que o PC ligou é o servidor (resumo-falado.json). Antes a tela pedia a versão
+  // curta sempre que o rosto já tinha sido conferido — e PC sem rosto (ou rosto conferido em outra janela) nunca ouvia
+  // o "Todos os sistemas online" com os dados do dia.
+  try { ({ blocos, sessao } = await (await fetch("/api/abertura", { signal: meu.controlador.signal })).json()); } catch {}
   if (emAndamento !== meu) return;
   // cada cartão aparece na hora em que o Jarvis começa a falar dele
   await falarBlocos(blocos);

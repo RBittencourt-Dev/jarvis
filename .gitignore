@@ -57,3 +57,4 @@ login-*.json
 !login-*.exemplo.json
 celular.json
 celular-log.txt
+versao.txt

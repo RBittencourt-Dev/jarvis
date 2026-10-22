@@ -28,7 +28,7 @@ FALAR = {
     "WhatsApp": "Uótsáp", "Spotify": "Spótifai", "Notion": "Nôuxon", "Vercel": "Vérsel", "Supabase": "Supabêis",
     "GitHub": "Guít Râb", "Git": "Guít", "Visual Studio Code": "Víjual Stúdio Côud", "VS Code": "vê ésse Côud",
     "Opera GX": "Ópera gê xis", "Edge": "Édj", "Firefox": "Fáierfóks", "Instagram": "Ínstagram", "Facebook": "Feicibúk",
-    "LinkedIn": "Linkedín", "iPhone": "Aifôun", "A16 Bionic": "A dezesseis Baiônic", "Bionic": "Baiônic", "Dynamic Island": "Dainâmic Áilend", "OLED": "ó léd", "iOS": "ai ó és", "Apple": "Épou", "Street View": "Strít Viú", "Google Maps": "Gúgou Méps",
+    "LinkedIn": "Linkedín", "iPhone": "Aifôun", "7planner": "Séven Pláner", "7Planner": "Séven Pláner", "7 planner": "Séven Pláner", "A16 Bionic": "A dezesseis Baiônic", "Bionic": "Baiônic", "Dynamic Island": "Dainâmic Áilend", "OLED": "ó léd", "iOS": "ai ó és", "Apple": "Épou", "Street View": "Strít Viú", "Google Maps": "Gúgou Méps",
     "Maps": "Méps", "Claude": "Clôd", "Groq": "Grók", "Ollama": "Olama", "Gemini": "Djêmini", "OpenAI": "Ôupen ei ai",
     "ChatGPT": "Tchat gê pê tê", "Steam": "Stím", "Discord": "Díscord", "Telegram": "Telegrâm", "Canva": "Kânva",
     "Excel": "Écsel", "Word": "Uórd", "PowerPoint": "Páuer Póint", "PowerShell": "Páuer Xél", "Python": "Páiton",

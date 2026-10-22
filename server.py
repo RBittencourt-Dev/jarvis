@@ -35,6 +35,7 @@ import sistemas
 import automacoes
 import cerebro
 import celular
+import planner7
 import claude_ponte
 import ferramentas_extra
 import extensao
@@ -934,7 +935,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (celular, falas_programadas, instagram, lembretes, pomodoro, anotacoes, noticias, sistemas)
+RECURSOS = (planner7, celular, falas_programadas, instagram, lembretes, pomodoro, anotacoes, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
@@ -2962,6 +2963,33 @@ async def ligar_relogio_das_automacoes():
     tarefas_de_fundo.add(asyncio.create_task(relogio_das_automacoes()))
 
 
+class Login7(BaseModel):
+    email: str
+    senha: str
+
+
+@app.get("/api/7planner")
+def api_7planner():
+    return planner7.quem()
+
+
+@app.post("/api/7planner")
+async def api_7planner_entrar(l: Login7):
+    """Ele digita o login do 7planner aqui; vira um token no cofre e a senha é descartada."""
+    try:
+        return await asyncio.to_thread(planner7.entrar, l.email, l.senha)
+    except PermissionError as e:
+        raise HTTPException(401, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"Não consegui falar com o 7planner: {str(e)[:120]}")
+
+
+@app.delete("/api/7planner")
+def api_7planner_sair():
+    planner7.sair()
+    return {"ok": True}
+
+
 @app.get("/api/falas-programadas")
 def listar_falas_programadas():
     return {"falas": falas_programadas.todas()}
@@ -3263,15 +3291,46 @@ async def abertura(curta: bool = False):
     return {"sessao": sid, "blocos": await blocos_do_dia()}
 
 
+def config_da_abertura():
+    """O que entra no resumo do dia DESTE PC (Configurações → Abertura). No colégio: 7planner + avisos; em casa: tudo."""
+    a = CONFIG.get("abertura") or {}
+    return {"porthon": a.get("porthon", True), "painel": a.get("painel", True), "planner": a.get("planner", True),
+            "avisos": [x for x in a.get("avisos") or [] if isinstance(x, dict) and str(x.get("texto", "")).strip()]}
+
+
+def bloco_7planner():
+    if not planner7.conectado():
+        return None
+    try:
+        r = planner7.executar(planner7.entender("agenda do 7planner hoje"))
+    except Exception as e:
+        return {"fala": "", "cartao": {"titulo": "7planner", "destaque": "Não consegui ler", "aguardando": True, "linhas": [str(e)[:140]]}}
+    return {"fala": r[0].replace(", chefe.", "."), "cartao": r[1][0] if len(r) > 1 else None}
+
+
+def bloco_dos_avisos(avisos):
+    hoje = datetime.now().weekday()
+    do_dia = [x["texto"].strip().rstrip(".") for x in avisos if hoje in (x.get("dias") or range(7)) and x.get("ativo", True)]
+    if not do_dia:
+        return None
+    return {"fala": ("Aviso do dia: " if len(do_dia) == 1 else "Avisos do dia: ") + ". ".join(do_dia) + ".",
+            "cartao": {"titulo": "Avisos do dia", "destaque": f"{len(do_dia)} aviso{'s' if len(do_dia) > 1 else ''}", "linhas": do_dia}}
+
+
 async def blocos_do_dia(fecho="O que vamos fazer hoje?"):
     agora = datetime.now()
     saudacao = "Bom dia" if agora.hour < 12 else "Boa tarde" if agora.hour < 18 else "Boa noite"
+    cfg = config_da_abertura()
     blocos = [
         {"fala": f"{saudacao}. Todos os sistemas online.", "cartao": None},
         {"fala": f"Hoje é {DIAS[agora.weekday()]}, e são {agora:%H:%M}.", "cartao": {
             "titulo": "Agora", "destaque": f"{agora:%H:%M}", "linhas": [f"{DIAS[agora.weekday()]}, {agora:%d/%m/%Y}"]}},
-        *[b for b in (bloco_porthon(), await asyncio.to_thread(bloco_porthon_numeros),
-                      *await asyncio.to_thread(blocos_do_painel)) if b],
+        *[b for b in (bloco_dos_avisos(cfg["avisos"]),
+                      await asyncio.to_thread(bloco_7planner) if cfg["planner"] else None,
+                      bloco_porthon() if cfg["porthon"] else None,
+                      await asyncio.to_thread(bloco_porthon_numeros) if cfg["porthon"] else None,
+                      # painel sem login neste PC (o do colégio): nem aparece, em vez do cartão "falta o login"
+                      *(await asyncio.to_thread(blocos_do_painel) if cfg["painel"] and painel.configurado() else [])) if b],
         *([{"fala": fecho, "cartao": None}] if fecho else []),
     ]
     return blocos
@@ -4058,7 +4117,7 @@ def api_estado(e: Estado):
 
 CAMPOS_DE_CONFIG = {"perfil", "usar_rosto", "casa", "nome_do_usuario", "como_chamar", "voz", "voz_velocidade", "voz_tom", "volume", "modelo", "contexto",
                     "keep_alive", "limite_ram_gb", "confirmar_acoes_perigosas", "proatividade", "animacoes_leves", "tema",
-                    "idioma", "pastas_indexadas", "ler_topicos", "tela_dos_sites", "palavra_de_ativacao"}
+                    "idioma", "pastas_indexadas", "ler_topicos", "tela_dos_sites", "palavra_de_ativacao", "abertura"}
 
 
 @app.get("/api/config")
