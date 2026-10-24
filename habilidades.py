@@ -77,6 +77,9 @@ GRUPOS = [
         ("Chamar um expert: programação, segurança, copy, dados, finanças, design gráfico, jurídico, contábil", "chama o especialista em segurança"),
         ("Responder com a cabeça daquela área; tarefa pesada ele manda pro Claude", "como especialista em programação, me explica recursão"),
         ("Programação e segurança: resposta rápida na hora + análise do Claude lendo o projeto", "modo segurança, o login do Porthon tá protegido?"),
+        ("Suporte técnico de T.I (PC, rede, Wi-Fi, impressora, projetor, Chromebook): passo a passo do diagnóstico", "a impressora não imprime"),
+        ("Educação Adventista e Igreja Adventista: crenças, Escola Sabatina, Desbravadores, filosofia da escola", "modo adventista, o que é a Semana de Oração"),
+        ("Marketing de escola: matrícula, rematrícula, Instagram e posts com autorização de imagem", "chama o especialista em marketing, ideias pra matrícula"),
     ]),
     ("Agenda (7planner)", [
         ("Ler as suas agendas do 7planner", "o que tem na minha agenda hoje"),

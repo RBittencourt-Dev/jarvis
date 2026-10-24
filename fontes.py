@@ -43,6 +43,8 @@ def ler_fontes():
     agora = time.time()
     idade = lambda arquivo: (agora - arquivo.stat().st_mtime) / 86400
     fontes = [(a.stem, a.read_text(encoding="utf-8"), 0) for a in sorted((RAIZ / "conhecimento").glob("*.md"))]
+    # especialidades/: conhecimento que vai junto com o Jarvis pra todo PC (suporte de T.I, Educação Adventista, marketing)
+    fontes += [(a.stem, a.read_text(encoding="utf-8"), 0) for a in sorted((RAIZ / "especialidades").glob("*.md"))]
     for nome, arquivo in DOCUMENTOS:
         if arquivo.exists():
             fontes.append((nome, arquivo.read_text(encoding="utf-8", errors="replace"), idade(arquivo)))

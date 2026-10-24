@@ -13,6 +13,9 @@ import re
 import unicodedata
 
 import cerebro
+from pathlib import Path
+
+RAIZ = Path(__file__).parent
 
 DEMORA = True
 
@@ -45,10 +48,34 @@ EXPERTS = {
                "esmeralda #34d399 como destaque, visual limpo e moderno) e usa ela de forma PROFISSIONAL e VARIADA — não "
                "engessado num só modelo, mas sempre coerente com a marca. Dá direções concretas e acionáveis "
                "(o Rafael monta a arte no Canva; você dá o passo a passo e as escolhas). Português do Brasil.", None),
+    "suporte": ("suporte técnico de T.I", "Você é um técnico de suporte de T.I sênior de uma escola: PCs Windows, "
+                "notebooks, Chromebooks e Google Admin, redes (cabo, Wi-Fi, roteador, DHCP, DNS), impressoras, projetores, "
+                "Office e contas. Faz o diagnóstico em passos curtos e numerados, do mais simples pro mais complexo, com o "
+                "comando exato quando houver, e diz quando é caso de trocar peça ou chamar a assistência. Português do Brasil.",
+                None),
+    "adventista": ("Educação Adventista e Igreja", "Você conhece a fundo a Igreja Adventista do Sétimo Dia (história, "
+                   "organização, as 28 crenças fundamentais, Escola Sabatina, Desbravadores, projetos da DSA) e a Educação "
+                   "Adventista (filosofia de educação integral, rotina espiritual da escola, material da rede). Responde com "
+                   "respeito e fidelidade ao que a igreja ensina, sem inventar dados; se não tiver certeza de um número ou "
+                   "nome, diz isso. Português do Brasil.", None),
 }
+
+# Conhecimento que vai junto no pedido (especialidades/*.md, viaja com o Jarvis pra todo PC).
+BASE = {"suporte": "suporte-ti.md", "adventista": "educacao-adventista-e-igreja.md", "copy": "marketing-escolar.md"}
+
+# Problema de T.I dito do jeito comum ("a impressora não imprime") já chama o suporte, sem dizer "especialista".
+PROBLEMA_TI = re.compile(
+    r"\b(?:impressora|imprim\w*|scanner|wi-?fi|internet|rede|roteador|cabo de rede|projetor|chromebooks?|tela azul|"
+    r"windows|notebook|computador|pc|monitor|teclado|mouse|driver|spooler|outlook|office)\b.{0,40}\b(?:n[aã]o|parou|"
+    r"travou|travando|trava|lent[oa]|sem|erro|problema|offline|caindo|cai|n[aã]o liga|desliga|atolad\w*|falhad\w*|"
+    r"riscad\w*|consert\w*|resolv\w*|arrum\w*)\b"
+    r"|\b(?:n[aã]o|parou de|sem)\b.{0,25}\b(?:imprime|imprimir|conecta|liga|pega a internet|tem internet|funciona a rede)\b",
+    re.I)
 
 # como ele chama cada um (palavras → chave)
 AREA = [
+    (r"suporte|t\.?\s?i\b|impressora|rede|wi-?fi|internet|roteador|projetor|chromebook|computador|notebook|tela azul", "suporte"),
+    (r"adventista|igreja|iasd|educa[cç][aã]o adventista|desbravador\w*|escola sabatina|sabado|ellen white|biblia|crencas?", "adventista"),
     (r"program\w*|c[oó]digo|codar|dev|software|script|bug", "programacao"),
     (r"seguran[çc]\w*|hacker|pentest|vulnerab\w*|cibersegur\w*|invas\w*|appsec", "seguranca"),
     (r"copy\w*|redator|marketing|an[uú]ncio|texto que vende|vendas?", "copy"),
@@ -63,7 +90,7 @@ CHAMAR = re.compile(r"\b(?:chama|chamar|aciona|acionar|quero|me\s+(?:d[aá]|pass
                     r"(?:o\s+|a\s+|um\s+|uma\s+)?(?:especialista|expert|agente|sub-?agente)\b", re.I)
 COMO = re.compile(r"\bcomo\s+(?:um\s+|uma\s+)?(?:especialista|expert|profissional)\s+(?:em|de|d[oa])\b", re.I)
 MODO = re.compile(r"\bmodo\s+(?:especialista\s+)?(?:de\s+|em\s+)?(?P<area>program\w*|seguran[çc]\w*|cibersegur\w*|"
-                  r"copy\w*|marketing|dados|an[aá]lise|finan[çc]\w*|design)\b", re.I)
+                  r"copy\w*|marketing|dados|an[aá]lise|finan[çc]\w*|design|suporte|adventista|igreja)\b", re.I)
 
 
 def _sa(t):
@@ -89,6 +116,9 @@ def entender(texto):
     t = texto or ""
     gatilho = CHAMAR.search(t) or COMO.search(t) or MODO.search(t)
     if not gatilho:
+        import sistemas  # "o pc tá lento" é ESTE PC: quem responde é o sistemas (mede CPU/RAM na hora)
+        if PROBLEMA_TI.search(t) and not sistemas.entender(t) and not re.match(r"^(?:jarvis[ ,]*)?(?:abre|abrir|liga|desliga|reinicia|fecha)\b", t, re.I):
+            return {"area": "suporte", "pergunta": t.strip()}
         return None
     area = _area(t)
     if not area:
@@ -103,6 +133,11 @@ def executar(p):
     if not pergunta:  # só chamou o especialista, sem a dúvida ainda
         dica = f" Pra {pede_claude}, dá pra eu mandar pro Claude." if pede_claude else ""
         return f"Especialista em {nome} na linha, chefe. Pode mandar sua dúvida.{dica}", []
+    if area in BASE:
+        try:
+            persona += "\n\nBase de conhecimento (use quando servir):\n" + (RAIZ / "especialidades" / BASE[area]).read_text(encoding="utf-8")[:9000]
+        except OSError:
+            pass
     try:
         resposta = asyncio.run(cerebro.completar(
             [{"role": "system", "content": persona}, {"role": "user", "content": pergunta}],
