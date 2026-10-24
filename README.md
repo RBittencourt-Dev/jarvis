@@ -54,6 +54,13 @@ em `/api/hud` e desenhados por `web/hud-paineis.js`. Os cartões transitórios c
 Tudo responsivo (PC, monitor em pé, janela pequena/celular). O "modo leve" (Configurações → Geral) desliga os efeitos
 pesados. Evoluindo em passos; ver progresso nos commits "HUD:".
 
+## Modo Reunião
+
+"Jarvis, **modo reunião**" (ou "começa a gravar a reunião") faz o Jarvis **ouvir e transcrever a reunião localmente**
+(faster-whisper — o áudio **não sai do PC**). "Como está a reunião?" dá o andamento; "**encerra a reunião**" fecha,
+monta a **ata** (resumo + decisões + tarefas, via cérebro) e salva em `conteudo/reunioes/`. Módulo `transcricao.py`
+(diferente de `reunioes.py`, que agenda reunião no painel). Na 1ª vez baixa o modelo de voz (~0,5 GB) e deixa em cache.
+
 ## O que fica fora do repositório
 
 `config.json` (cada PC tem o seu, nasce do `config.padrao.json`), `dados/` (cofre, diário, índice, caches),

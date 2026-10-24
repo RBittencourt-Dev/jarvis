@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 import primeiro_uso  # noqa: F401  (cria o config.json deste PC antes de qualquer módulo ler)
 import anotacoes
+import transcricao
 import aprendizado
 import lembretes
 import noticias
@@ -951,7 +952,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, documentos, imagens, professor, rede, seguranca, especialistas, timer, lembretes, pomodoro, anotacoes, noticias, sistemas)
+RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, documentos, imagens, professor, rede, seguranca, especialistas, timer, lembretes, pomodoro, anotacoes, transcricao, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
