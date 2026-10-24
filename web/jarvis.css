@@ -72,22 +72,20 @@ body.leve #radar-hud .sweep { animation: none; }
 .centro { inset: 27%; transition: box-shadow .3s;
   background: radial-gradient(circle, color-mix(in srgb, var(--nuc) 40%, transparent) 0%, color-mix(in srgb, var(--nuc) 13%, transparent) 45%, transparent 72%);
   box-shadow: 0 0 calc(40px + var(--nivel) * 80px) var(--nuc); }
-.sete { position: absolute; left: 50%; top: 50%; width: 36%; height: 36%; pointer-events: none;
-  transform: translate(-50%, -50%) scale(calc(1 + var(--nivel) * .28));
-  filter: drop-shadow(0 0 6px var(--nuc)) drop-shadow(0 0 calc(14px + var(--nivel) * 30px) var(--nuc)); }
+.jarvis-nome { position: absolute; left: 50%; top: 50%; pointer-events: none; white-space: nowrap; z-index: 1;
+  font: 700 calc(var(--nucleo) * 0.1)/1 var(--display); letter-spacing: .1em; color: var(--nuc);
+  transform: translate(-50%, -50%) scale(calc(1 + var(--nivel) * .18));
+  text-shadow: 0 0 8px var(--nuc), 0 0 calc(16px + var(--nivel) * 30px) color-mix(in srgb, var(--nuc) 65%, transparent); }
 #onda { transition: opacity .3s; opacity: .4; }
-/* estados (ref jarvis_hud.json): ouvindo=verde+pulso rápido+onda, pensando=âmbar+giro, falando=azul+onda, alerta=vermelho+pisca */
-body.ouvindo .nucleo { --nuc: var(--ok); }
+/* estados: só o MOVIMENTO muda — a cor do núcleo fica sempre ciano (pedido do Rafael); vermelho só em alerta/segurança */
 body.ouvindo .centro { animation: pulsa 1s ease-in-out infinite; }
 body.ouvindo #onda, body.falando #onda { opacity: 1; }
-body.pensando .nucleo { --nuc: var(--aviso); animation: none; }
+body.pensando .nucleo { animation: none; }
 body.pensando .a3 { animation-duration: .7s; }
 body.pensando .a1 { animation-duration: 1.5s; }
-body.falando .nucleo { --nuc: var(--secundario); }
-body.agindo .nucleo { --nuc: var(--secundario); }
 body.agindo .a1 { animation-duration: 1.5s; } body.agindo .a3 { animation-duration: .9s; }
 body.alerta .nucleo { --nuc: var(--perigo); animation: pisca 1s step-end infinite; }
-body.mudo .centro, body.mudo .sete { filter: grayscale(1) brightness(.5); box-shadow: none; }
+body.mudo .centro, body.mudo .jarvis-nome { filter: grayscale(1) brightness(.5); box-shadow: none; text-shadow: none; }
 @keyframes gira { to { transform: rotate(360deg); } }
 @keyframes pulsa { 50% { transform: scale(1.12); } }
 @keyframes respira { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.16); } }
