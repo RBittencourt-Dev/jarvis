@@ -61,6 +61,13 @@ pesados. Evoluindo em passos; ver progresso nos commits "HUD:".
 monta a **ata** (resumo + decisões + tarefas, via cérebro) e salva em `conteudo/reunioes/`. Módulo `transcricao.py`
 (diferente de `reunioes.py`, que agenda reunião no painel). Na 1ª vez baixa o modelo de voz (~0,5 GB) e deixa em cache.
 
+## Gestos (webcam)
+
+"**Liga os gestos**" ativa o controle por gestos com a webcam (MediaPipe, **local** — nada é gravado, é só a forma da
+mão): ✊ punho = parar, 👍 = sim, 👎 = não (nas autorizações), ✋ mão aberta = troca o modo do HUD. "**Desliga os
+gestos**" solta a câmera. Fica **desligado por padrão** (privacidade). Módulo `gestos.py`; o `jarvis.js` recebe o gesto
+pelo SSE e age. O modelo `modelos/hand_landmarker.task` baixa na 1ª vez (fica fora do repositório).
+
 ## O que fica fora do repositório
 
 `config.json` (cada PC tem o seu, nasce do `config.padrao.json`), `dados/` (cofre, diário, índice, caches),
