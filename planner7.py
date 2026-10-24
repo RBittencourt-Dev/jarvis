@@ -323,3 +323,23 @@ def vigiar(agora=None):
 
 def _chave_da(nome):
     return next((k for k, (_, n) in AGENDAS.items() if n == nome), "")
+
+
+def resgatar_login_trocado():
+    """PC do colégio (24/10): ele colou o email e a senha do 7planner no login-painel.json. Se o 7planner ainda não
+    tá conectado e esse login entra no 7planner, conecta por ele (guarda só o token, no cofre) e apaga o arquivo,
+    pra senha não ficar em texto puro. Só mexe se o login NÃO for do painel de verdade (o painel não existe neste PC)."""
+    import painel
+    arq = painel.ARQUIVO_LOGIN
+    if conectado() or not arq.exists() or painel.ENV_DO_PAINEL.exists():
+        return None
+    try:
+        l = json.loads(arq.read_text(encoding="utf-8"))
+        email, senha = l.get("email", ""), l.get("senha", "")
+        if not email or not senha or "exemplo" in email:
+            return None
+        entrar(email, senha)
+    except Exception as e:
+        return f"login-painel.json não entrou no 7planner: {str(e)[:80]}"
+    arq.unlink()
+    return f"7planner conectado com {email} (estava no login-painel.json)"

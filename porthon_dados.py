@@ -14,6 +14,8 @@ import httpx
 
 RAIZ = Path(__file__).parent
 ARQUIVO_LOGIN = RAIZ / "login-porthon.json"
+# 24/10: ele só preencheu o login-painel.json, e a mesma conta entra nos dois (testado). Sem o do Porthon, usa esse.
+LOGIN_DO_PAINEL = RAIZ / "login-painel.json"
 ENV = Path.home() / "Desktop" / "Porthon-System" / "lobby" / ".env.local"
 _sessao = {"token": None, "expira": 0}
 
@@ -36,8 +38,12 @@ class _Pergunta:
 PERGUNTA = _Pergunta()
 
 
+def _arquivo_login():
+    return ARQUIVO_LOGIN if ARQUIVO_LOGIN.exists() else LOGIN_DO_PAINEL
+
+
 def configurado():
-    return ARQUIVO_LOGIN.exists()
+    return _arquivo_login().exists() and ENV.exists()
 
 
 def _publico():
@@ -49,7 +55,7 @@ def _token():
     url, anon = _publico()
     if _sessao["token"] and relogio.time() < _sessao["expira"] - 60:
         return url, anon, _sessao["token"]
-    login = json.loads(ARQUIVO_LOGIN.read_text(encoding="utf-8"))
+    login = json.loads(_arquivo_login().read_text(encoding="utf-8"))
     r = httpx.post(f"{url}/auth/v1/token?grant_type=password", headers={"apikey": anon},
                    json={"email": login["email"], "password": login["senha"]}, timeout=8)
     if r.status_code != 200:

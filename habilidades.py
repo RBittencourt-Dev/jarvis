@@ -80,6 +80,7 @@ GRUPOS = [
     ]),
     ("Agenda (7planner)", [
         ("Ler as suas agendas do 7planner", "o que tem na minha agenda hoje"),
+        ("Falar a agenda do dia sozinho às 7h e avisar 10 min antes de cada agendamento do Marketing e da T.I", "(automático)"),
     ]),
     ("Corpo humano 3D (voz + janelinha)", [
         ("Mostrar o corpo e os sistemas: esqueleto, músculos, nervoso, crânio, coração, cérebro", "mostra o esqueleto"),

@@ -1065,6 +1065,13 @@ async def ligar_relogio_dos_avisos():
 
 
 @app.on_event("startup")
+async def arrumar_login_do_7planner():
+    msg = await asyncio.to_thread(planner7.resgatar_login_trocado)
+    if msg:
+        print(msg)
+
+
+@app.on_event("startup")
 async def ligar_freellmapi():
     await asyncio.to_thread(cerebro.ligar_freellmapi)
 

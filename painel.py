@@ -25,7 +25,7 @@ _sessao = {"token": None, "expira": 0}
 
 
 def configurado():
-    return ARQUIVO_LOGIN.exists()
+    return ARQUIVO_LOGIN.exists() and ENV_DO_PAINEL.exists()
 
 
 def _publico():
