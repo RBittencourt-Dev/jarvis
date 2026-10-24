@@ -296,6 +296,9 @@ def _corpo_painel(doc):
     partes = []
     for i, s in enumerate(doc["secoes"]):
         t = (s.get("titulo") or "").strip()
+        # O painel numera o h2 sozinho ("CLÁUSULA N — …", em maiúsculas via CSS). Então tiro número/‘cláusula’ do título
+        # pra não duplicar, e deixo só o texto.
+        t = re.sub(r"^\s*(?:cl[aá]usula\s+)?\d+\s*[\.\)\-–—:]*\s*", "", t, flags=re.I).strip()
         # a 1ª seção costuma ser a qualificação das partes: vai como parágrafo de abertura
         classe = ' class="partes"' if i == 0 and re.search(r"\bparte", _sa(t)) else ""
         if t and not classe:
@@ -322,11 +325,41 @@ def _cliente_do_assunto(assunto):
     return a[:120].title() if a else None
 
 
-def _escrever_previa(doc_id, doc):
-    """Grava a prévia formatada em web/docs-preview/<id>.html e devolve a URL servida (mesma origem do HUD)."""
+# Prévia IDÊNTICA ao painel: mesma folha.css, mesma faixa (logo + dados da empresa) e o MESMO corpo que foi pro banco.
+# Dados da empresa espelhados de lib/documentos.ts → EMPRESA (sem CNPJ enquanto é PF).
+_EMPRESA = {"marca": "7SevenCode", "razao": "Rafael Bittencourt", "cidade": "Porto Alegre", "uf": "RS",
+            "tel": "(51) 98012-8983", "email": "r.bittencourt.dev@gmail.com"}
+
+
+def _previa_painel_html(doc, corpo):
+    hoje = date.today().strftime("%d/%m/%Y")
+    e = _EMPRESA
+    # mesma estrutura do EditorTexto (cabecalho-editor) e mesmas CSS vars do PAGINA_WORD (Calibri 11, margem Normal)
+    return f"""<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
+<link rel="stylesheet" href="/web/doc-folha.css">
+<style>
+  html,body {{ margin:0; background:#2b2f36; }}
+  .palco-doc {{ padding:22px 12px; display:flex; justify-content:center; }}
+</style></head><body>
+<div class="palco-doc"><div class="editor-documento" style="--folha-fonte:Calibri, Carlito, 'Segoe UI', Arial, sans-serif;
+  --folha-tamanho:11pt; --folha-entrelinha:1.08; --folha-depois:8pt;
+  --folha-margem-topo:25mm; --folha-margem-esquerda:30mm; --folha-margem-direita:30mm;">
+  <div class="folha folha-editor numerado">
+    <div class="cabecalho-editor">
+      <div class="faixa"><img class="faixa-logo" src="/web/marca/logo-nav.webp" alt="{_esc(e['marca'])}" width="600" height="111">
+        <div class="faixa-lado"><span class="faixa-data">{hoje}</span></div></div>
+      <p class="emissor"><strong>{_esc(e['razao'])}</strong><br>{_esc(e['cidade'])}/{_esc(e['uf'])} · {_esc(e['tel'])} · {_esc(e['email'])}</p>
+      <h1>{_esc(doc['titulo'])}</h1>
+    </div>
+    {corpo}
+  </div>
+</div></body></html>"""
+
+
+def _escrever_previa(doc_id, doc, corpo):
+    """Grava a prévia (idêntica ao painel) em web/docs-preview/<id>.html e devolve a URL servida (mesma origem do HUD)."""
     PREVIA_DIR.mkdir(parents=True, exist_ok=True)
-    arq = PREVIA_DIR / f"{doc_id}.html"
-    arq.write_text(_html(doc), encoding="utf-8")
+    (PREVIA_DIR / f"{doc_id}.html").write_text(_previa_painel_html(doc, corpo), encoding="utf-8")
     return f"http://127.0.0.1:{_porta()}/web/docs-preview/{doc_id}.html"
 
 
@@ -350,13 +383,13 @@ def _abrir_no_painel(url):
         return False
 
 
-def _salvar_no_painel(doc, assunto):
+def _salvar_no_painel(doc, assunto, corpo):
     """Cria o documento na folha em branco do painel. Devolve o resultado ou None (cai pro .docx local)."""
     try:
         import painel
         if not painel.configurado():
             return None
-        return painel.criar_documento(doc["titulo"], _corpo_painel(doc), tipo="livre",
+        return painel.criar_documento(doc["titulo"], corpo, tipo="livre",
                                       cliente_nome=_cliente_do_assunto(assunto))
     except Exception:
         return None
@@ -405,9 +438,10 @@ def executar(p):
                 "é o gatilho pra abrir o CNPJ.")
 
     # 1) Caminho principal: salvar na FOLHA EM BRANCO do painel (formatação da 7code, assinável, fica na lista de docs).
-    res = _salvar_no_painel(doc, assunto)
+    corpo = _corpo_painel(doc)
+    res = _salvar_no_painel(doc, assunto, corpo)
     if res and res.get("id"):
-        previa = _escrever_previa(res["id"], doc)
+        previa = _escrever_previa(res["id"], doc, corpo)
         _mostrar_no_hud(doc["titulo"], previa)
         _abrir_no_painel(res["url"])
         numero = f"{res['ano']}/{str(res['numero']).zfill(3)}" if res.get("numero") else ""

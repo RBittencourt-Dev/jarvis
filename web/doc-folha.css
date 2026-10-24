@@ -1,0 +1,1201 @@
+/* ============================================================
+   A FOLHA DA 7SEVENCODE
+
+   O papel dos documentos da empresa: contrato, proposta, recibo, termo.
+   Isto e o equivalente ao "modelo do Word" da casa — margens, cabecalho,
+   rodape, numeracao de clausula e tipografia, num arquivo so.
+
+   DUAS REGRAS QUE EXPLICAM QUASE TUDO AQUI
+
+   1. O QUE ESTA NA TELA E O QUE SAI NA IMPRESSORA. A folha branca aparece
+      dentro do painel escuro em tamanho A4 real, com as mesmas margens. Nao
+      existe "visualizar impressao" separado, porque toda tela de preview que
+      diverge do resultado acaba mentindo num detalhe.
+
+   2. A IMPRESSAO E A EXPORTACAO. "Salvar como PDF" na caixa de impressao do
+      navegador gera o PDF final, com texto selecionavel, acentuacao correta e
+      quebra de pagina de verdade. Nao ha biblioteca de PDF nisto de proposito:
+      jsPDF e otimo para tabela e relatorio, e ruim para texto corrido com
+      negrito, lista e clausula numerada — que e exatamente o que um contrato e.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   A pagina
+   ------------------------------------------------------------ */
+
+.folha {
+  /* A4 exato. mm e nao px porque o destino e papel. */
+  width: 210mm;
+  /* NO CELULAR A FOLHA ENCOLHE, E NAO ROLA PARA O LADO.
+     210mm nao cabem numa tela de 360px, e as duas saidas ruins seriam rolagem
+     horizontal (escrever contrato arrastando a tela de lado) ou um `scale()`
+     que deixa a letra pequena demais para digitar. A terceira saida e esta: na
+     TELA a folha e fluida, na IMPRESSAO ela volta a ser A4 exato — ver o
+     @media print la embaixo, que redefine a largura.
+     O que se perde no celular e ver a quebra de pagina no lugar certo. O que
+     se ganha e conseguir escrever. */
+  max-width: 100%;
+  min-height: 297mm;
+  padding: var(--folha-margem-topo, 30mm) var(--folha-margem-direita, 20mm) var(--folha-margem-baixo, 20mm) var(--folha-margem-esquerda, 30mm);
+  box-sizing: border-box;
+
+  background: #ffffff;
+  color: #1a1a1a;
+
+  /* Serifada? Nao. Contrato brasileiro moderno e lido em sans, e a leitura em
+     tela (que e onde o cliente le hoje, no PDF do WhatsApp) fica melhor. */
+  /* Fonte, tamanho e entrelinha do documento (lib/pagina-documento.ts). Sem
+     configuração guardada valem os de sempre — documento antigo não muda. */
+  font-family: var(--folha-fonte, "Segoe UI", system-ui, -apple-system, Arial, sans-serif);
+  font-size: var(--folha-tamanho, 11pt);
+  line-height: var(--folha-entrelinha, 1.5);
+
+  margin: 0 auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  /* Ancora do ::before que desenha as quebras de pagina. */
+  position: relative;
+}
+
+/* ONDE A PAGINA ACABA.
+ *
+ * A folha na tela e UMA tira continua que cresce conforme se escreve — e sem
+ * marca nenhuma, o texto "fica enorme" sem que ninguem perceba que ja passou
+ * para a terceira folha. Estas linhas mostram o corte.
+ *
+ * A CONTA: a primeira pagina cabe 297mm contando as margens de cima e de
+ * baixo. Da segunda em diante, na tela, nao ha margem entre uma e outra —
+ * entao cada bloco seguinte vale 297 - 25 - 25 = 247mm de conteudo. Por isso o
+ * ::before comeca em 297mm e repete a cada 247mm, em vez de repetir 297.
+ *
+ * E so um guia: quem decide a quebra de verdade e o navegador na impressao,
+ * respeitando `break-inside` das assinaturas e das clausulas. Some no papel. */
+.folha::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 297mm;
+  bottom: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    #e2e6eb 0,
+    #e2e6eb 1px,
+    transparent 1px,
+    transparent 247mm
+  );
+}
+
+/* ------------------------------------------------------------
+   Cabecalho
+   ------------------------------------------------------------ */
+
+/* A FAIXA DA MARCA — o mesmo topo da proposta em PDF (lib/pdf.ts).
+
+   Ela SANGRA ate a borda do papel: as margens negativas anulam o padding da
+   folha nos tres lados de cima. Faixa com tira branca em volta pareceria uma
+   caixa colada na pagina, e nao papel timbrado.
+
+   Sobre fundo escuro a logo ORIGINAL da casa funciona — foi para isso que ela
+   foi desenhada. E por isso que o cabecalho escuro resolve de uma vez o
+   problema que o cabecalho branco criava. */
+.folha .faixa {
+  margin: calc(-1 * var(--folha-margem-topo, 30mm)) calc(-1 * var(--folha-margem-direita, 20mm)) 0 calc(-1 * var(--folha-margem-esquerda, 30mm));
+  padding: 0 var(--folha-margem-direita, 20mm) 0 var(--folha-margem-esquerda, 30mm);
+  /* 22mm, e nao 34. A faixa e assinatura da casa, nao capa: a 34mm ela comia
+     quase um decimo da area util da pagina, e num contrato de oito paginas
+     isso e meia pagina de texto perdida para decoracao. Aqui ela continua
+     evidente e devolve o espaco ao documento. */
+  height: 22mm;
+  background: #17191f;
+  /* A linha de 1px em #0479da que fecha a barra do site e a faixa do PDF. */
+  border-bottom: 1.2pt solid #0479da;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10mm;
+}
+
+.folha .faixa-logo {
+  display: block;
+  width: 38mm;
+  height: auto;
+}
+
+.folha .faixa-lado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1.5mm;
+  text-align: right;
+  color: #96a2b4;
+  font-size: 8.5pt;
+  line-height: 1.2;
+}
+
+.folha .faixa-tipo {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Os dados de quem emite. Cinza e pequeno de proposito: e informacao de
+   conferencia, nao de leitura — quem procura o CNPJ sabe onde olhar. */
+.folha .emissor {
+  margin: 4mm 0 8mm;
+  font-size: 8.5pt;
+  line-height: 1.5;
+  color: #5a6270;
+  text-align: left;
+}
+.folha .emissor::before { content: none; }
+
+/* ------------------------------------------------------------
+   Titulo
+   ------------------------------------------------------------ */
+
+.folha h1 {
+  font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  font-size: 15pt;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  margin: 0 0 10mm;
+  color: #1a1a1a;
+}
+
+/* ------------------------------------------------------------
+   Clausulas numeradas
+
+   O contador do CSS numera os <h2> sozinho. Isso importa: numero digitado a
+   mao sai de ordem no dia em que alguem apaga a clausula 5 e as seguintes
+   continuam 6, 7, 8 — e um contrato que pula do 4 para o 6 e um contrato que
+   o cliente devolve.
+   ------------------------------------------------------------ */
+
+/* ONDE O CONTADOR DE CLAUSULA NASCE.
+ *
+ * NAO em `.folha`, e aqui esta o motivo: no modo Paginas cada folha e uma
+ * `.folha`, entao um reset ali faria a numeracao RECOMECAR a cada pagina — a
+ * pagina 2 abriria com "CLAUSULA 1" de novo. Contrato assim o cliente devolve.
+ *
+ * Contadores de CSS correm na ordem do documento e atravessam elementos
+ * irmaos sem problema. Basta o reset acontecer UMA vez, no ancestral comum:
+ * a pilha de paginas. A folha continua do editor tem o seu, e o medidor
+ * tambem, porque nenhum dos dois vive dentro da pilha. */
+.pilha-paginas,
+.folha:not(.pagina),
+.medidor-folha {
+  /* `paragrafo` nasce aqui tambem, e nao no h2. Um counter-reset no h2 cria
+     um contador que so vale DENTRO daquela pagina: o paragrafo da clausula 1
+     que caia na pagina 2 abria um contador novo e saia "1.1." de novo. O h2
+     agora so ZERA (counter-set) o contador que ja existe na pilha inteira. */
+  counter-reset: clausula paragrafo;
+}
+
+.folha h2 {
+  counter-increment: clausula;
+  font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  font-size: 11pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  margin: 7mm 0 2.5mm;
+  color: #1a1a1a;
+
+  /* Titulo de clausula nunca fica sozinho no fim da pagina. */
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.folha h2::before {
+  content: "CLÁUSULA " counter(clausula) " — ";
+  color: #0479da;
+}
+
+.folha h3 {
+  font-size: 10.5pt;
+  font-weight: 600;
+  margin: 4mm 0 2mm;
+}
+
+/* ------------------------------------------------------------
+   Corpo
+   ------------------------------------------------------------ */
+
+/* NADA PASSA DA MARGEM.
+ *
+ * O padding da folha reserva as margens, mas um pedaco de texto SEM ESPACO —
+ * um e-mail longo, um endereco colado, a sequencia de sublinhados de um campo
+ * em branco — nao quebra sozinho: ele estica a linha e vaza para fora do
+ * papel (e, na impressao, some na borda).
+ *
+ * `overflow-wrap: anywhere` manda quebrar onde a linha acabou, mesmo no meio
+ * da palavra. So entra em acao quando NAO HA onde quebrar direito: texto
+ * normal continua quebrando entre palavras, com a hifenizacao de sempre.
+ *
+ * Vale para a folha inteira, e nao so para o paragrafo: titulo, clausula,
+ * lista e bloco de assinatura tem o mesmo papel e a mesma margem. */
+.folha,
+.folha p,
+.folha h1,
+.folha h2,
+.folha h3,
+.folha li,
+.folha td,
+.folha th,
+.folha span {
+  overflow-wrap: anywhere;
+}
+
+/* Imagem e tabela coladas de outro lugar tambem respeitam a largura util. */
+.folha img,
+.folha table {
+  max-width: 100%;
+}
+
+.folha p {
+  margin: 0 0 var(--folha-depois, 3mm);
+  text-align: justify;
+  /* Sem hifenizacao a justificacao abre buracos entre palavras. */
+  hyphens: auto;
+  /* Uma linha solta no topo ou no pe da pagina e o que mais denuncia
+     documento gerado por sistema. */
+  orphans: 3;
+  widows: 3;
+}
+
+/* Numeracao dos paragrafos DENTRO da clausula: 1.1, 1.2, 1.3.
+ * E o que permite escrever "conforme a clausula 7.2" numa cobranca.
+ *
+ * SEM O COMBINADOR DE IRMAO (`h2 ~ p`), e por causa da paginacao. Aquele
+ * seletor exige um <h2> antes, DENTRO DO MESMO PAI. No modo Paginas, um
+ * paragrafo da clausula 7 que caia na pagina seguinte fica sozinho no seu
+ * container, sem o h2 por perto — e perdia o "7.2." justamente ali, deixando
+ * a numeracao com buraco no meio do contrato.
+ *
+ * Agora TODO paragrafo conta, e o h2 e quem zera. Os contadores atravessam as
+ * paginas na ordem do documento, entao o 7.2 continua 7.2 mesmo comecando
+ * folha nova.
+ *
+ * A classe `numerado` decide se isso vale: um documento sem clausula nenhuma
+ * (uma carta, uma ata) numeraria tudo como "0.1." — ver Paginado/Folha, que
+ * so poem a classe quando existe <h2> no corpo. */
+.folha.numerado p { counter-increment: paragrafo; }
+.folha h2 { counter-set: paragrafo 0; }
+.folha.numerado p::before {
+  content: counter(clausula) "." counter(paragrafo) ". ";
+  color: #5a6270;
+  font-weight: 600;
+}
+
+/* Os paragrafos de servico ficam FORA da contagem, e nao so sem o prefixo: se
+   apenas o ::before sumisse, eles ainda incrementariam e a clausula pularia do
+   7.2 para o 7.4 sem que nada aparecesse entre eles. */
+.folha.numerado p.partes,
+.folha.numerado p.fecho,
+.folha.numerado p.local-data,
+.folha.numerado p.assinaturas,
+.folha.numerado p.testemunhas,
+.folha.numerado p.assinatura-simples,
+.folha.numerado p.destinatario,
+.folha.numerado p.validade,
+.folha.numerado p.recibo-valor,
+.folha.numerado p.nota-rodape,
+.folha.numerado p.emissor {
+  counter-increment: none;
+}
+
+.folha p.partes::before,
+.folha p.fecho::before,
+.folha p.local-data::before,
+.folha p.assinaturas::before,
+.folha p.testemunhas::before,
+.folha p.assinatura-simples::before,
+.folha p.destinatario::before,
+.folha p.validade::before,
+.folha p.recibo-valor::before,
+.folha p.nota-rodape::before {
+  content: none;
+}
+
+.folha ul,
+.folha ol { margin: 0 0 3mm 8mm; padding: 0 0 0 4mm; }
+/* O reset do Tailwind tira o marcador de toda lista; na folha ele volta. */
+.folha ul { list-style: disc; }
+.folha ol { list-style: decimal; }
+.folha li { margin-bottom: 1.5mm; text-align: justify; }
+
+.folha strong, .folha b { font-weight: 700; }
+
+/* ------------------------------------------------------------
+   Blocos de servico
+   ------------------------------------------------------------ */
+
+.folha p.partes {
+  text-align: justify;
+  margin-bottom: 8mm;
+}
+
+.folha p.destinatario {
+  text-align: left;
+  margin-bottom: 8mm;
+}
+
+.folha p.fecho { margin-top: 6mm; }
+
+.folha p.local-data {
+  text-align: right;
+  margin: 10mm 0 12mm;
+}
+
+.folha p.validade {
+  margin-top: 8mm;
+  font-size: 10pt;
+  color: #5a6270;
+}
+
+/* O valor do recibo, grande, no alto. E a primeira coisa que se confere. */
+.folha p.recibo-valor {
+  font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  font-size: 20pt;
+  text-align: right;
+  margin-bottom: 8mm;
+  color: #0479da;
+}
+
+.folha p.nota-rodape {
+  margin-top: 10mm;
+  font-size: 8.5pt;
+  color: #5a6270;
+  text-align: left;
+}
+
+/* A FOLHA DE ASSINATURAS ELETRONICAS.
+ *
+ * Sem estilo, as informacoes dos assinantes saiam num paragrafo justificado
+ * unico: o IP de um emendava no nome do outro e ninguem achava quem assinou o
+ * que.
+ *
+ * O desenho imita o que a caneta faria: CADA ASSINATURA OCUPA O SEU ESPACO — o
+ * nome em manuscrito sobre a linha, e abaixo dela a identificacao (nome, CPF,
+ * papel, data e IP). Duas por linha quando cabem, uma embaixo da outra quando a
+ * coluna e estreita. */
+.folha p.titulo-assinatura {
+  margin-top: 12mm;
+  margin-bottom: 0;
+  font-size: 9pt;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0479da;
+  text-align: left;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.folha p.assinatura-eletronica {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8mm 12mm;
+  margin-top: 8mm;
+  text-align: left;
+  hyphens: none;
+}
+
+.folha .uma-assinatura {
+  display: block;
+  flex: 1 1 60mm;
+  /* Item de flex nasce com min-width auto: sem isto um nome comprido empurra o
+     bloco para fora da margem da folha. */
+  min-width: 0;
+  font-size: 8.5pt;
+  line-height: 1.4;
+  color: #3d4550;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* O SELO DA ASSINATURA ELETRONICA, pousado sobre a linha onde a caneta
+   passaria (16/09/2026 — substituiu o nome em letra manuscrita, a pedido
+   dele). Azul de carimbo, e nao preto de tinta: mostra que a assinatura e
+   eletronica, e nao imita uma que nao foi feita a mao. Juridicamente o que vale
+   continua sendo o registro abaixo da linha (CPF, data, IP) mais o hash. */
+.folha .uma-assinatura .selo-assinatura {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 100%;
+  margin: 0 0 1.2mm 1.5mm;
+  padding: 1.2mm 3mm 1.3mm;
+  border: 0.35mm solid #0479da;
+  border-radius: 1.2mm;
+  background: rgba(4, 121, 218, 0.05);
+  color: #0a4f8f;
+  line-height: 1.25;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.folha .uma-assinatura .selo-topo {
+  font-size: 6.5pt;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.folha .uma-assinatura .selo-nome {
+  font-size: 10pt;
+  font-weight: 600;
+  color: #0a3f73;
+  overflow-wrap: anywhere;
+}
+.folha .uma-assinatura .selo-quando,
+.folha .uma-assinatura .selo-codigo {
+  font-size: 6.5pt;
+  color: #3b6fa0;
+}
+
+/* A rubrica manuscrita saiu do papel; a regra fica para documentos antigos
+   que ainda tragam a classe. */
+.folha .uma-assinatura .rubrica {
+  display: none;
+}
+
+.folha .uma-assinatura .linha-assinatura {
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin-bottom: 1.5mm;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.folha .uma-assinatura strong {
+  display: block;
+  font-size: 9pt;
+  color: #1a1a1a;
+  overflow-wrap: anywhere;
+}
+
+.folha .uma-assinatura .dado {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+/* O hash e a base legal fecham o bloco, menores e em cinza: precisam estar no
+   papel, nao em destaque. */
+.folha p.assinatura-eletronica + p.nota {
+  margin-top: 7mm;
+  padding-top: 2.5mm;
+  border-top: 1px solid #e2e6eb;
+  font-size: 8pt;
+  line-height: 1.45;
+  color: #5a6270;
+  text-align: left;
+  overflow-wrap: anywhere;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Duas assinaturas lado a lado. Bloco de assinatura NUNCA se parte entre
+   paginas — meia linha de assinatura numa folha e o nome na seguinte e o
+   defeito classico de documento gerado. */
+.folha p.assinaturas {
+  display: flex;
+  gap: 12mm;
+  margin-top: 14mm;
+  text-align: center;
+  font-size: 10pt;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+/* `min-width: 0` porque item de flex NAO ENCOLHE abaixo do proprio conteudo
+   por padrao: um nome longo empurrava a coluna e o bloco inteiro vazava para
+   fora da margem da folha. */
+.folha p.assinaturas > span { flex: 1; min-width: 0; }
+
+/* A LINHA ONDE SE ASSINA.
+ *
+ * Era uma fileira de 37 sublinhados digitados dentro do texto. Sublinhado nao
+ * tem onde quebrar: numa coluna de 74mm ele passava do papel, e na impressao o
+ * excesso sumia na borda. Agora e uma borda de verdade, que ocupa a largura
+ * disponivel e nunca vaza — e, de quebra, imprime com a espessura certa. */
+.folha .linha-assinatura {
+  display: block;
+  width: 100%;
+  max-width: 72mm;
+  margin: 0 auto 1.5mm;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+/* Fora do bloco de duas colunas (recibo, proposta) a linha comeca na margem
+   esquerda, como uma assinatura de carta. */
+.folha p.assinatura-simples .linha-assinatura { margin-left: 0; }
+
+.folha p.testemunhas {
+  margin-top: 10mm;
+  font-size: 10pt;
+  font-weight: 600;
+}
+
+.folha p.assinatura-simples {
+  margin-top: 16mm;
+  text-align: center;
+  font-size: 10pt;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Quebra de pagina manual, para quando o autor quiser separar um anexo. */
+.folha .quebra-pagina {
+  break-before: page;
+  page-break-before: always;
+}
+
+/* ------------------------------------------------------------
+   Rodape
+
+   Na TELA aparece uma vez, no fim da folha. Na IMPRESSAO ele nao se repete
+   por pagina — o navegador nao sabe fazer isso sem `position: fixed`, que por
+   sua vez quebra o fluxo do texto. A numeracao de pagina fica a cargo do
+   @page, logo abaixo.
+   ------------------------------------------------------------ */
+
+.folha .rodape {
+  margin-top: 14mm;
+  padding-top: 3mm;
+  border-top: 0.75pt solid #d6dae0;
+  font-size: 8pt;
+  color: #7a828f;
+  display: flex;
+  justify-content: space-between;
+  gap: 8mm;
+}
+
+/* ------------------------------------------------------------
+   Edicao
+
+   A area editavel e a MESMA folha, e nao um campo separado com preview ao
+   lado. Escrever direto no papel e o que faz a pessoa enxergar a quebra de
+   pagina enquanto digita, em vez de descobrir na impressao.
+   ------------------------------------------------------------ */
+
+.folha [contenteditable]:focus { outline: none; }
+
+.folha [contenteditable]:empty::before {
+  content: "Escreva aqui...";
+  color: #9aa2ae;
+}
+
+/* Regua de quebra de pagina: uma linha tracejada a cada 297mm de conteudo.
+   Serve para o autor saber onde a folha acaba ANTES de imprimir. Some na
+   impressao (ver @media print). */
+.regua-pagina {
+  position: relative;
+  border-top: 1px dashed #c7ccd4;
+  margin: 0;
+  height: 0;
+}
+.regua-pagina::after {
+  content: "quebra de página";
+  position: absolute;
+  right: 0;
+  top: -6pt;
+  background: #fff;
+  padding-left: 3mm;
+  font-size: 7pt;
+  color: #aeb5bf;
+}
+
+/* ------------------------------------------------------------
+   TELA PEQUENA
+
+   Margem de 3cm num celular deixa uma coluna de texto de dois dedos de
+   largura. Aqui a margem vira respiro de leitura, e nao margem de papel — o
+   papel de verdade so existe na impressao.
+   ------------------------------------------------------------ */
+
+/* SO NA FOLHA FLUIDA (a página de assinar). A pilha de páginas (Paginado) e o
+   editor NÃO entram aqui: eles são A4 de verdade, reduzidos por zoom no
+   Visualizador. Antes estas regras valiam para eles também, e no celular a
+   prévia saía com margem de 18px, assinaturas empilhadas e um vão branco no
+   pé de cada folha — a conta da paginação usa as margens em mm. (03/10/2026) */
+@media (max-width: 800px) {
+  .folha:not(.pagina):not(.folha-editor) {
+    min-height: auto;
+    padding: 20px 18px;
+    font-size: 10.5pt;
+    box-shadow: none;
+    border: 1px solid #d6dae0;
+  }
+
+  .folha:not(.pagina):not(.folha-editor) .cabecalho {
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .folha:not(.pagina):not(.folha-editor) .faixa {
+    margin: -20px -18px 0;
+    padding: 0 18px;
+    height: 18mm;
+  }
+  .folha:not(.pagina):not(.folha-editor) .faixa-logo { width: 30mm; }
+  .folha:not(.pagina):not(.folha-editor) .faixa-lado { font-size: 7.5pt; }
+  .folha:not(.pagina):not(.folha-editor) .emissor { margin: 4mm 0 7mm; font-size: 8pt; }
+
+  /* Sem guia de pagina no celular: a folha ali e fluida, entao a linha cairia
+     num lugar que nao corresponde a pagina nenhuma — pior que nao ter. */
+  .folha:not(.pagina):not(.folha-editor)::before { display: none; }
+  .folha:not(.pagina):not(.folha-editor) .cabecalho .contato { font-size: 7.5pt; }
+
+  .folha:not(.pagina):not(.folha-editor) h1 { font-size: 13pt; margin-bottom: 18px; }
+  .folha:not(.pagina):not(.folha-editor) h2 { margin: 18px 0 6px; }
+  .folha:not(.pagina):not(.folha-editor) p { margin-bottom: 8px; }
+
+  /* Duas assinaturas lado a lado viram duas linhas: em 360px cada uma teria
+     uns 8 caracteres de largura e o nome quebraria no meio. */
+  .folha:not(.pagina):not(.folha-editor) p.assinaturas {
+    flex-direction: column;
+    gap: 24px;
+    margin-top: 28px;
+  }
+
+  .folha:not(.pagina):not(.folha-editor) .rodape {
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 24px;
+  }
+}
+
+/* ------------------------------------------------------------
+   A PILHA DE PAGINAS  (modo "Páginas" — ver Paginado.tsx)
+
+   Folhas A4 separadas, uma embaixo da outra, com intervalo entre elas: a
+   mesma leitura de um visualizador de PDF. Cada uma tem 297mm EXATOS de
+   altura, e nao `min-height` — pagina que estica deixa de ser pagina.
+   ------------------------------------------------------------ */
+
+.pilha-paginas {
+  display: flex;
+  flex-direction: column;
+  /* 10mm de intervalo. E o vao que faz o olho ler "sao duas folhas" em vez de
+     "e uma folha com uma linha no meio". */
+  gap: 10mm;
+  align-items: center;
+}
+
+.folha.pagina {
+  height: 297mm;
+  min-height: 297mm;
+  /* SEMPRE 210mm, NUNCA "ate a largura da tela" (03/10/2026).
+     O `max-width: 100%` da .folha fluida valia aqui tambem. No celular, antes
+     de o Visualizador aplicar o zoom, a coluna tem a largura da tela — e o
+     medidor dividia o texto numa folha de 135px de area util: cada linha com
+     duas palavras, tudo "nao cabia", e o contrato de 5 folhas saia em 19,
+     cada uma com dois tercos em branco. Era corrida de tempo: as vezes o zoom
+     chegava antes e dava certo. Quem reduz a folha na tela e o Visualizador,
+     por `scale`; a largura dela e a do papel. */
+  width: 210mm;
+  max-width: none;
+  flex-shrink: 0;
+  /* `hidden` para o transbordo ser visivel COMO transbordo: se um bloco nao
+     couber, ele some no corte em vez de esticar a folha e mentir que coube. */
+  overflow: hidden;
+  position: relative;
+}
+
+/* O guia de quebra e do modo de escrita. Aqui a quebra e real. */
+.folha.pagina::before { display: none; }
+
+.folha.pagina .corpo-pagina {
+  /* Herda a contagem de clausulas da folha; ver o counter la em cima. */
+  display: block;
+}
+
+.folha .numero-pagina {
+  position: absolute;
+  right: 20mm;
+  bottom: 10mm;
+  font-size: 8pt;
+  color: #9aa2ae;
+}
+
+/* O MEDIDOR.
+ *
+ * ELE E UMA FOLHA DE VERDADE — no HTML leva as classes `folha pagina`, e nao
+ * uma caixa parecida. Isto e o que faz a conta bater.
+ *
+ * A versao anterior era um <div> solto com a fonte e a entrelinha copiadas a
+ * mao, e por isso media um documento que nao existe:
+ *
+ *   - os paragrafos ficavam com a margem PADRAO do navegador (cerca de 1em em
+ *     cima e embaixo) em vez dos 3mm da folha;
+ *   - as clausulas nao recebiam o "CLÁUSULA 7 — " do ::before, e um titulo que
+ *     ocupa duas linhas no papel media uma;
+ *   - os paragrafos nao recebiam o "7.2. " na frente, entao cabia mais texto
+ *     por linha do que cabe de verdade.
+ *
+ * Somados, esses erros faziam o texto passar do fim da folha. Herdando de
+ * `.folha`, cada bloco e medido exatamente como sera desenhado: mesma largura
+ * util, mesma margem, mesmos contadores.
+ *
+ * Fora da tela, e nao `display:none`: elemento escondido tem altura zero, e a
+ * medicao devolveria zero para tudo. */
+/* O SELETOR PRECISA DAS TRES CLASSES. Nao e capricho: o medidor leva
+ * `folha pagina medidor-folha` no HTML, e `.folha.pagina` (duas classes) vence
+ * `.medidor-folha` (uma). Escrito com uma classe so, TUDO aqui embaixo perdia:
+ * o `position: absolute` perdia para o `relative`, e o medidor — uma folha A4
+ * inteira, invisivel — ficava NO FLUXO empurrando o documento 297mm para
+ * baixo. Era o vao branco no topo da tela e do PDF. O `height: auto` perdia
+ * para o `height: 297mm`, e com o `overflow: hidden` da pagina o medidor
+ * passava a cortar em uma folha o texto que ele existe para medir: documento
+ * de tres paginas era medido como se tivesse uma. */
+.folha.pagina.medidor-folha {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+
+  /* Desfaz o que a pagina tem de pagina: aqui ela precisa crescer sem limite
+     para os blocos terem a altura real, em vez de serem cortados em 297mm. */
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------------
+   IMPRESSAO
+   ------------------------------------------------------------ */
+
+/* @page SEM MARGEM, e a margem no padding de CADA folha.
+ *
+ * A versao anterior deixava a margem aqui, e funcionava — mas so enquanto quem
+ * imprimia era o editor, um bloco continuo que o navegador quebrava sozinho.
+ * Agora quem imprime e a pilha de paginas (Paginado.tsx), onde cada folha e um
+ * elemento com a margem da ABNT no proprio padding e um `break-after: page`.
+ *
+ * A vantagem de fazer assim: o que esta na tela E o que sai no papel, folha por
+ * folha. Com a margem no @page, a quebra continuaria a criterio do navegador e
+ * a pagina 2 da tela poderia nao ser a pagina 2 do PDF. */
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  /* Some tudo do painel: menu, barra, botoes. So o papel vai para o papel. */
+  body * { visibility: hidden !important; }
+  .folha:not(.folha-editor, .nao-imprime .folha),
+  .folha:not(.folha-editor, .nao-imprime .folha) * { visibility: visible !important; }
+
+  /* E SOME TAMBEM O LUGAR QUE ELES OCUPAVAM.
+   *
+   * `visibility: hidden` apaga o desenho e GUARDA O ESPACO. So com a regra
+   * acima, o cabecalho do painel, a coluna do formulario e a barra de baixo
+   * continuavam empurrando a primeira folha para baixo: o PDF saia com um vao
+   * branco no topo, a folha 1 partida entre a pagina 1 e a 2, e a altura
+   * somada da interface ainda acrescentava pagina em branco no fim. Um
+   * contrato de 6 folhas imprimia em 8 paginas, nenhuma delas alinhada.
+   *
+   * `:has()` tira do fluxo tudo que nao e a folha, nao esta dentro dela e nao
+   * a contem — os ancestrais precisam continuar no lugar, senao a folha sai do
+   * papel junto com eles.
+   *
+   * AS DUAS REGRAS VIVEM JUNTAS DE PROPOSITO: em navegador antigo, sem
+   * `:has()`, esta e ignorada inteira e o `visibility` acima ainda garante que
+   * nada do painel apareca impresso. Volta o vao, nao volta o vazamento. */
+  body *:not(:has(.folha:not(.folha-editor, .nao-imprime .folha))):not(.folha:not(.folha-editor, .nao-imprime .folha)):not(.folha:not(.folha-editor, .nao-imprime .folha) *) {
+    display: none !important;
+  }
+
+  /* E OS ANCESTRAIS VIRAM MOLDURA VAZIA.
+   *
+   * Eles precisam continuar existindo (a folha esta dentro deles), mas o que
+   * eles trazem de tela — padding, gap, centralizacao, largura maxima — nao
+   * tem lugar no papel. O padding de 24px da coluna do documento empurrava a
+   * primeira folha 6,4mm para baixo; as seis folhas viravam 6,03 paginas e o
+   * PDF saia com uma pagina a mais no fim, com 3mm de texto. */
+  body :has(.folha:not(.folha-editor, .nao-imprime .folha)) {
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    border: 0 !important;
+  }
+
+  /* Desfaz TUDO que a tela pequena mudou: quem imprime do celular tem que
+     receber a mesma folha A4 de quem imprime do computador. Sem este bloco, o
+     PDF gerado no celular sairia com margem de 18px e fonte 10.5pt. */
+  .folha {
+    position: static;
+    margin: 0;
+    box-shadow: none;
+    border: none;
+    /* `auto`, e nao 210mm: a area util ja e o que sobra depois da margem do
+       @page. Fixar 210mm aqui somaria a largura cheia do papel dentro de uma
+       area menor, e a ultima palavra de cada linha sairia cortada. */
+    width: auto;
+    max-width: none;
+    min-height: auto;
+    padding: 0;
+    font-size: var(--folha-tamanho, 11pt);
+  }
+
+  /* O guia de quebra e coisa de tela. No papel a quebra e real. */
+  .folha::before { display: none; }
+
+  /* A pilha some como pilha: sem intervalo, sem centralizacao, e cada folha
+     forcando a quebra depois de si. A ultima NAO force, senao o PDF sai com
+     uma pagina em branco no fim — o defeito mais comum de impressao por CSS. */
+  .pilha-paginas { display: block; gap: 0; }
+
+  /* NO PAPEL A ALTURA NAO E DECLARADA — E CONSTRUIDA PELO CONTEUDO.
+   *
+   * `height: 297mm` aqui parece o obvio e e justamente o que estragava: uma
+   * caixa de altura fixa quase do tamanho da pagina, seguida de
+   * `break-after: page`, faz o Chrome inserir UMA PAGINA EM BRANCO depois de
+   * cada folha. Um contrato de 6 folhas imprimia em 8 paginas, uma em branco
+   * no meio a cada duas. Medido: com altura fixa, 3 folhas viram 5 paginas;
+   * com a altura vindo do conteudo, 3 folhas viram 3 paginas. Testei 296mm
+   * tambem — mesmo defeito, nao e arredondamento.
+   *
+   * A altura continua existindo, so vem de baixo: o corpo reserva a area util
+   * (247mm menos meio milimetro de folga) e a folha soma o padding em volta,
+   * chegando aos mesmos 297mm sem declarar nenhum. E `position: relative`
+   * tem que ficar, senao o "1 de 6" do pe — que e absoluto — se solta e vai
+   * ancorar na pagina inteira. */
+  .folha.pagina {
+    height: auto;
+    /* `min-height` e nao `height`: reserva a folha inteira e deixa crescer.
+     * Reservado NA FOLHA, nao no corpo — o corpo nao sabe do cabecalho que
+     * vem acima dele na pagina 1, e reservar la inflava a primeira folha para
+     * 326mm (medido), que transbordava para a pagina seguinte e desalinhava o
+     * resto do PDF. Meio milimetro a menos de 297 para nao encostar na borda
+     * da pagina. */
+    min-height: 296.5mm;
+    padding: var(--folha-margem-topo, 30mm) var(--folha-margem-direita, 20mm) var(--folha-margem-baixo, 20mm) var(--folha-margem-esquerda, 30mm);
+    position: relative;
+    break-after: page;
+    page-break-after: always;
+  }
+  .folha.pagina:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .medidor-folha { display: none !important; }
+
+  /* O fundo escuro do painel nao vai para o papel: se algo passar da folha,
+     sai branco, e nao uma pagina preta no meio do contrato. */
+  html, body { background: #fff !important; }
+
+  /* O VISUALIZADOR SOME NA IMPRESSAO, e principalmente o `scale` dele.
+   *
+   * Ele reduz a folha para caber na coluna da tela. Se essa reducao chegasse a
+   * impressora, o PDF sairia com o documento encolhido no canto de uma pagina
+   * A4 — folha dentro de folha. A moldura tambem perde a altura fixa e a
+   * rolagem: no papel nao ha o que rolar, e limitar a altura cortaria tudo
+   * depois da primeira pagina. */
+  .visualizador {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  .visualizador-conteudo {
+    transform: none !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+  }
+
+  /* A faixa sangra ate a borda tambem no papel. As margens negativas usam os
+     mesmos valores do @page acima — mudar um sem o outro deixa a faixa torta.
+     Exige "Gráficos de plano de fundo" ligado na caixa de impressão; sem isso
+     o navegador imprime a faixa em branco, e por isso o print-color-adjust
+     logo abaixo. */
+  .folha .faixa {
+    margin: calc(-1 * var(--folha-margem-topo, 30mm)) calc(-1 * var(--folha-margem-direita, 20mm)) 0 calc(-1 * var(--folha-margem-esquerda, 30mm));
+    padding: 0 var(--folha-margem-direita, 20mm) 0 var(--folha-margem-esquerda, 30mm);
+  }
+
+  .folha .faixa-logo { width: 38mm; }
+  .folha .faixa-lado { font-size: 8.5pt; }
+  .folha h1 { font-size: 15pt; }
+  .folha p.assinaturas { flex-direction: row; gap: 12mm; }
+  .folha .rodape { flex-direction: row; }
+
+  .regua-pagina { display: none !important; }
+
+  .folha [contenteditable]:empty::before { content: none; }
+
+  /* Fundo e cor exatos: sem isto o navegador "economiza tinta" e a linha azul
+     do cabecalho sai cinza. */
+  .folha {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* ------------------------------------------------------------
+   PARAGRAFO QUE CONTINUA NA FOLHA SEGUINTE
+   ------------------------------------------------------------
+
+   Quando um paragrafo e cortado na virada da pagina (ver `partirBloco` em
+   Paginado.tsx), o pedaco de baixo NAO e um paragrafo novo: e a mesma frase
+   continuando. Sem esta regra ele receberia numero proprio — o "7.3." nasceria
+   no meio de uma frase — e a contagem seguiria deslocada ate o fim.
+   ------------------------------------------------------------ */
+.folha.numerado p.continuacao {
+  counter-increment: none;
+}
+.folha.numerado p.continuacao::before {
+  content: none;
+}
+
+/* ------------------------------------------------------------
+   O PRIMEIRO BLOCO DE CADA FOLHA COMECA NA MARGEM
+   ------------------------------------------------------------
+
+   Sem isto ele desce os 3mm da propria margem de cima, e a medicao nao tem
+   como saber: `offsetTop` marca a BORDA do bloco, com a margem ficando acima
+   dela. O desenho ficava 3mm mais baixo do que a conta previa e a ultima linha
+   da folha caia fora — some, porque a pagina tem `overflow: hidden`. Medido:
+   4mm de transbordo na quarta folha de um contrato.
+
+   Vale para o medidor tambem, que leva as mesmas classes. E o que mantem a
+   conta e o papel dizendo a mesma coisa.
+   ------------------------------------------------------------ */
+.folha.pagina .corpo-pagina > :first-child {
+  margin-top: 0;
+}
+
+/* E O ULTIMO TERMINA NO TEXTO (03/10/2026). A margem de baixo do ultimo
+   paragrafo nao entra na conta do Paginado (que mede ate a borda do bloco),
+   mas no papel ela empurrava a folha uns 4px alem dos 297mm — e o PDF ganhava
+   uma pagina escura no meio, com o resto da folha. */
+.folha.pagina .corpo-pagina > :last-child {
+  margin-bottom: 0;
+}
+
+/* Paragrafo vazio (linha em branco do editor) nao ganha numero de clausula. */
+.folha.numerado p:empty { counter-increment: none; }
+.folha.numerado p:empty::before { content: none; }
+
+/* ==========================================================================
+   CAMPOS NA EDICAO DO MODELO (16/09/2026)
+   O lugar onde o dado do cliente entra, mostrado como um "chip" que se apaga
+   ou move inteiro. So existe na tela de editar modelo — documento gerado ja
+   vem com o valor no lugar, e nunca imprime isto.
+   ========================================================================== */
+.folha .campo-modelo {
+  display: inline-block;
+  padding: 0 0.35em;
+  margin: 0 0.05em;
+  border: 1px dashed rgba(4, 121, 218, 0.55);
+  border-radius: 4px;
+  background: rgba(4, 121, 218, 0.1);
+  color: #0a4f8f;
+  font-size: 0.9em;
+  line-height: 1.35;
+  text-indent: 0;
+  white-space: nowrap;
+  user-select: all;
+  cursor: default;
+}
+.folha .campo-modelo-bloco {
+  display: block;
+  padding: 0.45em 0.6em;
+  text-align: center;
+  white-space: normal;
+}
+.folha p.campo-bloco {
+  text-indent: 0;
+}
+/* O bloco do campo nao conta como paragrafo numerado na edicao: o que entra
+   no lugar dele (lista, paragrafo opcional) decide isso no documento gerado. */
+.folha.numerado p.campo-bloco { counter-increment: none; }
+.folha.numerado p.campo-bloco::before { content: none; }
+
+/* NUMERACAO FORA DOS BLOCOS DE SERVICO QUE FALTAVAM (16/09/2026).
+   O cabecalho do emissor saia "0.0." e o quadro de assinatura eletronica
+   saia "1.2.", "1.3.", "1.4." em documento com clausulas: a regra
+   `.folha.numerado p::before` e mais especifica que `.folha .emissor::before`,
+   e titulo-assinatura, assinatura-eletronica e nota nem estavam na lista. */
+.folha.numerado p.emissor,
+.folha.numerado p.titulo-assinatura,
+.folha.numerado p.assinatura-eletronica,
+.folha.numerado p.nota {
+  counter-increment: none;
+}
+.folha.numerado p.emissor::before,
+.folha.numerado p.titulo-assinatura::before,
+.folha.numerado p.assinatura-eletronica::before,
+.folha.numerado p.nota::before {
+  content: none;
+}
+
+/* ============================================================
+   EDITOR (TipTap) — 02/10/2026
+   Um documento só, desenhado em folhas pelo tiptap-pagination-plus. A folha
+   aqui é o próprio .ProseMirror: largura e margens laterais vêm do plugin
+   (estilo inline), o topo da folha 1 é o cabeçalho da 7SevenCode, e o resto
+   da tipografia é a mesma das folhas impressas (as regras .folha acima).
+   ============================================================ */
+.editor-documento {
+  overflow-x: auto;
+  padding: 8px 0 40px;
+}
+.folha.folha-editor {
+  max-width: none;
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin: 0 auto;
+  outline: none;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  border: none !important;
+  caret-color: #0479da;
+}
+.folha.folha-editor::before { display: none; }
+
+/* O topo da folha 1: a faixa encosta na borda do papel, como no impresso. */
+.folha.folha-editor .rm-first-page-header {
+  padding-top: 0 !important;
+  display: block !important;
+}
+.folha.folha-editor .rm-first-page-header .rm-page-header-left {
+  float: none;
+  display: block;
+  width: 100%;
+  margin: 0 !important;
+}
+.folha.folha-editor .cabecalho-editor .faixa {
+  margin: 0 calc(-1 * var(--folha-margem-direita, 20mm)) 0 calc(-1 * var(--folha-margem-esquerda, 30mm));
+}
+/* O alto das folhas 2 em diante é a margem de cima, em branco. */
+.folha.folha-editor .rm-page-header { min-height: 0; }
+
+/* "1 de 3" no pé de cada folha. */
+.folha.folha-editor .rm-page-footer {
+  font-size: 8.5pt;
+  color: #8a8f98;
+  line-height: 1;
+}
+.folha.folha-editor .numero-pagina-editor { font-variant-numeric: tabular-nums; }
+
+/* Bloco que não se digita dentro (quadro de assinaturas, campo do modelo):
+   selecionado, ganha o contorno azul — é assim que se apaga ou move. */
+.folha.folha-editor .ProseMirror-selectednode,
+.folha.folha-editor.ProseMirror .ProseMirror-selectednode {
+  outline: 2px solid #0479da;
+  outline-offset: 2px;
+}
+
+/* Tabela inserida pelo editor. */
+.folha.folha-editor table td,
+.folha.folha-editor table th {
+  border: 1px solid #9aa0a8;
+  padding: 2mm 2.5mm;
+  vertical-align: top;
+}
+.folha.folha-editor table th { background: #f1f3f5; font-weight: 600; }
+.folha.folha-editor .selectedCell { background: rgba(4, 121, 218, 0.12); }
+
+@media print {
+  /* Quem imprime é a pilha de folhas (Paginado), nunca o editor.
+     O EDITOR TAMBÉM TEM .folha (folha-editor), e por isso as regras de
+     impressão lá em cima miram `.folha:not(.folha-editor, .nao-imprime .folha)`: antes o
+     `body :has(.folha) { display: block !important }` vencia este
+     `display: none` e o PDF saía com o editor inteiro — os retângulos escuros
+     entre as folhas — e só depois as folhas certas. 4 páginas viravam 12.
+     E a prévia do Editor (`.nao-imprime`) também fica de fora: no celular a
+     caixa de impressão alarga a tela para o A4, o Editor acha que virou
+     computador e troca a prévia pelo editor no meio da impressão — o PDF saía
+     em branco. Quem imprime é sempre a pilha `.impressao-oculta`. (03/10/2026) */
+  .editor-documento { display: none !important; }
+}
+
+/* O editor guarda o texto de cada item de lista dentro de um <p>. Ele não
+   pode ganhar o "1.3." dos parágrafos numerados nem a margem de parágrafo:
+   item de lista é item de lista. */
+.folha li > p { margin: 0; }
+.folha.numerado li > p { counter-increment: none; }
+.folha.numerado li > p::before { content: none; }
+
+/* O cabeçalho da folha 1 no editor não pode ser cortado: a faixa sangra para
+   fora dele até a borda do papel. */
+.folha.folha-editor .rm-first-page-header,
+.folha.folha-editor .rm-first-page-header .rm-page-header-content { overflow: visible !important; max-height: none !important; }
+
+/* "de 3": o total de folhas, que o EditorTexto conta e põe nesta variável. */
+.folha.folha-editor .total-paginas::before { content: var(--total-paginas, ""); }
+
+/* A pilha de folhas que vai para o papel enquanto se edita (Editor.tsx,
+   baixarPdf): existe e é medida na tela, mas fora dela — `display:none`
+   zeraria as alturas e a divisão em folhas sairia errada. No papel, volta
+   para o lugar e é a única coisa impressa (o editor some, ver acima). */
+.impressao-oculta {
+  position: absolute;
+  left: -100000px;
+  top: 0;
+  width: 210mm;
+}
+@media print {
+  .impressao-oculta { position: static; left: auto; width: auto; }
+}
+
+/* ============================================================
+   ASSINATURA EM CIMA DA LINHA (02/10/2026) — lib/assinatura.ts,
+   assinaturasNasLinhas. O selo pousa logo acima da linha, quase
+   encostando nela, onde a caneta assinaria; embaixo do nome e do
+   papel, os dados (CPF, data, IP).
+   ============================================================ */
+.folha .selo-na-linha {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto -0.4mm;
+  padding: 1mm 3mm 1.1mm;
+  border: 0.35mm solid #0479da;
+  border-radius: 1.2mm;
+  background: rgba(4, 121, 218, 0.05);
+  color: #0a4f8f;
+  line-height: 1.2;
+  text-align: center;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+/* Assinatura única (recibo, autorização): a linha centralizada, embaixo do
+   selo e em cima do nome, que já eram centralizados. Antes ela começava na
+   margem esquerda e o nome ficava no meio, desencontrado. */
+.folha p.assinatura-simples .linha-assinatura { margin-left: auto; }
+.folha .selo-na-linha .selo-topo {
+  font-size: 6pt;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.folha .selo-na-linha .selo-nome {
+  font-size: 9.5pt;
+  font-weight: 600;
+  color: #0a3f73;
+  overflow-wrap: anywhere;
+}
+.folha .selo-na-linha .selo-quando { font-size: 6pt; color: #3b6fa0; }
+.folha .dado-assinatura {
+  display: inline-block;
+  margin-top: 0.8mm;
+  font-size: 7.5pt;
+  line-height: 1.3;
+  color: #5a6270;
+  overflow-wrap: anywhere;
+}
