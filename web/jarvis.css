@@ -1,14 +1,27 @@
+/* fontes do HUD (locais/offline) — referência jarvis_hud.json: Orbitron (display) + Share Tech Mono (mono) */
+@font-face { font-family: "Orbitron"; src: url("/web/vendor/fonts/orbitron.woff2") format("woff2"); font-weight: 400 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Share Tech Mono"; src: url("/web/vendor/fonts/share-tech-mono.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+
 :root {
   --fundo: #03080f;
-  --ciano: #39d0ff;
-  --ciano-fraco: #39d0ff33;
+  --ciano: #00e5ff;            /* primary (jarvis_hud.json) */
+  --ciano-fraco: #00e5ff33;
+  --secundario: #0077ff;       /* speaking */
+  --aviso: #ffb300;            /* warning */
+  --ok: #00e676;               /* success */
   --texto: #cfeeff;
   --apagado: #6c8aa0;
-  --perigo: #ff6b4a;
+  --perigo: #ff1744;           /* danger */
+  --display: "Orbitron", "Segoe UI", system-ui, sans-serif;
+  --mono: "Share Tech Mono", Consolas, monospace;
   --nucleo: min(400px, 44vmin);
   --nivel: 0; /* volume da voz do Jarvis, 0 a 1, atualizado pelo jarvis.js */
   color-scheme: dark;
 }
+/* scanlines finas por cima de tudo (não captura clique); desligam no modo leve */
+body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 40;
+  background: repeating-linear-gradient(0deg, #00e5ff0a 0 1px, transparent 1px 3px); opacity: .55; mix-blend-mode: screen; }
+body.leve::after { display: none; }
 * { box-sizing: border-box; }
 body {
   margin: 0; height: 100vh; overflow: hidden; color: var(--texto); font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
@@ -23,8 +36,9 @@ body {
 main { position: fixed; inset: 0; }
 header { position: absolute; top: 20px; left: 32px; right: 32px; display: flex; justify-content: space-between; align-items: center;
   letter-spacing: .3em; font-size: 12px; color: var(--apagado); z-index: 2; }
-.marca { color: var(--ciano); }
+.marca { color: var(--ciano); font-family: var(--display); font-weight: 700; text-shadow: 0 0 10px var(--ciano-fraco); }
 .logo { height: 26px; width: auto; opacity: .9; }
+#relogio { font-family: var(--mono); font-size: 14px; color: var(--ciano); letter-spacing: .12em; }
 
 .palco { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; z-index: 1; }
 #onda { position: absolute; left: 50%; top: calc(var(--nucleo) / 2); width: calc(var(--nucleo) * 1.8); height: calc(var(--nucleo) * 1.8);
@@ -46,7 +60,7 @@ body.mudo .centro, body.mudo .sete { filter: grayscale(1) brightness(.5); box-sh
 @keyframes gira { to { transform: rotate(360deg); } }
 @keyframes pulsa { 50% { transform: scale(1.12); } }
 
-#estado { margin: 22px 0 0; text-align: center; color: var(--apagado); letter-spacing: .3em; font-size: 12px; text-transform: uppercase; }
+#estado { margin: 22px 0 0; text-align: center; color: var(--apagado); letter-spacing: .3em; font-size: 12px; text-transform: uppercase; font-family: var(--display); }
 
 /* ------------------------------------------------------------ cartões em volta do núcleo */
 #ligacoes { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -65,8 +79,8 @@ body.mudo .centro, body.mudo .sete { filter: grayscale(1) brightness(.5); box-sh
 .cartao.v0 { right: 4vw; top: 12vh; }  .cartao.v1 { left: 4vw; top: 12vh; }
 .cartao.v2 { right: 3vw; top: 40vh; }  .cartao.v3 { left: 3vw; top: 40vh; }
 .cartao.v4 { right: 4vw; top: 66vh; }  .cartao.v5 { left: 4vw; top: 66vh; }
-.cartao h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: .25em; text-transform: uppercase; color: var(--apagado); font-weight: 600; }
-.cartao .destaque { font-size: 28px; font-weight: 300; color: var(--ciano); text-shadow: 0 0 12px var(--ciano-fraco); line-height: 1.2; }
+.cartao h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: .25em; text-transform: uppercase; color: var(--apagado); font-weight: 600; font-family: var(--display); }
+.cartao .destaque { font-size: 28px; font-weight: 500; color: var(--ciano); text-shadow: 0 0 12px var(--ciano-fraco); line-height: 1.2; font-family: var(--display); }
 .cartao ul { margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; }
 .cartao li { padding: 3px 0; border-top: 1px solid #39d0ff14; animation: entra .4s ease-out both;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -91,7 +105,7 @@ body.mudo .centro, body.mudo .sete { filter: grayscale(1) brightness(.5); box-sh
 .fala.eu { font-size: 14px; color: var(--apagado); }
 .fala.eu::before { content: "Você: "; }
 .fala.velha { opacity: .35; font-size: 14px; }
-.fala.saida { font: 12px/1.4 Consolas, monospace; color: var(--apagado); }
+.fala.saida { font: 12px/1.4 var(--mono); color: var(--apagado); }
 
 form { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); width: min(560px, 90vw); display: flex; gap: 8px; z-index: 1;
   animation: surge .3s ease-out both; }
@@ -108,7 +122,7 @@ button.secundario { background: transparent; color: var(--texto); border: 1px so
 
 #autorizacao { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; width: min(560px, 90vw);
   border: 1px solid var(--perigo); padding: 16px; background: #1a0906f2; box-shadow: 0 0 60px #ff6b4a44; }
-#autorizacao pre { white-space: pre-wrap; word-break: break-all; font: 13px Consolas, monospace; background: #0008; padding: 8px; max-height: 240px; overflow: auto; }
+#autorizacao pre { white-space: pre-wrap; word-break: break-all; font: 13px var(--mono); background: #0008; padding: 8px; max-height: 240px; overflow: auto; }
 .botoes { display: flex; gap: 8px; }
 #aut-sim { background: var(--perigo); color: #fff; }
 
@@ -119,7 +133,7 @@ button.secundario { background: transparent; color: var(--texto); border: 1px so
   box-shadow: 0 0 40px #0008; animation: surge .3s ease-out both; }
 #automacoes[hidden] { display: none; }
 .topo-auto { position: static; display: flex; justify-content: space-between; align-items: center; letter-spacing: normal; margin-bottom: 8px; }
-.topo-auto h2 { margin: 0; font-size: 13px; letter-spacing: .25em; text-transform: uppercase; color: var(--ciano); font-weight: 600; }
+.topo-auto h2 { margin: 0; font-size: 13px; letter-spacing: .25em; text-transform: uppercase; color: var(--ciano); font-weight: 600; font-family: var(--display); }
 .topo-auto button { padding: 4px 10px; }
 #lista-auto { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
 #lista-auto li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #39d0ff1f; background: #0006; }
@@ -219,7 +233,7 @@ body.dormindo main { animation: apaga 1s ease-in forwards; }
 #cfg-abas button[aria-selected="true"] { color: var(--ciano); border-color: var(--ciano-fraco); background: #39d0ff14; }
 #cfg-corpo { overflow-y: auto; padding-right: 6px; display: grid; gap: 14px; align-content: start; }
 .cfg-secao { border: 1px solid #39d0ff1f; background: #0005; padding: 12px 14px; display: grid; gap: 10px; }
-.cfg-secao h3 { margin: 0; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--apagado); font-weight: 600; }
+.cfg-secao h3 { margin: 0; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--apagado); font-weight: 600; font-family: var(--display); }
 .cfg-campo { display: grid; grid-template-columns: 220px 1fr; gap: 4px 12px; align-items: center; font-size: 13px; }
 .cfg-campo > span { color: var(--texto); }
 .cfg-campo small { grid-column: 2; color: var(--apagado); font-size: 12px; }
@@ -263,7 +277,7 @@ body.dormindo main { animation: apaga 1s ease-in forwards; }
 #linha-do-tempo { position: absolute; z-index: 4; left: 32px; bottom: 100px; width: min(360px, 40vw); padding: 12px 14px;
   background: linear-gradient(135deg, #0c2236e6, #06121de6); border: 1px solid var(--ciano-fraco); animation: surge .3s ease-out both; }
 #linha-do-tempo[hidden] { display: none; }
-#linha-do-tempo h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--ciano); }
+#linha-do-tempo h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--ciano); font-family: var(--display); }
 #ldt-passos { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; }
 #ldt-passos li { position: relative; padding-left: 22px; color: var(--apagado); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ldt-passos li::before { content: ""; position: absolute; left: 4px; top: 6px; width: 8px; height: 8px; border-radius: 50%;
@@ -281,7 +295,7 @@ body.dormindo main { animation: apaga 1s ease-in forwards; }
 
 /* tópico sendo lido em voz alta, código e saída de comando */
 .cartao li.lendo { color: var(--ciano); text-shadow: 0 0 10px var(--ciano-fraco); }
-.cartao pre { margin: 8px 0 0; max-height: 300px; overflow: auto; font: 12px/1.45 Consolas, monospace; background: #0009; border: 1px solid #39d0ff1f; }
+.cartao pre { margin: 8px 0 0; max-height: 300px; overflow: auto; font: 12px/1.45 var(--mono); background: #0009; border: 1px solid #39d0ff1f; }
 .cartao pre code { display: block; padding: 10px; background: transparent !important; }
 .cartao pre.saida { padding: 8px 10px; color: #b8f5d0; white-space: pre-wrap; }
 .cartao pre.saida.erro { color: var(--perigo); }

@@ -39,6 +39,15 @@ Configurações → Geral → **Exportar meus dados** (um .zip) → no outro PC,
 as habilidades, contatos e automações. O que é de cada PC (perfil, modelo local, reconhecimento facial) não é trocado.
 As chaves **não** vão: o cofre é criptografado pelo Windows e só abre no PC onde foi criado. No PC novo, cole de novo.
 
+## HUD (visual)
+
+O HUD (tela do Jarvis, `web/`) segue a referência `jarvis_hud.json`: tema ciano `#00E5FF` com âmbar/vermelho/verde
+para aviso/perigo/ok, fontes **Orbitron** (títulos e números) e **Share Tech Mono** (código/relógio), ambas locais em
+`web/vendor/fonts/` (offline), e scanlines finas por cima. O núcleo "arc reactor" muda de estado
+(ouvindo/pensando/falando/alerta), os painéis giram em volta e o holograma 3D aparece no palco central.
+Tudo responsivo (PC, monitor em pé, janela pequena/celular). O "modo leve" (Configurações → Geral) desliga os efeitos
+pesados. Evoluindo em passos; ver progresso nos commits "HUD:".
+
 ## O que fica fora do repositório
 
 `config.json` (cada PC tem o seu, nasce do `config.padrao.json`), `dados/` (cofre, diário, índice, caches),
