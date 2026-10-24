@@ -12,6 +12,7 @@ SEGURANÇA / LIMITES (duros, não dá pra driblar por voz):
 Como o aviso de "terminou" chega: igual ao claude_ponte — o server lê novidades() em /api/novidades e fala. O Claude é
 disparado pelo próprio claude_ponte (entra na fila de novidades dele); o Strix entra na fila daqui.
 """
+import datetime
 import os
 import re
 import shutil
@@ -25,6 +26,22 @@ import claude_ponte
 
 DEMORA = True
 RAIZ = Path(__file__).parent
+ACHADOS = RAIZ / "achados_seguranca"  # tudo que as varreduras acharem, guardado aqui pra ver/corrigir depois
+
+
+def _salvar_achado(nome, chave, fonte, texto, achou=None):
+    """Grava o resultado de uma varredura num .md por projeto/dia, pra não se perder (pedido do Rafael 24/10)."""
+    try:
+        ACHADOS.mkdir(exist_ok=True)
+        arq = ACHADOS / f"{chave}_{datetime.date.today().isoformat()}.md"
+        cabecalho = "" if arq.exists() else f"# Achados de segurança — {nome}\n\n(só defensivo, cópia local)\n\n"
+        marca = {True: " · ACHOU falhas", False: " · limpo"}.get(achou, "")
+        ts = datetime.datetime.now().strftime("%d/%m %H:%M")
+        with open(arq, "a", encoding="utf-8") as f:
+            f.write(f"{cabecalho}## {fonte} — {ts}{marca}\n\n{(texto or '').strip() or '(sem saída)'}\n\n---\n\n")
+        return arq
+    except Exception:
+        return None
 
 PROJETOS = claude_ponte.PROJETOS  # mesma lista (porthon, painel, radar, site, planner, jarvis)
 
@@ -71,28 +88,56 @@ def _strix_disponivel():
     return bool(_strix_bin()) and _docker_rodando()
 
 
-def _ambiente_strix():
-    """Monta STRIX_LLM + LLM_API_KEY a partir do que ele já tem no cérebro (ou de STRIX_LLM/LLM_API_KEY no ambiente).
-    None se não há chave de IA pra dar ao Strix."""
+def _guardar_revisao(tid, nome, chave):
+    """Espera a revisão de AppSec do Claude terminar e guarda em arquivo (não some se o HUD não for consultado)."""
+    for _ in range(360):  # até ~30 min (o claude_ponte tem timeout de 15 min)
+        t = claude_ponte.tarefas.get(tid)
+        if not t:
+            return
+        if t.get("estado") and t["estado"] != "trabalhando":
+            if t["estado"] == "pronto":
+                _salvar_achado(nome, chave, "Claude (revisão AppSec)", t.get("resposta", ""),
+                               _achou_vuln(t.get("resposta", "")))
+            return
+        time.sleep(5)
+
+
+def _ambientes_strix():
+    """Lista de (provedor, env) pro Strix, em ordem de preferência. Ele tenta um; se der cota/erro de conexão,
+    cai pro próximo (descoberto 24/10: a cota grátis do Gemini estoura em 20 req/dia). Groq primeiro porque é o
+    modelo que o cérebro usa por padrão e aguenta mais; Gemini e o FreeLLMAPI local como reserva."""
     if os.environ.get("STRIX_LLM") and os.environ.get("LLM_API_KEY"):
-        return dict(os.environ)
+        return [("ambiente", dict(os.environ))]
     try:
         import cerebro
     except Exception:
-        return None
-    env = dict(os.environ)
-    # gemini é o preferido (litellm aceita "gemini/<modelo>"); senão groq; senão o FreeLLMAPI local (OpenAI-compatível)
-    if cerebro.chave("gemini"):
-        env.update(STRIX_LLM="gemini/gemini-3.5-flash", LLM_API_KEY=cerebro.chave("gemini"))
-        return env
+        return []
+    envs = []
     if cerebro.chave("groq"):
-        env.update(STRIX_LLM="groq/openai/gpt-oss-120b", LLM_API_KEY=cerebro.chave("groq"))
-        return env
+        e = dict(os.environ); e.update(STRIX_LLM="groq/openai/gpt-oss-120b", LLM_API_KEY=cerebro.chave("groq"))
+        envs.append(("groq", e))
+    if cerebro.chave("gemini"):
+        e = dict(os.environ); e.update(STRIX_LLM="gemini/gemini-3.5-flash", LLM_API_KEY=cerebro.chave("gemini"))
+        envs.append(("gemini", e))
     if cerebro.chave("freellmapi"):
-        env.update(STRIX_LLM="openai/auto", LLM_API_KEY=cerebro.chave("freellmapi"),
-                   LLM_API_BASE=cerebro.PROVEDORES["freellmapi"]["url"])
-        return env
-    return None
+        e = dict(os.environ); e.update(STRIX_LLM="openai/auto", LLM_API_KEY=cerebro.chave("freellmapi"),
+                                       LLM_API_BASE=cerebro.PROVEDORES["freellmapi"]["url"])
+        envs.append(("freellmapi", e))
+    return envs
+
+
+def _ambiente_strix():
+    """Compat: só diz se HÁ alguma chave de IA pro Strix (usado na mensagem do executar)."""
+    envs = _ambientes_strix()
+    return envs[0][1] if envs else None
+
+
+# Sinais FORTES de que o Strix FALHOU por IA (cota/conexão/credencial), não que achou vulnerabilidade.
+# (sinais específicos do banner de erro do Strix/litellm — evita confundir com um achado que cite "429/quota")
+_FALHA_LLM = re.compile(
+    r"LLM CONNECTION FAILED|Could not establish connection to the language model|RateLimitError|"
+    r"RESOURCE_EXHAUSTED|AuthenticationError|invalid api key|exceeded your current quota|"
+    r"BadRequestError|invalid_request_error|invalid JSON schema|Error during penetration test", re.I)
 
 
 _scans = {}      # tid -> {projeto, nome, estado, inicio, fim, avisado, resumo}  (corridas do Strix)
@@ -129,27 +174,41 @@ def _oferta_de_correcao(chave, nome):
 
 def _rodar_strix(tid, pasta, nome):
     s = _scans[tid]
-    env = _ambiente_strix()
-    if not env:
+    envs = _ambientes_strix()
+    if not envs:
         s.update(estado="erro", resumo="Falta a chave de IA do Strix (STRIX_LLM/LLM_API_KEY).", fim=time.time())
         return
     instrucao = ("Teste de segurança DEFENSIVO, autorizado pelo dono, na cópia LOCAL deste app. Ache e valide "
                  "vulnerabilidades (autenticação, autorização/IDOR, injeção, exposição de dados, LGPD) e descreva a "
                  "correção. Não ataque sistemas de terceiros.")
-    try:
-        r = subprocess.run(
-            [_strix_bin(), "-n", "--target", str(pasta), "--scan-mode", "quick", "--instruction", instrucao],
-            cwd=str(pasta), capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=30 * 60, env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        # strix -n sai != 0 QUANDO ACHA vulnerabilidade — isso é sucesso, não erro.
-        achou = r.returncode != 0
+    ultimo_erro = ""
+    for provedor, env in envs:   # tenta cada IA; se uma recusar por cota/conexão, cai pra próxima
+        try:
+            r = subprocess.run(
+                [_strix_bin(), "-n", "--target", str(pasta), "--scan-mode", "quick", "--instruction", instrucao],
+                cwd=str(pasta), capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=30 * 60, env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except subprocess.TimeoutExpired:
+            s.update(estado="erro", resumo="O Strix passou de 30 min e eu parei.", fim=time.time())
+            return
+        except Exception as e:
+            ultimo_erro = f"{provedor}: {str(e)[:150]}"
+            continue
         saida = (r.stdout or r.stderr or "").strip()
+        if _FALHA_LLM.search(saida):   # não achou nada: a IA recusou (ex.: cota do Gemini). Tenta a próxima.
+            linha = next((l.strip() for l in saida.splitlines() if _FALHA_LLM.search(l)), "falha de IA")
+            ultimo_erro = f"{provedor}: {linha[:150]}"
+            continue
+        # sucesso de verdade: o strix -n sai != 0 QUANDO ACHA vulnerabilidade.
+        achou = r.returncode != 0
         resumo = saida.splitlines()[-1] if saida else ("Encontrou achados." if achou else "Sem achados.")
-        s.update(estado="pronto", achou=achou, resumo=resumo[:400], fim=time.time())
-    except subprocess.TimeoutExpired:
-        s.update(estado="erro", resumo="O Strix passou de 30 min e eu parei.", fim=time.time())
-    except Exception as e:
-        s.update(estado="erro", resumo=str(e)[:200], fim=time.time())
+        _salvar_achado(nome, s["projeto"], f"Strix (pentest · {provedor})", saida or resumo, achou)
+        s.update(estado="pronto", achou=achou, resumo=resumo[:400], provedor=provedor, fim=time.time())
+        return
+    # todas as IAs recusaram
+    _salvar_achado(nome, s["projeto"], "Strix (pentest · não rodou)", ultimo_erro or "Nenhuma IA respondeu.", None)
+    s.update(estado="erro", resumo=f"O Strix não conseguiu rodar: a IA recusou em todos os provedores. {ultimo_erro}",
+             fim=time.time())
 
 
 def executar(p):
@@ -168,6 +227,7 @@ def executar(p):
             tid = claude_ponte.iniciar_pergunta(
                 {"projeto": chave, "nome": nome, "pedido": pedido_claude}, dono="seguranca")
             _revisoes[tid] = {"projeto": chave, "nome": nome, "avisado": False}
+            threading.Thread(target=_guardar_revisao, args=(tid, nome, chave), daemon=True).start()
             claude_ok = True
     except Exception:
         claude_ok = False

@@ -249,10 +249,32 @@ RAIOX = {
     "passos": [],
 }
 
+# corpo humano em 3D REAL: vários órgãos do BodyParts3D (co-registrados), em raio-x, montados pelo holograma.js
+# a partir do manifesto. Aposenta o torso.glb oco (que virava um vulto preto).
+CORPO = {
+    "titulo": "Corpo humano",
+    "estilo": "corpo",
+    "corpo": "/web/modelos/corpo/manifesto.json",
+    "zoom": 11,
+    "intro": "Esse é o corpo humano em 3D de verdade, chefe — órgãos reais em raio-x. Pode girar com o mouse pra ver de todos os lados.",
+    "passos": [
+        {"fala": "No alto, dentro do crânio, fica o cérebro: ele comanda tudo.", "destaque": ["Crânio", "Cérebro"]},
+        {"fala": "No peito, os dois pulmões puxam o ar, e entre eles o coração bombeia o sangue pro corpo inteiro.",
+         "destaque": ["Pulmão direito", "Pulmão esquerdo", "Coração"]},
+        {"fala": "Logo abaixo, o fígado processa quase tudo que você come, e o estômago começa a digestão.",
+         "destaque": ["Fígado", "Estômago"]},
+        {"fala": "Atrás, os dois rins filtram o sangue e fazem a urina.", "destaque": ["Rim direito", "Rim esquerdo"]},
+        {"fala": "E embaixo, os intestinos terminam de absorver o alimento.", "destaque": ["Intestino delgado", "Intestino grosso"]},
+        {"fala": "Juntando tudo: esse é o corpo humano por dentro. Pode girar à vontade.",
+         "destaque": ["Crânio", "Cérebro", "Coração", "Pulmão direito", "Pulmão esquerdo", "Fígado", "Estômago",
+                      "Rim direito", "Rim esquerdo", "Intestino delgado", "Intestino grosso"]},
+    ],
+}
+
 MODELOS = [
-    # corpo humano = SEMPRE o modelo 3D real (raio-x). O modelo antigo de formas geométricas foi aposentado.
+    # corpo humano = SEMPRE os órgãos 3D reais co-registrados (raio-x). Torso oco e o modelo de formas aposentados.
     (re.compile(r"raio[\s-]?x|corpo\s+humano|\bcorpo\b|corpo\s+real|corpo\s+de\s+verdade|torso|anatomia\s+human|"
-                r"sistema\s+digestivo|org[aã]os\s+(?:do\s+)?(?:corpo|humano)"), RAIOX),
+                r"sistema\s+digestivo|org[aã]os\s+(?:do\s+)?(?:corpo|humano)"), CORPO),
     (re.compile(r"camadas?\s+(?:d[ae]|n[ae])\s+(?:terra|planeta)|(?:terra|planeta)\s+por\s+dentro|dentro\s+d[ae]\s+(?:terra|planeta)|"
                 r"(?:interior|estrutura|nucleo)\s+d[ae]\s+(?:terra|planeta)"), TERRA),
     (re.compile(r"(?:pecas|partes|componentes|hardware)\s+d[eo]\s+(?:um\s+)?(?:computador|pc)|(?:computador|pc)\s+por\s+dentro|"
