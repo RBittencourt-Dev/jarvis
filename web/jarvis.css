@@ -441,3 +441,8 @@ body.modo-foco #conversa { bottom: 110px; }
 body.modo-seguranca #hp-sistema, body.modo-seguranca #hp-hoje { display: none; }   /* segurança: só REDE + VISÃO */
 body.modo-seguranca .nucleo { --nuc: var(--perigo); }                              /* núcleo em alerta */
 body.modo-seguranca .marca::after { content: " · SEGURANÇA"; color: var(--perigo); letter-spacing: .2em; }
+
+/* ============================================================ arc reactor (canvas) no núcleo — substitui os anéis CSS e a onda */
+#reator { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.nucleo .anel, .nucleo .centro, .nucleo .jarvis-nome { display: none; }  /* o reator desenha tudo isso */
+#onda { display: none; }  /* a onda de voz agora vive dentro do reator (reage pelo --nivel) */

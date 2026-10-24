@@ -43,9 +43,11 @@ As chaves **não** vão: o cofre é criptografado pelo Windows e só abre no PC 
 
 O HUD (tela do Jarvis, `web/`) segue a referência `jarvis_hud.json`: tema ciano `#00E5FF` com âmbar/vermelho/verde
 para aviso/perigo/ok, fontes **Orbitron** (títulos e números) e **Share Tech Mono** (código/relógio), ambas locais em
-`web/vendor/fonts/` (offline), e scanlines finas por cima. O núcleo "arc reactor" muda de estado
-com "JARVIS" escrito no meio; a cor fica sempre ciano (só o movimento muda — pulso ao ouvir, anéis girando ao pensar),
-vermelho só em alerta/segurança. O holograma 3D aparece no palco central. Nos quatro cantos ficam painéis fixos ao
+`web/vendor/fonts/` (offline), e scanlines finas por cima. O núcleo é um **arc reactor** desenhado em canvas (`web/arc-reactor.js`, fiel ao `jarvis_core` JSON do Rafael): 8 camadas
+(HUD externo, anel técnico, ticks radiais, dois anéis de energia, anel mecânico, raios internos e núcleo concêntrico),
+com "JARVIS" escrito no meio, partículas, varredura e ignição na abertura. Reage ao áudio pelo `--nivel`. A cor fica
+sempre ciano (só o MOVIMENTO muda por estado — pulso ao ouvir, giro acelerado ao pensar); vermelho só em alerta/segurança
+(há um interruptor `CORES_DE_ESTADO` pra ligar as cores verde/âmbar/azul do JSON, se um dia quiser). O holograma 3D aparece no palco central. Nos quatro cantos ficam painéis fixos ao
 vivo — **SISTEMA** (CPU/RAM/GPU/disco/temp/bateria), **REDE** (download/upload/ping/dispositivos), **VISÃO** (câmera,
 ainda stub) e **HOJE** (relógio, clima de Porto Alegre via open-meteo, notícias do G1) — servidos por `hud_paineis.py`
 em `/api/hud` e desenhados por `web/hud-paineis.js`. Os cartões transitórios continuam aparecendo no miolo.
