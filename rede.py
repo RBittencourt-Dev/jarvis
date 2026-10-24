@@ -9,6 +9,7 @@ Mostrar a IMAGEM da câmera precisa do login dela (guardado no cofre) — enquan
 Tudo aqui é pra administrar a rede que ELE cuida (a escola), defensivo. Nada de rede de terceiros.
 """
 import json
+import os
 import re
 import socket
 import subprocess
@@ -140,6 +141,85 @@ def _vizinhos():
         if ip and not ip.startswith(("224.", "239.", "255.")):
             out[ip] = v.get("LinkLayerAddress")
     return out
+
+
+def _nbt(ip):
+    """Nome do PC, quem está logado e o grupo/domínio, sem senha (NetBIOS, porta 137). None se o PC não responde
+    NetBIOS (desligado ou não é Windows). Códigos são universais: <00> UNIQUE=nome, <00> GROUP=grupo, <20>=compartilha,
+    <03> UNIQUE (≠ nome)=usuário logado."""
+    try:
+        r = subprocess.run(["nbtstat", "-A", ip], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=4, creationflags=SEM_JANELA)
+        out = r.stdout
+    except Exception:
+        return None
+    nome = grupo = usuario = None
+    shares = False
+    for l in out.splitlines():
+        m = re.match(r"\s*(\S.*?)\s+<([0-9A-Fa-f]{2})>\s+(UNIQUE|GROUP)", l)
+        if not m:
+            continue
+        n, code, tipo = m.group(1).strip(), m.group(2).upper(), m.group(3)
+        if code == "00" and tipo == "UNIQUE" and not nome:
+            nome = n
+        elif code == "00" and tipo == "GROUP" and not grupo:
+            grupo = n
+        elif code == "20":
+            shares = True
+        elif code == "03" and tipo == "UNIQUE" and n and n != nome:
+            usuario = n
+    if not (nome or grupo):
+        return None
+    return {"nome": nome, "grupo": grupo, "usuario": usuario, "shares": shares}
+
+
+def pcs_da_rede():
+    """Os outros PCs (Windows) na rede: nome, quem está logado, grupo e se compartilha pasta — tudo sem senha."""
+    aparelhos, cfg = escanear(com_cameras=False)
+    outros = [a for a in aparelhos if not a["eu"]]
+    prazo = time.time() + 13
+    futuros = {a["ip"]: _POOL.submit(_nbt, a["ip"]) for a in outros}
+    pcs = []
+    for a in outros:
+        try:
+            info = futuros[a["ip"]].result(timeout=max(0.1, prazo - time.time()))
+        except Exception:
+            info = None
+        if info and info.get("nome"):
+            pcs.append({"ip": a["ip"], "fabricante": a["fabricante"], **info})
+    return pcs, cfg, aparelhos
+
+
+def _remoto_usuarios(ip, user, senhas):
+    """Lista os usuários locais de OUTRO PC (que é do Rafael/da escola), testando as senhas de admin que ele guardou.
+    Usa WMI (DCOM, porta 135). A senha vai por variável de ambiente, nunca na linha de comando. Devolve (lista, senha_ok)
+    ou (None, None). Para rápido se o 135 estiver fechado (acesso remoto desligado)."""
+    if not _porta(ip, 135, 1.0):
+        return None, None
+    ps = ("$sec = ConvertTo-SecureString $env:JPW -AsPlainText -Force;"
+          "$c = New-Object System.Management.Automation.PSCredential($env:JUSER, $sec);"
+          "try { Get-WmiObject -ComputerName $env:JIP -Credential $c -Class Win32_UserAccount -Filter 'LocalAccount=True' -ErrorAction Stop |"
+          " Select-Object Name,Disabled | ConvertTo-Json -Compress } catch { Write-Output ('ERRO:' + $_.Exception.Message) }")
+    # conta local do PC remoto: "IP\Administrador" (o ".\" do Rafael vira o host remoto)
+    u = user if "\\" in user else f"{ip}\\{user.lstrip('.').lstrip(chr(92)) or 'Administrador'}"
+    prazo = time.time() + 22
+    for senha in senhas:
+        if time.time() > prazo:
+            break
+        env = dict(os.environ, JPW=senha or "", JUSER=u, JIP=ip)
+        try:
+            r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=18, creationflags=SEM_JANELA, env=env)
+        except Exception:
+            continue
+        out = (r.stdout or "").strip()
+        if not out or out.startswith("ERRO:"):
+            continue
+        try:
+            return _lista(json.loads(out)), senha
+        except Exception:
+            continue
+    return None, None
 
 
 def _nome(ip, prazo):
@@ -307,7 +387,16 @@ def entender(texto):
         if re.search(ACHAR, sa):
             return {"acao": "cameras"}
         return {"acao": "menu_cam"}  # só tocou no assunto "câmera" → ofereço as opções
-    # USUÁRIOS
+    # USUÁRIOS DE UM PC ESPECÍFICO (por IP): "lista os usuários do 192.168.0.67"
+    _ip = re.search(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b", t)
+    if _ip and re.search(r"usu[aá]ri|contas?", sa):
+        return {"acao": "usuarios_pc", "alvo": _ip.group(1)}
+    # OUTROS PCs DA REDE: "ver os outros pcs", "mostra os computadores da rede", "quais máquinas tem na rede"
+    if re.search(r"\b(outros?|demais|todos os|os|esses)\s+(pcs?|computadores?|m[aá]quinas|notebooks?|esta[çc][oõ]es)\b", sa) \
+       or (re.search(r"\b(pcs?|computadores?|m[aá]quinas|notebooks?|esta[çc][oõ]es)\b", sa) and re.search(REDE, sa) and re.search(ACHAR, sa)) \
+       or re.search(r"\b(ver|ve|vê|olha\w*|espia\w*|mostra\w*|lista\w*)\s+(?:os\s+)?(?:outros?\s+)?(pcs?|computadores?|m[aá]quinas)\b", sa):
+        return {"acao": "pcs"}
+    # USUÁRIOS (deste PC / do domínio)
     if re.search(USUARIO, sa) and (re.search(r"\b(rede|dom[ií]nio|pc|computador|windows|cadastrad\w*)\b", sa) or re.search(ACHAR, sa)):
         return {"acao": "usuarios"}
     # DIAGNÓSTICO / INFO
@@ -342,10 +431,11 @@ def executar(p):
 
     if acao == "menu":
         linhas = ["• \"acha os aparelhos da rede\" — quem está conectado (IP, nome, fabricante, MAC)",
+                  "• \"ver todos os PCs da rede\" — os computadores, nome e quem está logado",
                   "• \"acha as câmeras\" — câmeras e DVRs na rede",
                   "• \"lista os usuários da rede\" — contas deste PC e do domínio",
-                  "• \"diagnóstico da rede\" — IP, Wi-Fi, internet, DNS e compartilhamentos",
-                  "• \"qual meu IP\" · \"testa a internet\" · \"compartilhamentos da rede\""]
+                  "• \"lista os usuários do <IP>\" — usuários de outro PC (com teu login de admin)",
+                  "• \"diagnóstico da rede\" — IP, Wi-Fi, internet, DNS e compartilhamentos"]
         return ("Na parte de rede eu acho os aparelhos, acho as câmeras, listo os usuários e faço o diagnóstico, chefe. Qual deles?",
                 [{"titulo": "T.I de rede · o que eu faço", "destaque": "escolhe", "linhas": linhas}])
 
@@ -391,6 +481,69 @@ def executar(p):
         else:
             fala = f"Rede ok, chefe. IP {cfg['ip']}, internet respondendo em {g8} milissegundos." + (f" Conectado no Wi-Fi {wifi['ssid']}." if wifi else " Conexão por cabo.")
         return fala, [{"titulo": "Diagnóstico de rede", "destaque": "Rede ok" if (gw_ms is not None and g8 is not None and gd is not None) else "Atenção", "linhas": linhas}]
+
+    if acao == "pcs":
+        pcs, cfg, aparelhos = pcs_da_rede()
+        if not pcs:
+            if not cfg.get("ip"):
+                return "Não consegui ler a rede deste PC, chefe. Parece sem conexão.", []
+            # NetBIOS desligado: não dá o nome dos PCs, mas mostro todos os aparelhos pra você ver as máquinas
+            outros = [a for a in aparelhos if not a["eu"]]
+            linhas = [_linha_aparelho(a) for a in outros]
+            return (f"Não consegui os nomes dos PCs (o NetBIOS parece desligado na rede), chefe, mas achei {len(outros)} "
+                    f"aparelho{'s' if len(outros) != 1 else ''} na rede. Aqui está o que respondeu:",
+                    [{"titulo": "Aparelhos na rede", "destaque": f"{len(outros)} na rede", "linhas": linhas}])
+        linhas = []
+        for p in pcs:
+            l = f"🖥️ {p['nome']} · {p['ip']}"
+            if p.get("usuario"):
+                l += f" · logado: {p['usuario']}"
+            if p.get("grupo"):
+                l += f" · {p['grupo']}"
+            if p.get("shares"):
+                l += " · compartilha pasta"
+            linhas.append(l)
+        logados = [p["usuario"] for p in pcs if p.get("usuario")]
+        fala = (f"Achei {len(pcs)} PC{'s' if len(pcs) != 1 else ''} na rede, chefe: " + ", ".join(p["nome"] for p in pcs[:6])
+                + ("." if len(pcs) <= 6 else f" e mais {len(pcs) - 6}.")
+                + (f" Logados agora: {', '.join(logados[:4])}." if logados else ""))
+        return fala, [{"titulo": "PCs na rede", "destaque": f"{len(pcs)} PCs", "linhas": linhas,
+                       "copiar": "Pra ver todos os usuários de um PC: \"lista os usuários do <IP>\"."}]
+
+    if acao == "usuarios_pc":
+        ip = p["alvo"]
+        info = _nbt(ip)
+        linhas = []
+        if info:
+            if info.get("nome"):
+                linhas.append(f"PC: {info['nome']}")
+            if info.get("grupo"):
+                linhas.append(f"Grupo/domínio: {info['grupo']}")
+            if info.get("usuario"):
+                linhas.append(f"Logado agora: {info['usuario']}")
+            if info.get("shares"):
+                linhas.append("Compartilha pasta (SMB)")
+        nome_pc = (info or {}).get("nome") or ip
+        # lista completa: precisa das senhas de admin (do Rafael, guardadas no cofre)
+        cred = cofre.pegar("admin_logins") if hasattr(cofre, "pegar") else None
+        senhas = cred.get("senhas") if isinstance(cred, dict) else None
+        user = (cred.get("user") if isinstance(cred, dict) else None) or "Administrador"
+        if senhas:
+            lista, ok = _remoto_usuarios(ip, user, senhas)
+            if lista:
+                for u in lista:
+                    linhas.append(f"👤 {u.get('Name')}" + (" (desativado)" if u.get("Disabled") else ""))
+                return (f"No PC {nome_pc} tem {len(lista)} usuário{'s' if len(lista) != 1 else ''}, chefe. Conectei como administrador.",
+                        [{"titulo": f"Usuários · {nome_pc}", "destaque": f"{len(lista)} no PC", "linhas": linhas}])
+            fim = (" Nenhuma das senhas de admin que você guardou entrou nesse PC (ou o acesso remoto/WMI está desligado nele)."
+                   if _porta(ip, 135, 1.0) else " O acesso remoto (WMI) está desligado nesse PC, então não dá pra puxar a lista completa daqui.")
+        else:
+            fim = (" Pra ver TODOS os usuários desse PC eu uso o teu login de administrador. Salva tuas senhas no cofre uma vez "
+                   "(Configurações, Privacidade) que eu testo elas sozinho — o usuário eu já assumo como .\\Administrador.")
+        if info:
+            quem = f"Quem está logado nele agora é {info['usuario']}. " if info.get("usuario") else ""
+            return f"No {nome_pc}: {quem}".strip() + fim, [{"titulo": f"PC {nome_pc}", "destaque": info.get("usuario") or ip, "linhas": linhas or [nome_pc]}]
+        return f"Não consegui falar com o PC {ip}, chefe — pode estar desligado, bloqueando, ou sem NetBIOS." + fim, []
 
     if acao == "usuarios":
         u = usuarios()
@@ -464,4 +617,13 @@ def executar(p):
 def salvar_login_cameras(user, senha, marca=""):
     """Guarda o login das câmeras no cofre (criptografado). Chamado quando o Rafael passar as credenciais."""
     cofre.guardar("cameras", {"user": user, "senha": senha, "marca": marca})
+    return True
+
+
+def salvar_logins_admin(senhas, user="Administrador"):
+    """Guarda as senhas de administrador dos PCs da escola no cofre (criptografado). 'senhas' é a lista de 3-4
+    possíveis (varia de PC pra PC); o Jarvis testa cada uma ao consultar um PC. Usuário padrão: .\\Administrador."""
+    if isinstance(senhas, str):
+        senhas = [senhas]
+    cofre.guardar("admin_logins", {"user": user, "senhas": [s for s in senhas if s]})
     return True

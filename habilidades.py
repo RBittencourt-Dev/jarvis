@@ -83,6 +83,8 @@ GRUPOS = [
     ]),
     ("T.I de rede (faz na hora)", [
         ("Achar os aparelhos da rede: IP, nome, fabricante e MAC de quem está conectado", "acha os aparelhos da rede"),
+        ("Ver todos os PCs da rede: nome, quem está logado e o grupo (sem senha, via NetBIOS)", "ver todos os pcs da rede"),
+        ("Listar os usuários de outro PC da rede (usando teu login de administrador salvo no cofre)", "lista os usuários do 192.168.0.X"),
         ("Achar as câmeras e DVRs na rede (pela porta de vídeo e pelo fabricante)", "acha as câmeras"),
         ("Mostrar a imagem da câmera no HUD — precisa do login dela (sem senha não dá, é por segurança)", "mostra as câmeras"),
         ("Listar os usuários do Windows (deste PC e do domínio, se houver)", "lista os usuários da rede"),
