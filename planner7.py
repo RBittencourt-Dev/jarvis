@@ -233,3 +233,93 @@ def executar(p):
               + (" · pendente" if x["status"] == "pendente" else "") for x in lista[:30]]
     return (fala, [{"titulo": f"7planner · {p['dito']}", "destaque": f"{n} agendamento{'s' if n > 1 else ''}", "linhas": linhas,
                     "links": [{"texto": "Abrir o 7planner", "url": SITE}]}])
+
+
+# ------------------------------------------------------------------ avisos sozinho (pedido de 24/10, PC do colégio)
+# 1) Todo dia, a partir das 7h (ou na hora de "planner_avisos.resumo"), fala a agenda do dia — uma vez só; se a
+#    abertura do PC já falou, não repete (marcar_resumo_de_hoje).
+# 2) Marketing e T.I (a agenda de Chromebooks, que o 7planner chama de "Agenda de Chromebooks — T.I"): avisa 10 min
+#    antes de cada agendamento. Agendas e minutos mudam em config.json → "planner_avisos".
+import json
+from datetime import datetime
+from pathlib import Path
+
+ESTADO = Path(__file__).parent / "dados" / "planner-avisados.json"
+_cache = {"em": 0.0, "dia": "", "lista": []}
+ONDE_AVISO = {"chromebook": "na T.I, dos Chromebooks"}
+
+
+def _config():
+    try:
+        c = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8")).get("planner_avisos") or {}
+    except (OSError, ValueError):
+        c = {}
+    return {"agendas": c.get("agendas") or ["marketing", "chromebook"], "minutos": int(c.get("minutos", 10)),
+            "resumo": c.get("resumo", "07:00"), "ligado": c.get("ligado", True)}
+
+
+def _estado():
+    try:
+        e = json.loads(ESTADO.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        e = {}
+    hoje = date.today().isoformat()
+    if e.get("dia") != hoje:
+        e = {"dia": hoje, "resumo": False, "avisados": []}
+    return e
+
+
+def _gravar(e):
+    ESTADO.parent.mkdir(exist_ok=True)
+    ESTADO.write_text(json.dumps(e, ensure_ascii=False), encoding="utf-8")
+
+
+def marcar_resumo_de_hoje():
+    e = _estado()
+    e["resumo"] = True
+    _gravar(e)
+
+
+def _de_hoje(agendas):
+    hoje = date.today().isoformat()
+    if time.time() - _cache["em"] > 300 or _cache["dia"] != hoje:  # 5 min: pega agendamento marcado em cima da hora
+        _cache.update(em=time.time(), dia=hoje, lista=agendamentos(hoje, hoje, agendas))
+    return _cache["lista"]
+
+
+def vigiar(agora=None):
+    """[(fala, cartão)] do que avisar agora. Chamado a cada minuto pelo servidor."""
+    cfg = _config()
+    if not cfg["ligado"] or not conectado():
+        return []
+    agora = agora or datetime.now()
+    e, saida = _estado(), []
+    if not e["resumo"] and agora.strftime("%H:%M") >= cfg["resumo"]:
+        e["resumo"] = True
+        _gravar(e)
+        r = executar(entender("agenda do 7planner hoje"))
+        if agora.weekday() < 5 or len(r) > 1:  # fim de semana vazio: fica quieto
+            saida.append((r[0], r[1][0] if len(r) > 1 else None))
+    for x in _de_hoje(cfg["agendas"]):
+        if not x["inicio"]:
+            continue
+        comeca = datetime.combine(agora.date(), datetime.strptime(x["inicio"], "%H:%M").time())
+        falta = (comeca - agora).total_seconds() / 60
+        chave = f"{x['agenda']}|{x['inicio']}|{x['quem']}|{x['descricao'][:30]}"
+        if 0 < falta <= cfg["minutos"] and chave not in e["avisados"]:
+            e["avisados"].append(chave)
+            _gravar(e)
+            n = round(falta)
+            quem_ = x["quem"].split(" ")[0] if x["quem"] else "alguém"
+            o_que = f": {x['descricao'][:70]}" if x["descricao"] else ""
+            fala = (f"Chefe, daqui a {n} minuto{'s' if n != 1 else ''} tem agendamento {ONDE_AVISO.get(_chave_da(x['agenda'])) or NO.get(_chave_da(x['agenda']), x['agenda'])}"
+                    f", das {x['inicio']} às {x['fim']}, com {quem_}{o_que}.")
+            saida.append((fala, {"titulo": f"7planner · em {n} min", "destaque": x["agenda"],
+                                 "linhas": [f"{x['inicio']}–{x['fim']} · {x['quem'] or '?'}" + (f" ({x['setor']})" if x["setor"] else ""),
+                                            *([x["descricao"][:120]] if x["descricao"] else [])],
+                                 "links": [{"texto": "Abrir o 7planner", "url": SITE}]}))
+    return saida
+
+
+def _chave_da(nome):
+    return next((k for k, (_, n) in AGENDAS.items() if n == nome), "")

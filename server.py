@@ -1041,6 +1041,13 @@ async def relogio_dos_avisos():
                     avisar(fala, cartao, imp)
             except Exception as e:
                 print("vigia do PC falhou:", e)
+        if time.time() - vigia_pc.get("planner", 0) > 60:  # 7planner: agenda do dia e "daqui a 10 min" (Marketing/T.I)
+            vigia_pc["planner"] = time.time()
+            try:
+                for fala, cartao in await asyncio.to_thread(planner7.vigiar):
+                    avisar(fala, cartao, "marcado")
+            except Exception as e:
+                print("vigia do 7planner falhou:", e)
         if time.time() - vigia_pc["rotina"] > 3600:  # rotina dele → sugestão de automação
             vigia_pc["rotina"] = time.time()
             try:
@@ -3449,6 +3456,7 @@ def bloco_7planner():
         return None
     try:
         r = planner7.executar(planner7.entender("agenda do 7planner hoje"))
+        planner7.marcar_resumo_de_hoje()  # já falou na abertura: o aviso das 7h não repete
     except Exception as e:
         return {"fala": "", "cartao": {"titulo": "7planner", "destaque": "Não consegui ler", "aguardando": True, "linhas": [str(e)[:140]]}}
     return {"fala": r[0].replace(", chefe.", "."), "cartao": r[1][0] if len(r) > 1 else None}
