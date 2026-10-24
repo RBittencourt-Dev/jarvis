@@ -50,29 +50,71 @@ _CONTEUDO = re.compile(r"\b(?:com (?:o )?(?:texto|conte[úu]do|escrito)|escrev\w
 _ABS = re.compile(r"[A-Za-z]:[\\/][^\"'<>|]+")
 
 
-def _achar_pasta(texto):
-    """Resolve a pasta-alvo citada no texto (nome conhecido, projeto, caminho absoluto); senão Desktop."""
+def _achar_pasta_estrito(texto):
+    """Pasta citada no texto (caminho absoluto, pasta conhecida ou projeto), ou None se nada bater."""
     m = _ABS.search(texto)
     if m:
         return Path(m.group(0).strip().rstrip(".,"))
     t = texto.lower()
-    # "pasta do/no <projeto>" (porthon, painel, radar, site, planner, jarvis)
-    for chave, (nome, pasta) in claude_ponte.PROJETOS.items():
-        if re.search(rf"\b(?:pasta\s+d[oae]\s+|projeto\s+d[oae]\s+|n[oa]\s+)?{chave}\b", t):
-            if re.search(rf"\b{chave}\b", t):
-                # só casa se o pedido realmente menciona o projeto como lugar
-                if re.search(rf"\b(?:n[oa]|d[oae]|pasta|projeto)\s+\w*\s*{chave}\b", t) or f" {chave}" in t:
-                    return pasta
+    for chave, (nome, pasta) in claude_ponte.PROJETOS.items():  # porthon, painel, radar, site, planner, jarvis
+        if re.search(rf"\b{chave}\b", t):
+            return pasta
     for nome, caminho in PASTAS.items():
         if re.search(rf"\b{re.escape(nome)}\b", t):
             return caminho
-    return PADRAO
+    return None
+
+
+def _achar_pasta(texto):
+    """Como o estrito, mas cai no Desktop quando ele não diz onde."""
+    return _achar_pasta_estrito(texto) or PADRAO
+
+
+def _destino(dir_, base):
+    """Pasta de destino de um mover/copiar: conhecida/absoluta, ou 'pra pasta X' = subpasta da origem."""
+    d = _achar_pasta_estrito(dir_)
+    if d is not None:
+        return d
+    sub = re.search(r"\bpasta\s+(?:chamad[oa]\s+)?['\"]?([\wÀ-ÿ][\wÀ-ÿ \-]*?)['\"]?\s*$", dir_.strip(), re.I)
+    return (base / sub.group(1).strip()) if sub else None
+
+
+def _split_pra(t):
+    """Separa 'origem ... pra destino' em (esquerda, direita)."""
+    partes = re.split(r"\s+(?:pra|para|->|at[ée]\s+(?:a|o)?)\s+", t, maxsplit=1, flags=re.I)
+    return (partes[0], partes[1]) if len(partes) == 2 else (t, "")
+
+
+def _origem(t):
+    """Caminho completo do arquivo/pasta citado (absoluto, ou nome.ext/‘chamado X’ dentro da pasta resolvida)."""
+    m = _ABS.search(t)
+    if m:
+        return m.group(0).strip().rstrip(".,")
+    nome = _NOME.search(t) or _NOME_EXT.search(t)
+    if nome:
+        return str(_achar_pasta(t) / nome.group(1).strip())
+    return None
 
 
 def entender(texto):
     t = (texto or "").strip()
     if not t:
         return None
+    # RENOMEAR: "renomeia X pra Y" (Y = nome novo)
+    if _RENOMEAR.search(t):
+        esq, dir_ = _split_pra(t)
+        alvo = _origem(esq)
+        novo = re.sub(r"['\"]", "", dir_).strip().rstrip(".,")
+        if alvo and novo:
+            return {"op": "renomear", "alvo": alvo, "novo": novo}
+    # MOVER / COPIAR: "move|copia X pra <pasta>"
+    if _MOVER.search(t) or _COPIAR.search(t):
+        esq, dir_ = _split_pra(t)
+        alvo = _origem(esq)
+        destino = _destino(dir_, Path(alvo).parent) if (alvo and dir_) else None
+        if alvo and destino:
+            return {"op": "copiar" if _COPIAR.search(t) and not _MOVER.search(t) else "mover",
+                    "alvo": alvo, "destino": str(destino)}
     # LISTAR
     if _LISTAR.search(t):
         return {"op": "listar", "pasta": str(_achar_pasta(t))}
@@ -127,12 +169,19 @@ def descrever(p):
         return f"Vou criar o arquivo \"{p['nome']}\" em {p['pasta']}{extra}."
     if op == "apagar":
         return f"Vou mandar pra LIXEIRA (dá pra recuperar): {p['alvo']}."
+    if op == "renomear":
+        return f"Vou renomear {Path(p['alvo']).name} para \"{p['novo']}\"."
+    if op == "mover":
+        return f"Vou mover {Path(p['alvo']).name} para {p['destino']}."
+    if op == "copiar":
+        return f"Vou copiar {Path(p['alvo']).name} para {p['destino']}."
     return "Vou mexer nos arquivos."
 
 
 def nome_curto(p):
     return {"criar_pasta": "criar uma pasta", "criar_arquivo": "criar um arquivo",
-            "apagar": "mandar pra lixeira", "abrir": "abrir", "listar": "listar a pasta"}.get(p["op"], "mexer em arquivos")
+            "apagar": "mandar pra lixeira", "abrir": "abrir", "listar": "listar a pasta",
+            "renomear": "renomear", "mover": "mover", "copiar": "copiar"}.get(p["op"], "mexer em arquivos")
 
 
 def executar(p):
@@ -164,6 +213,24 @@ def executar(p):
                 return f"Não achei {p['alvo']} pra apagar, chefe."
             send2trash(p["alvo"].replace("/", "\\"))
             return f"Mandei pra lixeira, chefe (dá pra recuperar): {Path(p['alvo']).name}."
+        if op == "renomear":
+            src = Path(p["alvo"])
+            if not src.exists():
+                return f"Não achei {src.name} pra renomear, chefe."
+            novo = p["novo"] if ("." in p["novo"] or src.is_dir()) else p["novo"] + src.suffix
+            src.rename(src.with_name(novo))
+            return f"Pronto, renomeei para \"{novo}\", chefe."
+        if op in ("mover", "copiar"):
+            src = Path(p["alvo"])
+            if not src.exists():
+                return f"Não achei {src.name}, chefe."
+            Path(p["destino"]).mkdir(parents=True, exist_ok=True)
+            destino = Path(p["destino"]) / src.name
+            if op == "mover":
+                shutil.move(str(src), str(destino))
+                return f"Pronto, movi {src.name} pra {p['destino']}, chefe."
+            shutil.copytree(src, destino) if src.is_dir() else shutil.copy2(src, destino)
+            return f"Pronto, copiei {src.name} pra {p['destino']}, chefe."
         return "Não entendi o que era pra fazer com o arquivo, chefe."
     except Exception as e:
         return f"Não consegui, chefe: {str(e)[:150]}"
