@@ -290,16 +290,48 @@ def _copiar(texto):
 
 
 # ---------------------------------------------------------------- salvar no painel (folha em branco) + HUD
-def _corpo_painel(doc):
-    """Monta o corpo em HTML com as tags que o painel aceita (p, h2, strong, ul/li) + o bloco de assinatura.
-    O painel aplica o timbre e o logo da 7code por cima; aqui vai só o conteúdo."""
+_MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro",
+          "novembro", "dezembro"]
+# títulos de seção que NÃO viram cláusula própria: o fecho/assinatura é montado no padrão da casa (RODAPE_ASSINATURAS)
+_SECAO_ASSINATURA = re.compile(r"\bassinatur|\bfecho\b|\bencerr", re.I)
+
+
+def _data_extenso():
+    h = date.today()
+    return f"{_EMPRESA['cidade']}, {h.day} de {_MESES[h.month - 1]} de {h.year}"
+
+
+def _rodape_assinaturas(cliente):
+    """O mesmo padrão dos modelos do painel (RODAPE_ASSINATURAS em lib/documentos.ts): fecho, local/data, duas
+    assinaturas lado a lado (CONTRATADA/CONTRATANTE) e as testemunhas."""
+    cli = _esc(cliente or "[preencher: nome do contratante]")
+    return (
+        '<p class="fecho">E, por estarem assim justas e contratadas, as partes firmam o presente instrumento em duas '
+        'vias de igual teor e forma, na presença das testemunhas abaixo.</p>\n'
+        f'<p class="local-data">{_esc(_data_extenso())}.</p>\n'
+        '<p class="assinaturas">\n'
+        '  <span><span class="linha-assinatura"></span><br><strong>Rafael Bittencourt</strong><br>CONTRATADA</span>\n'
+        f'  <span><span class="linha-assinatura"></span><br><strong>{cli}</strong><br>CONTRATANTE</span>\n'
+        '</p>\n'
+        '<p class="testemunhas">Testemunhas:</p>\n'
+        '<p class="assinaturas">\n'
+        '  <span><span class="linha-assinatura"></span><br>Nome:<br>CPF:</span>\n'
+        '  <span><span class="linha-assinatura"></span><br>Nome:<br>CPF:</span>\n'
+        '</p>')
+
+
+def _corpo_painel(doc, tipo="contrato", cliente=None):
+    """Monta o corpo em HTML com as tags que o painel aceita (p, h2, strong, ul/li) + o rodapé de assinatura no padrão
+    da casa. O painel aplica o timbre e o logo da 7code por cima; aqui vai só o conteúdo."""
     partes = []
     for i, s in enumerate(doc["secoes"]):
         t = (s.get("titulo") or "").strip()
-        # O painel numera o h2 sozinho ("CLÁUSULA N — …", em maiúsculas via CSS). Então tiro número/‘cláusula’ do título
+        if _SECAO_ASSINATURA.search(t):
+            continue  # assinatura/fecho vêm do rodapé-padrão, não como cláusula do modelo
+        # O painel numera o h2 sozinho ("CLÁUSULA N — …", em maiúsculas via CSS). Tiro número/‘cláusula’ do título
         # pra não duplicar, e deixo só o texto.
         t = re.sub(r"^\s*(?:cl[aá]usula\s+)?\d+\s*[\.\)\-–—:]*\s*", "", t, flags=re.I).strip()
-        # a 1ª seção costuma ser a qualificação das partes: vai como parágrafo de abertura
+        # a 1ª seção costuma ser a qualificação das partes: vai como parágrafo de abertura (sem virar cláusula)
         classe = ' class="partes"' if i == 0 and re.search(r"\bparte", _sa(t)) else ""
         if t and not classe:
             partes.append(f"<h2>{_esc(t)}</h2>")
@@ -313,8 +345,12 @@ def _corpo_painel(doc):
     campos = [c for c in (doc.get("campos") or []) if str(c).strip()]
     if campos:
         partes.append('<p class="nota"><strong>A preencher antes de enviar:</strong> ' + _esc("; ".join(campos)) + "</p>")
-    partes.append('<p class="assinaturas"><span class="linha-assinatura"></span>7 SevenCode — Rafael Bittencourt'
-                  '&nbsp;&nbsp;&nbsp;<span class="linha-assinatura"></span>Contratante</p>')
+    if tipo == "proposta":
+        # proposta não se assina (é oferta); fecha com a validade, como os modelos do painel.
+        partes.append('<p class="validade">Proposta válida por 15 dias a partir da data acima. '
+                      'O aceite formaliza a contratação.</p>')
+    else:
+        partes.append(_rodape_assinaturas(cliente))
     return "\n".join(partes)
 
 
@@ -383,14 +419,13 @@ def _abrir_no_painel(url):
         return False
 
 
-def _salvar_no_painel(doc, assunto, corpo):
+def _salvar_no_painel(doc, cliente, corpo):
     """Cria o documento na folha em branco do painel. Devolve o resultado ou None (cai pro .docx local)."""
     try:
         import painel
         if not painel.configurado():
             return None
-        return painel.criar_documento(doc["titulo"], corpo, tipo="livre",
-                                      cliente_nome=_cliente_do_assunto(assunto))
+        return painel.criar_documento(doc["titulo"], corpo, tipo="livre", cliente_nome=cliente)
     except Exception:
         return None
 
@@ -438,8 +473,9 @@ def executar(p):
                 "é o gatilho pra abrir o CNPJ.")
 
     # 1) Caminho principal: salvar na FOLHA EM BRANCO do painel (formatação da 7code, assinável, fica na lista de docs).
-    corpo = _corpo_painel(doc)
-    res = _salvar_no_painel(doc, assunto, corpo)
+    cliente = _cliente_do_assunto(assunto)
+    corpo = _corpo_painel(doc, tipo, cliente)
+    res = _salvar_no_painel(doc, cliente, corpo)
     if res and res.get("id"):
         previa = _escrever_previa(res["id"], doc, corpo)
         _mostrar_no_hud(doc["titulo"], previa)
