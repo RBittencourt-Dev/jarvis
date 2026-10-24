@@ -45,8 +45,30 @@ def entender(texto):
 
 
 # ------------------------------------------------------------------ Strix
+def _strix_bin():
+    """Caminho do strix.exe — pelo PATH ou direto no diretório do pipx (o Jarvis em execução não vê PATH novo)."""
+    achado = shutil.which("strix")
+    if achado:
+        return achado
+    base = Path(os.path.expanduser("~")) / ".local" / "bin"
+    for nome in ("strix.exe", "strix"):
+        if (base / nome).exists():
+            return str(base / nome)
+    return None
+
+
+def _docker_rodando():
+    if not shutil.which("docker"):
+        return False
+    try:
+        return subprocess.run(["docker", "info"], capture_output=True, timeout=12,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).returncode == 0
+    except Exception:
+        return False
+
+
 def _strix_disponivel():
-    return bool(shutil.which("strix")) and bool(shutil.which("docker"))
+    return bool(_strix_bin()) and _docker_rodando()
 
 
 def _ambiente_strix():
@@ -87,7 +109,7 @@ def _rodar_strix(tid, pasta, nome):
                  "correção. Não ataque sistemas de terceiros.")
     try:
         r = subprocess.run(
-            ["strix", "-n", "--target", str(pasta), "--scan-mode", "quick", "--instruction", instrucao],
+            [_strix_bin(), "-n", "--target", str(pasta), "--scan-mode", "quick", "--instruction", instrucao],
             cwd=str(pasta), capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=30 * 60, env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         # strix -n sai != 0 QUANDO ACHA vulnerabilidade — isso é sucesso, não erro.
@@ -123,9 +145,11 @@ def executar(p):
     strix_msg = ""
     if not pasta.exists():
         strix_msg = ""
-    elif not _strix_disponivel():
-        strix_msg = (" O Strix ainda não está instalado neste PC (precisa do Strix e do Docker) — quando instalar, eu "
-                     "disparo ele junto.")
+    elif not _strix_bin():
+        strix_msg = " O Strix ainda não está instalado neste PC — quando instalar, eu disparo ele junto."
+    elif not _docker_rodando():
+        strix_msg = (" O Strix já está instalado, mas o Docker não está rodando — ele precisa do Docker pra varrer. "
+                     "Abre o Docker Desktop que na próxima eu disparo junto.")
     elif not _ambiente_strix():
         strix_msg = " O Strix está instalado, mas falta a chave de IA dele (STRIX_LLM/LLM_API_KEY)."
     else:
