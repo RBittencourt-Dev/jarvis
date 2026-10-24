@@ -394,10 +394,9 @@ def _mover(hwnd, mon):
 
 
 def abrir_em(destino, abrir):
-    """Roda `abrir()` e leva a janela que aparecer para o monitor pedido. Devolve o que `abrir()` devolveu."""
+    """Roda `abrir()`, traz a janela nova PRA FRENTE (o HUD do Jarvis fica atrás, como o Rafael pediu) e, se for
+    pedido um monitor, leva a janela pra lá. Devolve o que `abrir()` devolveu."""
     mon = monitor(destino) if destino else None
-    if not mon:
-        return abrir()
     antes = _janelas()
     frente_antes = u.GetForegroundWindow()
     resultado = abrir()
@@ -406,11 +405,15 @@ def abrir_em(destino, abrir):
         novas = _janelas() - antes
         if novas:
             nova = next(iter(novas))
-            _mover(nova, mon)
+            if mon:
+                _mover(nova, mon)
             lembrar_aberta(nova)
+            _para_frente(nova)  # a coisa aberta vem pra frente; o Jarvis fica atrás
             return resultado
     frente = u.GetForegroundWindow()
     if frente and frente != frente_antes:  # app que já estava aberto e só veio pra frente
-        _mover(frente, mon)
+        if mon:
+            _mover(frente, mon)
         lembrar_aberta(frente)
+        _para_frente(frente)
     return resultado

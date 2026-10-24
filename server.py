@@ -387,6 +387,11 @@ def abrir_programa(nome: str):
     return f"Abri {app['rotulo']}"
 
 
+def _abrir_programa_frente(nome: str):
+    """Como abrir_programa, mas traz a janela aberta PRA FRENTE (o HUD do Jarvis fica atrás). Usado pelo modelo."""
+    return telas.abrir_em(None, lambda: abrir_programa(nome))
+
+
 def listar_pasta(caminho: str):
     p = caminho_permitido(caminho)
     itens = sorted(p.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))[:80]
@@ -449,7 +454,7 @@ def parametro(nome, descricao):
 FERRAMENTAS = {
     "abrir_site": (abrir_site, False, "Abre um site no navegador.", parametro("url", "endereço do site")),
     "pesquisar_google": (pesquisar_google, False, "Abre uma pesquisa no Google pra ele ver.", parametro("consulta", "o que pesquisar")),
-    "abrir_programa": (abrir_programa, False, "Abre um programa do PC (ex.: Visual Studio Code, Porthon, Painel 7SevenCode, WhatsApp).", parametro("nome", "nome do programa")),
+    "abrir_programa": (_abrir_programa_frente, False, "Abre um programa do PC (ex.: Visual Studio Code, Porthon, Painel 7SevenCode, WhatsApp).", parametro("nome", "nome do programa")),
     "listar_pasta": (listar_pasta, False, "Lista uma pasta.", parametro("caminho", "caminho completo da pasta")),
     "ler_arquivo": (ler_arquivo, False, "Lê um arquivo de texto.", parametro("caminho", "caminho completo do arquivo")),
     "lembrar": (lembrar, False, "Guarda pra sempre um fato sobre ele, a empresa ou o Porthon.", parametro("fato", "o fato, numa frase")),
