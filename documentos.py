@@ -1,0 +1,325 @@
+"""Documentos da 7 SevenCode por voz: o Jarvis monta contrato e proposta de software — no Word de verdade — e deixa
+pronto pra revisar, com a cabeça jurídica e contábil certa.
+
+Pedido dele (24/10/2026): "acesso total ao Office + ensinar a montar documento, com conhecimento jurídico e contábil,
+foco em contrato/proposta de SOFTWARE. Eu pedir 'olha os docs da 7SevenCode' e o Jarvis saber o que pode / o que não
+pode e como montar."
+
+Como funciona (sempre com a chave de IA que ele já tem — Groq/Gemini):
+  1. Ele fala "monta um contrato de software pro condomínio X" / "faz uma proposta do Porthon pra administradora Y" /
+     "o que pode num contrato de software?".
+  2. O cérebro escreve o documento NO PADRÃO (ver a base especialidades/documentos-juridico-contabil.md + o que ele
+     sabe da 7 SevenCode em conhecimento/7sevencode.md): as cláusulas/seções certas, sem prometer o que não pode, com
+     LGPD quando trata dado pessoal, e deixando [campos pra preencher] no que não sabe (CPF, valor fechado) em vez de
+     inventar.
+  3. Salva em Documentos/7 SevenCode/AAAA-MM-DD-<assunto>.docx, ABRE no Word (Office de verdade, pra ele editar e
+     assinar), copia o texto pra área de transferência e mostra o resumo no HUD.
+
+"o que pode / o que não pode / me explica os docs" → responde com a cabeça da base, sem gerar arquivo.
+
+NÃO é parecer jurídico nem contábil: é documento BASE pra revisar. Enquanto a 7 SevenCode recebe como PF, o Jarvis não
+promete nota fiscal — avisa que nota é o gatilho pra abrir o CNPJ.
+"""
+import asyncio
+import json
+import os
+import re
+import unicodedata
+from datetime import date
+from pathlib import Path
+
+import cerebro
+
+DEMORA = True
+RAIZ = Path(__file__).parent
+# Vai pra pasta Documentos do Windows, dentro de "7 SevenCode" (onde ele guarda as coisas da empresa).
+PASTA = Path(os.path.expanduser("~")) / "Documents" / "7 SevenCode"
+
+PALETA = {"fundo": "#17191f", "azul": "#0479da", "texto": "#1a1a1a", "apoio": "#555"}
+
+
+def _sa(t):
+    return "".join(c for c in unicodedata.normalize("NFD", (t or "").lower()) if unicodedata.category(c) != "Mn")
+
+
+def _slug(t):
+    s = re.sub(r"[^a-z0-9]+", "-", _sa(t)).strip("-")
+    return (s or "documento")[:40]
+
+
+# ---------------------------------------------------------------- entender o pedido
+# gerar um documento: "monta um contrato", "faz uma proposta de software", "elabora um termo"
+GERAR = re.compile(
+    r"\b(?:cria?r?|faz(?:er)?|monta?r?|gera?r?|escreve[r]?|prepara?r?|elabora?r?|redig[ei]r?|bola?r?|refaz(?:er)?|"
+    r"atualiza?r?|revisa?r?)\b.{0,40}?"
+    r"\b(contrato|proposta(?:\s+comercial)?|documento|termo(?:\s+de\s+uso)?|minuta|acordo|recibo|or[çc]amento\s+formal)\b",
+    re.I)
+# explicar / mostrar: "o que pode num contrato", "me explica os docs da 7sevencode", "quais documentos a gente tem"
+EXPLICAR = re.compile(
+    r"\b(?:o que (?:pode|n[aã]o pode|deve|precisa|tem que)|o que vai|como (?:monta|faz|escrev|é)|me explica|"
+    r"explica|quais|que)\b.{0,40}?\b(contrato|proposta|documento|termo|cl[aá]usul\w*|minuta)\b"
+    r"|\b(?:olha|v[eê]|mostra|quais s[aã]o)\b.{0,25}?\bdoc(?:umento)?s?\b.{0,20}?\b(?:da\s+)?(?:7\s*seven\s*code|sevencode|7code|empresa)\b",
+    re.I)
+
+TIPOS = [
+    (re.compile(r"\bproposta|or[çc]amento\s+formal\b", re.I), "proposta"),
+    (re.compile(r"\bcontrato|minuta|acordo|termo\b", re.I), "contrato"),
+    (re.compile(r"\brecibo\b", re.I), "recibo"),
+]
+
+
+def _tipo(t):
+    for rx, nome in TIPOS:
+        if rx.search(t):
+            return nome
+    return "documento"
+
+
+def _assunto(texto):
+    """Pra quem / sobre o quê: pega o resto depois de 'pro/pra/para/do/de ...' pra dar contexto ao cérebro."""
+    t = re.sub(r"\b(?:contrato|proposta(?:\s+comercial)?|documento|termo(?:\s+de\s+uso)?|minuta|acordo|recibo|"
+               r"or[çc]amento\s+formal|de\s+software|de\s+presta[çc][aã]o\s+de\s+servi[çc]o)\b", " ", texto, flags=re.I)
+    t = re.sub(r"\b(?:cria?r?|faz(?:er)?|monta?r?|gera?r?|escreve[r]?|prepara?r?|elabora?r?|redig[ei]r?|bola?r?|"
+               r"refaz(?:er)?|atualiza?r?|revisa?r?|jarvis|um|uma|o|a|me|pra mim)\b", " ", t, flags=re.I)
+    m = re.search(r"\b(?:pr[oa]|para|do|da|de|ao|a|com)\s+(?P<q>.+?)[.!?]*$", t, re.I)
+    q = (m.group("q").strip() if m else t.strip())
+    q = re.sub(r"\s+", " ", q).strip(" ,.:-")
+    return q
+
+
+def entender(texto):
+    t = (texto or "").strip()
+    if GERAR.search(t):
+        return {"modo": "gerar", "tipo": _tipo(t), "assunto": _assunto(t)}
+    if EXPLICAR.search(t):
+        return {"modo": "explicar", "pergunta": t}
+    return None
+
+
+# ---------------------------------------------------------------- base de conhecimento
+def _conhecimento():
+    partes = []
+    for caminho in (RAIZ / "especialidades" / "documentos-juridico-contabil.md",
+                    RAIZ / "conhecimento" / "7sevencode.md"):
+        try:
+            partes.append(caminho.read_text(encoding="utf-8"))
+        except OSError:
+            pass
+    return "\n\n".join(partes)[:16000]
+
+
+PERSONA = (
+    "Você é o assessor de documentos da 7 SevenCode (software house do Rafael Bittencourt). Monta e revisa PROPOSTA "
+    "comercial e CONTRATO de software (desenvolvimento sob medida e/ou licença de uso SaaS), com cabeça jurídica e "
+    "contábil brasileira (Código Civil, CDC, LGPD, Lei do Software 9.609/98). Profissional, claro e direto, português "
+    "do Brasil, com as cláusulas/seções certas e sem juridiquês inútil. Regras duras: NÃO prometa resultado que não se "
+    "controla (posição no Google, aumento de vendas, zero bug); NÃO prometa nota fiscal (a empresa recebe como PF — "
+    "nota é o gatilho pra abrir CNPJ); em SaaS é LICENÇA de uso, o código é da 7 SevenCode; inclua cláusula de LGPD "
+    "sempre que o sistema tratar dado pessoal (o Porthon trata); nada de cláusula abusiva (CDC art. 51). O que você não "
+    "souber (CPF/CNPJ do cliente, valor fechado, prazo), deixe um campo visível entre colchetes tipo "
+    "[preencher: CPF do cliente] em vez de inventar.")
+
+
+def _esquema():
+    return ('{ "titulo": "título do documento", "subtitulo": "uma linha (partes/assunto/data)", '
+            '"secoes": [ { "titulo": "NOME DA SEÇÃO OU CLÁUSULA", "paragrafos": ["...", "..."], '
+            '"itens": ["ponto a", "ponto b"] } ], "campos": ["campos que ficaram pra preencher"], '
+            '"observacao": "aviso curto de que é documento base pra revisar" }')
+
+
+async def _gerar_doc(tipo, assunto):
+    alvo = {"proposta": "uma PROPOSTA COMERCIAL de software",
+            "contrato": "um CONTRATO de prestação de serviço / licença de uso de software",
+            "recibo": "um RECIBO de pagamento",
+            "documento": "o documento pedido (proposta ou contrato de software, o que fizer mais sentido)"}[tipo]
+    pedido = (f"Monte {alvo} da 7 SevenCode" + (f", para: {assunto}." if assunto else ".")
+              + " Use TUDO que souber da 7 SevenCode e do padrão. Preencha o que dá; o resto, [campos pra preencher]. "
+              "Responda SÓ o JSON no esquema: " + _esquema())
+    bruto = await cerebro.completar(
+        [{"role": "system", "content": PERSONA + "\n\nBASE (padrão + dados reais da empresa):\n" + _conhecimento()},
+         {"role": "user", "content": pedido}],
+        json_mode=True, temperatura=0.3, max_tokens=2200, dificil=True)
+    try:
+        d = json.loads(bruto[bruto.index("{"):bruto.rindex("}") + 1])
+    except (ValueError, json.JSONDecodeError):
+        return None
+    d["secoes"] = [s for s in (d.get("secoes") or []) if isinstance(s, dict)]
+    return d if d.get("titulo") and d["secoes"] else None
+
+
+# ---------------------------------------------------------------- render + salvar no Word
+def _esc(t):
+    return (str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def _html(doc):
+    hoje = date.today().strftime("%d/%m/%Y")
+    secoes = []
+    for i, s in enumerate(doc["secoes"], 1):
+        corpo = "".join(f"<p>{_esc(p)}</p>" for p in (s.get("paragrafos") or []) if str(p).strip())
+        itens = [str(x) for x in (s.get("itens") or []) if str(x).strip()]
+        if itens:
+            corpo += "<ul>" + "".join(f"<li>{_esc(x)}</li>" for x in itens) + "</ul>"
+        titulo = _esc(s.get("titulo") or f"Seção {i}")
+        secoes.append(f'<h2>{titulo}</h2>{corpo}')
+    campos = [str(c) for c in (doc.get("campos") or []) if str(c).strip()]
+    bloco_campos = ("<div class='campos'><strong>A preencher antes de enviar:</strong><ul>"
+                    + "".join(f"<li>{_esc(c)}</li>" for c in campos) + "</ul></div>") if campos else ""
+    obs = _esc(doc.get("observacao") or
+               "Documento base gerado pela 7 SevenCode — revise antes de enviar. Não substitui advogado/contador.")
+    assinaturas = (
+        "<div class='assin'><div class='linha'>7 SevenCode — Rafael Bittencourt</div>"
+        "<div class='linha'>Contratante</div></div>")
+    return f"""<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
+<style>
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; color: {PALETA['texto']}; max-width: 720px; margin: 40px auto;
+          line-height: 1.55; font-size: 11pt; }}
+  .topo {{ border-bottom: 3px solid {PALETA['azul']}; padding-bottom: 10px; margin-bottom: 18px; }}
+  .marca {{ color: {PALETA['azul']}; font-size: 20pt; font-weight: 700; letter-spacing: .5px; }}
+  .marca small {{ color: {PALETA['apoio']}; font-weight: 400; font-size: 10pt; }}
+  h1 {{ font-size: 16pt; margin: 6px 0 2px; }}
+  .sub {{ color: {PALETA['apoio']}; margin: 0 0 4px; }}
+  .data {{ color: {PALETA['apoio']}; font-size: 9pt; }}
+  h2 {{ color: {PALETA['azul']}; font-size: 12pt; margin: 20px 0 6px; }}
+  p {{ margin: 6px 0; text-align: justify; }}
+  ul {{ margin: 6px 0; }}
+  .campos {{ background: #eef5fd; border-left: 4px solid {PALETA['azul']}; padding: 8px 14px; margin: 18px 0; font-size: 10pt; }}
+  .assin {{ display: flex; gap: 40px; margin-top: 50px; }}
+  .assin .linha {{ flex: 1; border-top: 1px solid #333; padding-top: 6px; text-align: center; font-size: 9pt; }}
+  .obs {{ color: {PALETA['apoio']}; font-size: 8.5pt; margin-top: 26px; border-top: 1px solid #ddd; padding-top: 8px; }}
+</style></head><body>
+<div class="topo"><div class="marca">7 SevenCode <small>· software sob medida</small></div></div>
+<h1>{_esc(doc['titulo'])}</h1>
+<p class="sub">{_esc(doc.get('subtitulo') or '')}</p>
+<p class="data">Documento gerado em {hoje} — 7sevencode.com.br</p>
+{''.join(secoes)}
+{bloco_campos}
+{assinaturas}
+<p class="obs">{obs}</p>
+</body></html>"""
+
+
+def _texto(doc):
+    linhas = [doc["titulo"], doc.get("subtitulo") or "", ""]
+    for s in doc["secoes"]:
+        linhas.append((s.get("titulo") or "").upper())
+        for p in (s.get("paragrafos") or []):
+            if str(p).strip():
+                linhas.append(str(p))
+        for x in (s.get("itens") or []):
+            if str(x).strip():
+                linhas.append("• " + str(x))
+        linhas.append("")
+    campos = [str(c) for c in (doc.get("campos") or []) if str(c).strip()]
+    if campos:
+        linhas.append("A PREENCHER: " + "; ".join(campos))
+    return "\n".join(l for l in linhas).strip()
+
+
+def _salvar_e_abrir(doc):
+    """Escreve o .docx e abre no Word (Office de verdade). Fallback: .doc (HTML) que o Word também abre."""
+    PASTA.mkdir(parents=True, exist_ok=True)
+    base = PASTA / f"{date.today():%Y-%m-%d}-{_slug(doc['titulo'])}"
+    html = _html(doc)
+    # 1) Word de verdade via COM: abre o HTML e salva como .docx editável.
+    try:
+        import pythoncom
+        import win32com.client
+        pythoncom.CoInitialize()
+        tmp = base.with_suffix(".html")
+        tmp.write_text(html, encoding="utf-8")
+        destino = base.with_suffix(".docx")
+        word = win32com.client.DispatchEx("Word.Application")
+        word.Visible = True
+        d = word.Documents.Open(str(tmp))
+        d.SaveAs(str(destino), FileFormat=16)  # 16 = .docx (wdFormatDocumentDefault)
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        return destino, "word"
+    except Exception:
+        pass
+    # 2) Sem Word automatizável: grava .doc com o HTML — o Word (ou WordPad/navegador) abre.
+    destino = base.with_suffix(".doc")
+    try:
+        destino.write_text(html, encoding="utf-8")
+        os.startfile(str(destino))
+        return destino, "doc"
+    except Exception:
+        try:
+            alt = base.with_suffix(".html")
+            alt.write_text(html, encoding="utf-8")
+            os.startfile(str(alt))
+            return alt, "html"
+        except Exception:
+            return None, "erro"
+
+
+def _copiar(texto):
+    try:
+        import controle_pc
+        controle_pc.area_de_transferencia("copiar", texto)
+        return True
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------- executar
+def _explicar(pergunta):
+    persona = (PERSONA + "\n\nResponda à dúvida do Rafael sobre documentos da 7 SevenCode de forma direta e prática, em "
+               "tópicos curtos quando couber. Use a BASE.\n\nBASE:\n" + _conhecimento())
+    try:
+        resp = asyncio.run(cerebro.completar(
+            [{"role": "system", "content": persona}, {"role": "user", "content": pergunta}],
+            temperatura=0.35, max_tokens=800, dificil=True)).strip()
+    except Exception:
+        resp = ""
+    if not resp:
+        return "Não consegui montar a explicação agora, chefe. Tenta de novo?", []
+    limpo = re.sub(r"[*`#]+", "", resp)
+    cartao = {"titulo": "Documentos · 7 SevenCode", "destaque": "O que pode e como montar",
+              "linhas": [l.strip() for l in limpo.split("\n") if l.strip()][:20], "copiar": resp}
+    return "Sobre os documentos da 7 SevenCode, chefe: " + limpo.split("\n")[0][:200], [cartao]
+
+
+NOMES = {"proposta": "proposta", "contrato": "contrato", "recibo": "recibo", "documento": "documento"}
+
+
+def executar(p):
+    if p.get("modo") == "explicar":
+        return _explicar(p.get("pergunta") or "")
+
+    tipo = p.get("tipo", "documento")
+    assunto = p.get("assunto") or ""
+    try:
+        doc = asyncio.run(_gerar_doc(tipo, assunto))
+    except Exception:
+        doc = None
+    if not doc:
+        return (f"Não consegui montar o {NOMES[tipo]} agora, chefe. Tenta de novo, ou me diz pra quem e sobre o quê?", [])
+
+    caminho, como = _salvar_e_abrir(doc)
+    texto = _texto(doc)
+    copiou = _copiar(texto)
+
+    campos = [str(c) for c in (doc.get("campos") or []) if str(c).strip()]
+    linhas = [s.get("titulo", "") for s in doc["secoes"] if s.get("titulo")]
+    if campos:
+        linhas += ["", "A preencher: " + "; ".join(campos[:6])]
+    linhas.append("Pra mudar: \"tira a cláusula de…\", \"deixa o prazo em 30 dias\", \"inclui a parte de LGPD\".")
+    cartao = {"titulo": doc["titulo"], "destaque": doc.get("subtitulo") or NOMES[tipo].capitalize(),
+              "linhas": linhas, "copiar": texto}
+
+    onde = {"word": "e já abri no Word pra você revisar e assinar",
+            "doc": "e abri o arquivo pra você revisar",
+            "html": "e abri a prévia pra você",
+            "erro": "mas não consegui abrir o arquivo automaticamente"}[como]
+    nota = ""
+    if assunto and re.search(r"\bnota\s+fiscal|nota\b|nf\b", _sa(assunto)):
+        nota = " Lembrando: enquanto a empresa recebe como PF não tem nota fiscal — se o cliente exige nota, é o gatilho pra abrir o CNPJ."
+    fala = (f"Prontinho, chefe. Montei o {NOMES[tipo]} \"{doc['titulo']}\" {onde}"
+            + (", e o texto já tá copiado." if copiou else ".")
+            + (f" Deixei {len(campos)} campo{'s' if len(campos) != 1 else ''} pra você preencher." if campos else "")
+            + " É um documento base: revisa antes de enviar." + nota)
+    return fala, [cartao]

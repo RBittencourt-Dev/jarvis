@@ -110,6 +110,7 @@ PLANO = re.compile(r"\b(?:monta|montar|faz(?:er)?|cria|criar|me\s+(?:d[aá]|faz)
 PLANO_ATUAL = PASTA / "plano-atual.json"
 PAUTA_ATUAL = PASTA / "pauta-atual.json"
 POST_ATUAL = PASTA / "post-atual.json"
+PLANEJAMENTO = PASTA / "planejamento-marketing.json"  # o que a equipe (ex.: Ohanna) ditou de como funciona o marketing
 _FOCO = {"tipo": None, "quando": 0.0}  # o último que ele gerou/mexeu: "deixa só um" logo depois vale pra ele
 RECENTE = 900  # segundos
 
@@ -134,6 +135,22 @@ APAGAR_PLANO = re.compile(r"\b(?:apag[ae]r?|exclu[ia]r?|cancel[ae]r?|remov[ae]r?
                           r"(?:plano|marketing|posts?|postar)\b", re.I)
 VER_PLANO = re.compile(r"\b(?:mostra|me\s+mostra|qual\s+[eé]|como\s+(?:t[aá]|est[aá]|ficou)|l[eê]|me\s+fala|abre|v[eê])\b"
                        r".{0,12}?\b(?:o\s+|meu\s+)?plano\s+(?:de\s+marketing|de\s+posts?|do\s+porthon|atual)\b", re.I)
+
+# ---- "anota o planejamento de marketing" ditado por alguém (ex.: a Ohanna no colégio explica como funciona do jeito
+# dela; o Jarvis OUVE, anota FIELMENTE e vira lembrete). É diferente do plano de posts do Porthon aí de cima: aqui o
+# Jarvis não inventa conteúdo nenhum — ele só registra o que foi dito e agenda os avisos nos dias/horários falados.
+ANOTAR_PLAN = re.compile(
+    r"\b(?:anota|anotar|registra|registrar|guarda|guardar|grava|gravar|toma\s+nota|apont[ae]r?)\b.{0,30}?"
+    r"\b(?:planejamento|plano|rotina|calend[aá]rio|estrat[eé]gia|combinad\w*|como\s+funciona|o\s+que)\b.{0,20}?\bmarketing\b"
+    r"|\bmarketing\b.{0,25}?\b(?:funciona\s+assim|[eé]\s+assim|daqui|do\s+col[eé]gio|da\s+escola|aqui\s+[eé])\b"
+    r"|\banota\w*\b.{0,25}?\bmarketing\b"
+    r"|\banota\w*\b.{0,30}?\b(?:ohanna|oana|joana|a\s+menina\s+do\s+marketing)\b", re.I)
+VER_PLANEJAMENTO = re.compile(
+    r"\b(?:mostra|me\s+mostra|l[eê]|me\s+fala|v[eê]|qual|o\s+que\s+(?:t[aá]|tem|foi)\s+anotad\w*|abre)\b.{0,20}?"
+    r"\b(?:planejamento|anota[cç][aã]o|rotina|combinad\w*)\b.{0,15}?\bmarketing\b", re.I)
+APAGAR_PLANEJAMENTO = re.compile(
+    r"\b(?:apag|exclu|cancel|remov|delet|limp|esquec)\w*\b.{0,20}?"
+    r"\b(?:planejamento|anota[cç][aã]o|rotina|combinad\w*)\b.{0,15}?\bmarketing\b", re.I)
 NUMEROS = {"um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3, "quatro": 4, "cinco": 5, "seis": 6, "sete": 7}
 QTD = re.compile(r"\b(\d{1,2}|um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete)\s+(?:posts?|postage(?:m|ns)|"
                  r"publica[cç](?:[aã]o|[oõ]es)|reels?|vez(?:es)?|dias?)\b|\b(?:s[oó]|apenas|somente)\s+(\d{1,2}|um|uma|"
@@ -194,6 +211,13 @@ def _alvo_da_edicao(t):
 
 def entender(texto):
     t = texto or ""
+    # Planejamento DITADO pela equipe (Ohanna etc.) vem primeiro: é "anota o planejamento de marketing…", não o plano de posts.
+    if APAGAR_PLANEJAMENTO.search(t):
+        return {"modo": "apagar_planejamento"}
+    if VER_PLANEJAMENTO.search(t):
+        return {"modo": "ver_planejamento"}
+    if ANOTAR_PLAN.search(t):
+        return {"modo": "anotar_planejamento", "texto": t}
     if APAGAR_PLANO.search(NAO_E_PLANO.sub(" ", t)):
         return {"modo": "apagar_plano"}
     if VER_PLANO.search(t):
@@ -488,6 +512,165 @@ _PREFIXO_LEMBRETE = "Chefe, hoje é dia de postar no Porthon"
 _DIAS_IDX = {"segunda": 0, "terca": 1, "quarta": 2, "quinta": 3, "sexta": 4, "sabado": 5, "domingo": 6}
 
 
+# ================================================================ planejamento DITADO (ex.: a Ohanna no colégio)
+# A pessoa explica o marketing com as palavras dela; o Jarvis anota FIEL (sem inventar) e agenda os avisos.
+_PREFIXO_PLANEJAMENTO = "Chefe, lembrete do marketing"
+
+PEDIDO_ANOTAR = """Alguém da equipe de marketing ditou, com as próprias palavras, COMO FUNCIONA o marketing (de um \
+colégio ou empresa) e o que o Jarvis precisa lembrar e fazer. Sua tarefa é ANOTAR FIELMENTE o que a pessoa disse — sem \
+inventar nada, sem trocar as decisões dela, sem acrescentar ideias suas. Apenas organize.
+
+O que a pessoa disse:
+\"\"\"{texto}\"\"\"
+
+Responda SÓ um JSON, em português do Brasil:
+{{
+  "titulo": "um título curto, ex.: 'Marketing do Colégio'",
+  "resumo": ["frases curtas e fiéis do que ela explicou: regras, responsáveis, canais, rotina, o que postar"],
+  "compromissos": [
+    {{ "o_que": "a tarefa ou aviso, do jeito que ela falou",
+       "dia": "segunda/terça/quarta/quinta/sexta/sábado/domingo se for TODA semana nesse dia, senão deixe vazio",
+       "data": "AAAA-MM-DD se for uma data específica, senão vazio",
+       "horario": "HH:MM" }}
+  ]
+}}
+Regra: em "compromissos" só entra o que tem QUANDO acontecer (um dia da semana ou uma data) — é isso que vira lembrete \
+falado. O resto vai pro "resumo". Se ela não disse o horário de um compromisso, use "09:00". Hoje é {hoje}."""
+
+
+def _hhmm(h):
+    m = re.search(r"(\d{1,2})(?:\s*[:h]\s*(\d{2}))?", str(h or ""))
+    return f"{int(m.group(1)):02d}:{m.group(2) or '00'}" if m else "09:00"
+
+
+def _agendar_avisos_do_planejamento(compromissos):
+    """Cada compromisso com dia-da-semana ou data vira uma fala programada: na hora, o Jarvis avisa."""
+    try:
+        import falas_programadas as fp
+    except Exception:
+        return 0
+    for f in fp.todas():  # limpa os avisos do planejamento anterior pra não acumular
+        if (f.get("texto") or "").startswith(_PREFIXO_PLANEJAMENTO):
+            fp.apagar(f["id"])
+    n = 0
+    for c in compromissos:
+        o_que = str(c.get("o_que") or "").strip()
+        if not o_que:
+            continue
+        texto = f"{_PREFIXO_PLANEJAMENTO}: {o_que}"
+        data = str(c.get("data") or "").strip()
+        dia = _DIAS_IDX.get(_sa(c.get("dia", "")).strip())
+        try:
+            if re.match(r"^\d{4}-\d{2}-\d{2}$", data):
+                fp.salvar({"hora": _hhmm(c.get("horario")), "data": data, "texto": texto, "ativa": True})
+                n += 1
+            elif dia is not None:
+                fp.salvar({"hora": _hhmm(c.get("horario")), "dias": [dia], "texto": texto, "ativa": True})
+                n += 1
+        except Exception:
+            pass
+    return n
+
+
+def _limpar_compromisso(c):
+    return {"o_que": str(c.get("o_que") or "").strip()[:160], "dia": str(c.get("dia") or "").strip()[:12],
+            "data": str(c.get("data") or "").strip()[:10], "horario": _hhmm(c.get("horario"))}
+
+
+def _quando_falado(c):
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", c.get("data", "")):
+        return f"dia {c['data'][8:10]}/{c['data'][5:7]} às {c['horario']}"
+    if _DIAS_IDX.get(_sa(c.get("dia", "")).strip()) is not None:
+        return f"{c['dia']} às {c['horario']}"
+    return "sem horário"
+
+
+def _cartao_do_planejamento(dados):
+    resumo = [str(r).strip() for r in (dados.get("resumo") or []) if str(r).strip()]
+    comps = dados.get("compromissos") or []
+    linhas = list(resumo)
+    if comps:
+        linhas += ["", "Avisos marcados:"] + [f"• {c.get('o_que','')} — {_quando_falado(c)}" for c in comps]
+    linhas.append("Pra mudar: fala de novo \"anota o planejamento de marketing: …\", ou \"apaga o planejamento de marketing\".")
+    return {"titulo": "Planejamento de marketing · " + (dados.get("titulo") or "anotado"),
+            "destaque": f"{len(comps)} aviso{'s' if len(comps) != 1 else ''} marcado{'s' if len(comps) != 1 else ''}",
+            "linhas": linhas, "copiar": _texto_do_planejamento(dados)}
+
+
+def _texto_do_planejamento(dados):
+    linhas = ["PLANEJAMENTO DE MARKETING — " + (dados.get("titulo") or "").upper(), ""]
+    linhas += [f"- {r}" for r in (dados.get("resumo") or []) if str(r).strip()]
+    comps = dados.get("compromissos") or []
+    if comps:
+        linhas += ["", "Compromissos (viram lembrete):"]
+        linhas += [f"- {c.get('o_que','')} ({_quando_falado(c)})" for c in comps]
+    return "\n".join(linhas).strip()
+
+
+def _anotar_planejamento(texto):
+    # Só o gatilho, sem conteúdo ditado ainda: pede pra ditar em uma fala só.
+    miolo = re.sub(r"(?is)^.*?\b(?:anota\w*|registra\w*|guarda\w*|grava\w*|toma\s+nota|planejamento|marketing)\b[\s:,.-]*",
+                   "", texto).strip()
+    if len(re.sub(r"[^\wÀ-ÿ]", "", miolo)) < 12 and not re.search(r"\b(?:segunda|ter[cç]a|quarta|quinta|sexta|s[aá]bado|"
+                                                                  r"domingo|toda|todo|dia|hora|\d)\b", texto, re.I):
+        return ("Tô ouvindo, chefe. Pode ditar o planejamento numa fala só, tipo: \"anota o planejamento de marketing: "
+                "toda segunda a Ohanna posta no Instagram às 9h, quarta é dia de divulgar o cardápio, e no dia 5 tem a "
+                "campanha da matrícula\". Aí eu anoto e marco os avisos.", [])
+    try:
+        bruto = asyncio.run(cerebro.completar(
+            [{"role": "user", "content": PEDIDO_ANOTAR.format(texto=texto, hoje=date.today().strftime("%Y-%m-%d"))}],
+            json_mode=True, temperatura=0.2, max_tokens=1100, dificil=True))
+    except Exception:
+        bruto = ""
+    dados = _json_da_ia(bruto) or {}
+    resumo = [str(r).strip() for r in (dados.get("resumo") or []) if str(r).strip()][:20]
+    comps = [_limpar_compromisso(c) for c in (dados.get("compromissos") or []) if isinstance(c, dict) and c.get("o_que")][:20]
+    if not resumo and not comps:
+        return ("Não consegui captar o planejamento agora, chefe. Repete numa fala só, do jeito que ela falou, que eu anoto.", [])
+    dados = {"titulo": str(dados.get("titulo") or "Marketing").strip()[:60], "resumo": resumo,
+             "compromissos": comps, "atualizado": time.time()}
+    _gravar(PLANEJAMENTO, dados)
+    _salvar("planejamento-marketing", dados, _texto_do_planejamento(dados))
+    n = _agendar_avisos_do_planejamento(comps)
+    copiou = _copiar(_texto_do_planejamento(dados))
+    fala = ("Anotei o planejamento de marketing, chefe. "
+            + (f"Guardei {len(resumo)} ponto{'s' if len(resumo) != 1 else ''} do que a equipe explicou"
+               if resumo else "")
+            + (f" e marquei {n} aviso{'s' if n != 1 else ''} pra te lembrar na hora certa." if n else
+               ". Nenhum tinha dia/horário, então não marquei aviso — se quiser, me diz os dias.")
+            + (" Tá tudo na tela, e copiei pra você." if copiou else " Tá tudo na tela."))
+    return fala, [_cartao_do_planejamento(dados)]
+
+
+def _ver_planejamento():
+    dados = _ler(PLANEJAMENTO)
+    if not dados or (not dados.get("resumo") and not dados.get("compromissos")):
+        return ("Não tem planejamento de marketing anotado ainda, chefe. É só a pessoa ditar: \"anota o planejamento de "
+                "marketing: …\".", [])
+    return "O planejamento de marketing anotado tá aí na tela, chefe.", [_cartao_do_planejamento(dados)]
+
+
+def _apagar_planejamento():
+    n = 0
+    try:
+        import falas_programadas as fp
+        for f in fp.todas():
+            if (f.get("texto") or "").startswith(_PREFIXO_PLANEJAMENTO):
+                fp.apagar(f["id"])
+                n += 1
+    except Exception:
+        pass
+    tinha = bool(_ler(PLANEJAMENTO))
+    try:
+        PLANEJAMENTO.unlink()
+    except OSError:
+        pass
+    if not tinha and not n:
+        return "Não tinha planejamento de marketing anotado, chefe.", []
+    return ("Apaguei o planejamento de marketing anotado" + (f" e os {n} avisos dele." if n > 1 else
+            " e o aviso dele." if n else "."), [])
+
+
 def _agendar_lembretes_do_plano(plano):
     """Cria uma fala programada pra cada post do plano: no dia e horário, o Jarvis lembra com o tema pronto."""
     try:
@@ -658,6 +841,12 @@ def _editar_post(instrucao):
 
 # ---------------------------------------------------------------- executar
 def executar(p):
+    if p["modo"] == "anotar_planejamento":
+        return _anotar_planejamento(p.get("texto") or "")
+    if p["modo"] == "ver_planejamento":
+        return _ver_planejamento()
+    if p["modo"] == "apagar_planejamento":
+        return _apagar_planejamento()
     if p["modo"] == "quando":
         return MELHORES_HORARIOS["fala"], [MELHORES_HORARIOS["cartao"]]
     if p["modo"] == "dicas":
