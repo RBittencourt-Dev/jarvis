@@ -25,7 +25,7 @@ SITE = "https://7planner-system.vercel.app"
 AGENDAS = {"marketing": ("appointments", "Marketing"), "chromebook": ("chromebook_appointments", "Chromebooks"),
            "lab": ("lab_appointments", "Laboratório"), "maker": ("maker_appointments", "Maker"),
            "artes": ("artes_appointments", "Artes"), "auditorio": ("auditorio_appointments", "Auditório")}
-NO = {"marketing": "no Marketing", "chromebook": "nos Chromebooks", "lab": "no Laboratório", "maker": "no Maker",
+NO = {"marketing": "no Marketing", "chromebook": "na T.I (Chromebooks)", "lab": "no Laboratório", "maker": "no Maker",
       "artes": "em Artes", "auditorio": "no Auditório"}
 STATUS = {"pending": "pendente", "confirmed": "confirmado"}
 DIAS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
@@ -147,6 +147,12 @@ def _datas(t):
     """(inicio, fim, como dizer) do que ele falou; sem data = hoje."""
     hoje = date.today()
     t = _sa(t)
+    fim_do_mes = lambda d: (d.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    if re.search(r"\bmes\s+que\s+vem|proximo\s+mes", t):
+        ini = fim_do_mes(hoje) + timedelta(days=1)
+        return ini, fim_do_mes(ini), "no mês que vem"
+    if re.search(r"\bmes\b", t):
+        return hoje, fim_do_mes(hoje), "nesse mês"
     if re.search(r"semana\s+que\s+vem|proxima\s+semana", t):
         ini = hoje + timedelta(days=7 - hoje.weekday())
         return ini, ini + timedelta(days=4), "na semana que vem"
@@ -178,12 +184,29 @@ def _datas(t):
     return hoje, hoje, "hoje"
 
 
+# PC do colégio (pedido de 24/10): lá "agenda"/"agendamento" é sempre o 7planner, sem precisar dizer o nome.
+# Vale quando o 7planner tá conectado e o painel da SevenCode (agenda de reuniões do Radar) não existe neste PC.
+AGENDA_SOLTA = re.compile(r"\b(?:agenda|agendamentos?|agendad[oa]s?|reservas?|reservad[oa]s?)\b", re.I)
+CRIAR = re.compile(r"^(?:jarvis[ ,]*)?(?:agenda|agendar|agende|marca|marcar|marque|cria|criar|reserva|reservar)\s+(?:um|uma|pra|para|o|a)\b", re.I)
+
+
+def agenda_padrao():
+    import painel
+    return conectado() and not painel.configurado()
+
+
 def entender(texto):
     t = texto.strip()
     if ABRIR.match(t):
         return {"acao": "abrir"}
     if CONECTAR.search(t):
         return {"acao": "conectar"}
+    if AGENDA_SOLTA.search(t) and not CRIAR.match(t) and agenda_padrao():
+        salas = [k for k, rx in SALAS.items() if re.search(rx, t, re.I)]
+        if re.search(r"\bt\.?\s?i\b", t, re.I) and "chromebook" not in salas:
+            salas.append("chromebook")
+        ini, fim, dito = _datas(t)
+        return {"acao": "agenda", "inicio": ini.isoformat(), "fim": fim.isoformat(), "dito": dito, "salas": salas or None}
     do_sete = re.search(r"\b" + SETE + r"\b", t, re.I)
     salas = [k for k, rx in SALAS.items() if re.search(rx, t, re.I)]
     if do_sete or (salas and AGENDA_DE_SALA.search(t)):
