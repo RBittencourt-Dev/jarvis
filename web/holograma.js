@@ -220,36 +220,6 @@
     }, undefined, () => { if (atual === c) el.querySelector(".h-texto").textContent = "Não consegui carregar o modelo 3D, chefe."; });
   }
 
-  // ---------------------------------------------- corpo humano: vários órgãos .glb REAIS co-registrados, em raio-x
-  function montarCorpo(c) {
-    if (!T.GLTFLoader) { el.querySelector(".h-texto").textContent = "Modelo 3D indisponível (GLTFLoader não carregou)."; return; }
-    fetch(c.corpo).then((r) => r.json()).then((orgaos) => {
-      if (atual !== c) return;
-      el.classList.remove("carregando");
-      const loader = new T.GLTFLoader();
-      orgaos.forEach((o, i) => {
-        loader.load(o.arquivo, (gltf) => {
-          if (atual !== c) return;  // trocou de cena enquanto baixava
-          const cor = new T.Color(o.cor || "#4fe3ff");
-          const mat = new T.MeshPhongMaterial({ color: cor, emissive: cor.clone().multiplyScalar(0.35), transparent: true,
-            opacity: 0.4, side: T.DoubleSide, depthWrite: false, blending: T.AdditiveBlending, shininess: 80 });
-          const g = gltf.scene;
-          g.traverse((m) => { if (m.isMesh) m.material = mat; });
-          const centro = new T.Box3().setFromObject(g).getCenter(new T.Vector3());  // só pra ancorar o rótulo
-          g.scale.setScalar(0.001);  // os órgãos "nascem" do centro e crescem pro lugar (já estão co-registrados)
-          grupo.add(g);
-          const rot = document.createElement("div"); rot.className = "h-rot"; rot.textContent = o.nome;
-          rot.style.setProperty("--c", o.cor || "#4fe3ff"); el.append(rot);
-          const linha = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-          linha.setAttribute("fill", "none"); linha.setAttribute("stroke", o.cor || "#4fe3ff");
-          linha.setAttribute("stroke-width", "1"); linha.setAttribute("opacity", ".7"); svg.append(linha);
-          pecas.push({ p: { nome: o.nome, cor: o.cor }, g, mat, solido: false, base: new T.Vector3(), explode: new T.Vector3(),
-            ancora: centro, opBase: 0.4, op: 0.4, linhaBase: 0.5, aceso: false, nasce: 250 + i * 150, rot, linha, somou: false, i });
-        }, undefined, () => {});
-      });
-    }).catch(() => { if (atual === c) el.querySelector(".h-texto").textContent = "Não consegui carregar o corpo 3D, chefe."; });
-  }
-
   function montarPecas(lista) {
     lista.forEach((p, i) => {
       const cor = new T.Color(p.cor || "#4fe3ff");
@@ -376,7 +346,7 @@
     if (c.carregando) { if (!mesma) somH.liga(); limparCena(); arrancar(); return; }
     if (mesma && c.so_dados) { dados(c.dados); return; }
     limparCena();
-    if (c.corpo) montarCorpo(c); else if (c.modelo) montarModelo(c); else if (c.rede) montarRede(c.rede); else montarPecas(c.partes || []);
+    if (c.modelo) montarModelo(c); else if (c.rede) montarRede(c.rede); else montarPecas(c.partes || []);
     montarMenu(c);
     dados(c.dados);
     let raio = 2.2;
