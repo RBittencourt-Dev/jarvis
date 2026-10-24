@@ -32,6 +32,7 @@ STATUS = {"pending": "pendente", "confirmed": "confirmado"}
 DIAS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
 _horarios = {"em": 0.0, "mapa": {}}
 falhas = []  # agendas que não responderam na última leitura
+_vigia = {"espera": 0.0}  # até quando o vigiar fica quieto depois de um erro (evita martelar toda hora)
 
 
 def _sa(t):
@@ -94,7 +95,14 @@ def _acesso_sem_trava():
     s = cofre.pegar("7planner")
     if not (isinstance(s, dict) and s.get("refresh")):
         raise LookupError("sem login")
-    j = _auth({"refresh_token": s["refresh"]}, "refresh_token")
+    try:
+        j = _auth({"refresh_token": s["refresh"]}, "refresh_token")
+    except PermissionError:
+        # refresh inválido/vencido (ou corrompido por corrida antiga): desconecta de vez pra pedir reconexão,
+        # em vez de tentar o mesmo token podre toda leitura e todo minuto no vigiar.
+        cofre.apagar("7planner")
+        _token.update(valor=None, ate=0)
+        raise PermissionError("O acesso ao 7planner venceu; reconecta na aba 7planner.")
     s["refresh"] = j["refresh_token"]  # o Supabase troca o de renovação a cada uso
     cofre.guardar("7planner", s)
     _token.update(valor=j["access_token"], ate=time.time() + j.get("expires_in", 3600) - 60)
@@ -335,11 +343,21 @@ def _de_hoje(agendas):
 
 
 def vigiar(agora=None):
-    """[(fala, cartão)] do que avisar agora. Chamado a cada minuto pelo servidor."""
+    """[(fala, cartão)] do que avisar agora. Chamado a cada minuto pelo servidor; nunca estoura o laço."""
     cfg = _config()
-    if not cfg["ligado"] or not conectado():
+    if not cfg["ligado"] or not conectado() or time.time() < _vigia["espera"]:
         return []
-    agora = agora or datetime.now()
+    try:
+        return _vigiar(cfg, agora or datetime.now())
+    except PermissionError:
+        return []  # desconectou (token vencido): fica quieto até ele reconectar
+    except Exception as e:
+        _vigia["espera"] = time.time() + 300  # deu ruim (internet?): não insiste todo minuto
+        print("7planner vigiar falhou:", str(e)[:120])
+        return []
+
+
+def _vigiar(cfg, agora):
     e, saida = _estado(), []
     if not e["resumo"] and agora.strftime("%H:%M") >= cfg["resumo"]:
         e["resumo"] = True
