@@ -1135,7 +1135,9 @@ async def comentando(comentarios, tarefa):
     import random
     yield {"trecho": falas.escolher(comentarios) + " ", "falar_ja": True}
     try:
-        resultado = await tarefa
+        resultado = await asyncio.wait_for(tarefa, 45)  # nunca fica preso no "Um instante"
+    except asyncio.TimeoutError:
+        resultado = ("Demorou demais pra responder, chefe. Pede de novo daqui a pouco.", [])
     except Exception as e:  # antes o erro matava a resposta e ele ficava mudo depois do "Deixa eu ver"
         import traceback
         traceback.print_exc()

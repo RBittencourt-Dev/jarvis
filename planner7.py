@@ -9,6 +9,7 @@ Voz: "o que tem no 7planner amanhã", "agenda do auditório hoje", "quem agendou
 "agendamentos da semana no seven planner", "abre o 7planner".
 """
 import re
+import threading
 import time
 import unicodedata
 from datetime import date, timedelta
@@ -30,6 +31,7 @@ NO = {"marketing": "no Marketing", "chromebook": "na T.I (Chromebooks)", "lab": 
 STATUS = {"pending": "pendente", "confirmed": "confirmado"}
 DIAS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
 _horarios = {"em": 0.0, "mapa": {}}
+falhas = []  # agendas que não responderam na última leitura
 
 
 def _sa(t):
@@ -78,7 +80,15 @@ def sair():
 _token = {"valor": None, "ate": 0.0}
 
 
+_trava_token = threading.Lock()
+
+
 def _acesso():
+    with _trava_token:  # o aviso de 1 em 1 min e uma pergunta ao mesmo tempo: renova uma vez só
+        return _acesso_sem_trava()
+
+
+def _acesso_sem_trava():
     if _token["valor"] and time.time() < _token["ate"]:
         return _token["valor"]
     s = cofre.pegar("7planner")
@@ -92,7 +102,7 @@ def _acesso():
 
 
 def _get(tabela, params, token=None):
-    r = httpx.get(f"{URL}/rest/v1/{tabela}", params=params, timeout=20,
+    r = httpx.get(f"{URL}/rest/v1/{tabela}", params=params, timeout=httpx.Timeout(10, connect=5),
                   headers={"apikey": ANON, "Authorization": f"Bearer {token or _acesso()}"})
     r.raise_for_status()
     return r.json()
@@ -109,15 +119,27 @@ def _mapa_de_horarios():
 
 def agendamentos(inicio, fim, agendas=None):
     """[{agenda, data, inicio, fim, quem, setor, descricao, status}] de inicio a fim (datas), sem os cancelados."""
+    from concurrent.futures import ThreadPoolExecutor
+    token = _acesso()  # um token só pra todas: renovar em paralelo queimaria o refresh (o Supabase troca a cada uso)
     horarios = _mapa_de_horarios()
     saida = []
-    for chave in agendas or AGENDAS:
-        tabela, nome = AGENDAS[chave]
+    falhas.clear()
+
+    def ler(chave):
         try:
-            linhas = _get(tabela, {"select": "date,time_slot_id,time_slot_ids,description,status,user_id",
-                                   "and": f"(date.gte.{inicio},date.lte.{fim})", "status": "neq.cancelled", "order": "date"})
+            return chave, _get(AGENDAS[chave][0], {"select": "date,time_slot_id,time_slot_ids,description,status,user_id",
+                                                   "and": f"(date.gte.{inicio},date.lte.{fim})", "status": "neq.cancelled",
+                                                   "order": "date"}, token)
         except httpx.HTTPStatusError:
-            continue  # agenda que a conta dele não enxerga
+            return chave, []  # agenda que a conta dele não enxerga
+        except httpx.HTTPError:
+            falhas.append(AGENDAS[chave][1])  # demorou/caiu: segue com as outras e avisa
+            return chave, []
+
+    with ThreadPoolExecutor(6) as pool:  # as 6 agendas juntas: 1 espera em vez de 6
+        lidas = list(pool.map(ler, agendas or AGENDAS))
+    for chave, linhas in lidas:
+        nome = AGENDAS[chave][1]
         for a in linhas:
             ids = [i for i in (a.get("time_slot_ids") or [a.get("time_slot_id")]) if i in horarios]
             faixas = sorted(horarios[i] for i in ids)
@@ -127,7 +149,7 @@ def agendamentos(inicio, fim, agendas=None):
     pessoas = {x["user_id"] for x in saida if x["user_id"]}
     nomes = {}
     if pessoas:  # profiles à parte: user_id aponta pro auth.users, o banco não junta sozinho
-        for p in _get("profiles", {"select": "id,full_name,sector", "id": "in.(" + ",".join(pessoas) + ")"}):
+        for p in _get("profiles", {"select": "id,full_name,sector", "id": "in.(" + ",".join(pessoas) + ")"}, token):
             nomes[p["id"]] = (p.get("full_name") or "", p.get("sector") or "")
     for x in saida:
         x["quem"], x["setor"] = nomes.get(x.pop("user_id"), ("", ""))
@@ -244,13 +266,15 @@ def executar(p):
         return (f"Não consegui falar com o 7planner agora: {str(e)[:80]}",)
     onde = " e ".join(NO[s] for s in p["salas"]) if p.get("salas") else "no 7planner"
     varios = p["inicio"] != p["fim"]
+    aviso = f" Não consegui ler {', '.join(falhas)} agora, a internet tá lenta." if falhas else ""
     if not lista:
-        return (f"Nada agendado {onde} {p['dito']}, chefe.",)
+        return (f"Nada agendado {onde} {p['dito']}, chefe.{aviso}",)
     n = len(lista)
     fala = f"{p['dito'].capitalize()}, {n} agendamento{'s' if n > 1 else ''} {onde}. "
     fala += ". ".join(_fala_de(x, varios) for x in lista[:6]) + "."
     if n > 6:
         fala += f" E mais {n - 6}, tão no cartão."
+    fala += aviso
     linhas = [(f"{date.fromisoformat(x['data']):%d/%m} " if varios else "") + f"{x['inicio']}–{x['fim']} · {x['agenda']} · "
               f"{x['quem'] or '?'}" + (f" ({x['setor']})" if x["setor"] else "") + (f" — {x['descricao'][:80]}" if x["descricao"] else "")
               + (" · pendente" if x["status"] == "pendente" else "") for x in lista[:30]]
