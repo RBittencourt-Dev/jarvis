@@ -827,7 +827,15 @@ async function falarBlocos(blocos) {
   const voz = filaDeVoz();
   const meu = { voz };
   emAndamento = meu;
-  for (const b of blocos) voz.adicionar(b.fala, () => { if (b.fala) escrever(b.fala); if (b.cartao) mostrarCartao(b.cartao); });
+  for (const b of blocos) {
+    voz.adicionar(b.fala, () => { if (b.fala) escrever(b.fala); if (b.cartao) mostrarCartao(b.cartao); });
+    // varredura de segurança que achou falhas: abre o sim/não pra mandar o Claude corrigir (voz ou botão)
+    if (b.pendente) voz.adicionar(b.pendente.fala || "Confirma, chefe? É só dizer sim ou não.", () => {
+      $("aut-nome").textContent = b.pendente.nome.replace("_", " ");
+      $("aut-args").textContent = Object.values(b.pendente.args).join("\n\n");
+      $("autorizacao").hidden = false;
+    });
+  }
   ouvir();
   await voz.terminar();
   if (emAndamento !== meu) return;
@@ -835,6 +843,7 @@ async function falarBlocos(blocos) {
   emAndamento = null;
   ocupado = false;
   ouvir();
+  if (!$("autorizacao").hidden) estado("ouvindo", "Diga sim ou não");
 }
 
 // avisa o servidor que a tela está aberta, para as palmas não abrirem outra

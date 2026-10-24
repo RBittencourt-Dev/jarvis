@@ -90,6 +90,18 @@ def _perguntar(tid):
     t["fim"] = time.time()
 
 
+def iniciar_pergunta(pedido, dono=None):
+    """Como executar() em modo perguntar, mas DEVOLVE o tid e marca o 'dono' do resultado.
+    Quando 'dono' está setado (ex.: "seguranca"), novidades() daqui NÃO conta esse resultado —
+    quem lê tarefas[tid] e avisa é o módulo dono (o seguranca junta com o Strix e oferece a correção)."""
+    ultimo_projeto["chave"] = pedido["projeto"]
+    tid = str(uuid.uuid4())[:8]
+    tarefas[tid] = {**pedido, "modo": "perguntar", "estado": "trabalhando",
+                    "inicio": time.time(), "avisado": False, "dono": dono}
+    threading.Thread(target=_perguntar, args=(tid,), daemon=True).start()
+    return tid
+
+
 def executar(pedido):
     """Chamado depois do "sim" do Rafael."""
     ultimo_projeto["chave"] = pedido["projeto"]
@@ -115,8 +127,8 @@ def novidades():
     """Respostas que chegaram e ainda não foram contadas (cada uma é contada uma vez)."""
     prontas = []
     for t in tarefas.values():
-        if t["estado"] == "trabalhando" or t["avisado"]:
-            continue
+        if t["estado"] == "trabalhando" or t["avisado"] or t.get("dono"):
+            continue  # com 'dono' é o módulo dono (ex.: seguranca) que conta e oferece a correção
         t["avisado"] = True
         ok = t["estado"] == "pronto"
         prontas.append({

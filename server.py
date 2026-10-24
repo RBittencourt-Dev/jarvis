@@ -40,6 +40,7 @@ import celular
 import planner7
 import rede
 import claude_ponte
+import claude_conversa
 import ferramentas_extra
 import extensao
 import fontes
@@ -1771,6 +1772,18 @@ async def conversar(p: Pergunta):
         return em_linhas(sid, responder_ja("Limpei a tela, chefe. Tudo no lugar de novo."))
     if CONTINUAR_LENDO.match(p.texto.strip()) and noticias.ultimo.get("itens") and noticias.ultimo["lida"] < len(noticias.ultimo["itens"]):
         return em_linhas(sid, responder_ja(*noticias.resto()))
+    # modo "falar direto com o Claude": o Jarvis passa o microfone. Tudo que ele falar vai pro PRÓPRIO Claude
+    # (resposta real, com memória), menos os escapes acima (reiniciar/limpar). "volta pro Jarvis" sai do modo.
+    if claude_conversa.ativo(sid):
+        fala_c, cartao_c, _segue = await asyncio.to_thread(claude_conversa.falar, sid, p.texto)
+        return em_linhas(sid, responder_ja(fala_c, [cartao_c] if cartao_c else ()))
+    chave_claude = claude_conversa.entrar_pedido(p.texto)
+    if chave_claude:
+        nome_c = claude_conversa.entrar(sid, chave_claude)
+        return em_linhas(sid, responder_ja(
+            f"Prontinho, chefe. Agora você fala direto com o Claude no {nome_c} — quem te responde é ele. Começo só "
+            "lendo, sem mexer em nada; diga 'pode editar' quando quiser que ele altere o código, e 'volta pro Jarvis' "
+            "pra me chamar de volta. Pode mandar."))
     # "deixa eu ver X", "tu pode me mostrar X", "abra X"… → um jeito só (no meio de um diálogo a fala vai como foi dita:
     # pode ser o texto de uma mensagem)
     if not sessao.get("dialogo"):
@@ -2849,9 +2862,23 @@ async def pedir_confirmacao(pendente):
 
 @app.get("/api/novidades")
 def novidades():
-    """Respostas do Claude que chegaram enquanto o Rafael fazia outra coisa."""
+    """Respostas do Claude que chegaram enquanto o Rafael fazia outra coisa.
+
+    Varredura de segurança que ACHOU falhas vem com uma 'oferta': armo o pendente (claude, modo FAZER) na sessão
+    aberta e deixo o HUD mostrar o sim/não. No "sim", /api/decidir roda claude_ponte.executar e abre o Claude pra
+    corrigir (aprovando cada passo). Só a pasta local, nunca produção."""
     blocos = claude_ponte.novidades() + seguranca.novidades() + novidades_de_leads[:]
     novidades_de_leads.clear()
+    sid = SESSAO_ATUAL.get("sid")
+    sessao = sessoes.get(sid) if sid else None
+    for b in blocos:
+        oferta = b.pop("oferta", None)  # nunca vaza a oferta crua pro HUD
+        if not oferta:
+            continue
+        # só arma se tem uma sessão aberta e nada mais esperando "sim" (um pedido de cada vez)
+        if sessao is not None and not sessao.get("pendente"):
+            sessao["pendente"] = oferta
+            b["pendente"] = {"nome": oferta["nome"], "args": oferta["args"], "fala": oferta["fala"]}
     return {"blocos": blocos}
 
 

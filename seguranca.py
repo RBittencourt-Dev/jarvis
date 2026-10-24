@@ -95,7 +95,36 @@ def _ambiente_strix():
     return None
 
 
-_scans = {}  # tid -> {projeto, nome, estado, inicio, fim, avisado, resumo}
+_scans = {}      # tid -> {projeto, nome, estado, inicio, fim, avisado, resumo}  (corridas do Strix)
+_revisoes = {}   # tid (do claude_ponte) -> {projeto, nome, avisado}  (revisões de AppSec do Claude)
+
+# Palavras que indicam que a varredura REALMENTE achou algo que vale corrigir (pra só então oferecer o conserto).
+_ACHOU = re.compile(
+    r"\b(?:vulnerab\w*|idor|xss|csrf|sql\s*injection|inje[cç]\w*|exposi[cç]\w*|expost[oa]s?|"
+    r"cr[ií]tic[oa]s?|grav[ei]\w*|alto\s+risco|risco\s+alto|segredo\w*\s+(?:no|em)\s+c[oó]digo|"
+    r"chave\w*\s+expost\w*|senha\w*\s+expost\w*|falha\w*\s+de\s+seguran\w*)\b", re.I)
+_NADA = re.compile(r"\b(?:nenhuma?\s+vulnerab\w*|sem\s+(?:vulnerab\w*|achados?|falhas?)|"
+                   r"n[aã]o\s+(?:encontre\w*|achei|h[aá]|identifiquei)\s+\w*\s*(?:vulnerab\w*|falhas?|problemas?))\b", re.I)
+
+
+def _achou_vuln(texto):
+    t = texto or ""
+    return bool(_ACHOU.search(t)) and not _NADA.search(t)
+
+
+def _oferta_de_correcao(chave, nome):
+    """Monta o 'pendente' do tipo claude em modo FAZER: no "sim" do Rafael, o server roda claude_ponte.executar
+    e abre o Claude Code pra corrigir, aprovando cada passo. SÓ a pasta local, nunca produção."""
+    pedido = (f"Atue como especialista em segurança de aplicações (AppSec), DEFENSIVO. No projeto {nome}, CORRIJA as "
+              "vulnerabilidades apontadas na revisão de segurança (autenticação, autorização/IDOR, injeção, exposição "
+              "de dados, segredo no código, LGPD). Mostre cada alteração e PEÇA minha aprovação antes de aplicar. "
+              "Não toque em produção nem no Supabase.")
+    return {
+        "claude": {"modo": "fazer", "projeto": chave, "nome": nome, "pedido": pedido},
+        "nome": f"pedir ao Claude pra corrigir o {nome}",
+        "args": {"pedido": pedido},
+        "fala": f"Quer que eu peça pro Claude corrigir essas falhas no {nome}, chefe? Diz sim que eu mando ele consertar.",
+    }
 
 
 def _rodar_strix(tid, pasta, nome):
@@ -136,7 +165,9 @@ def executar(p):
     claude_ok = False
     try:
         if shutil.which("claude") and pasta.exists():
-            claude_ponte.executar({"modo": "perguntar", "projeto": chave, "nome": nome, "pedido": pedido_claude})
+            tid = claude_ponte.iniciar_pergunta(
+                {"projeto": chave, "nome": nome, "pedido": pedido_claude}, dono="seguranca")
+            _revisoes[tid] = {"projeto": chave, "nome": nome, "avisado": False}
             claude_ok = True
     except Exception:
         claude_ok = False
@@ -172,19 +203,53 @@ def executar(p):
 
 
 def novidades():
-    """Scans do Strix que terminaram e ainda não foram falados (o server junta com os do Claude em /api/novidades)."""
+    """Varreduras que terminaram e ainda não foram faladas — do Claude (revisão de AppSec) e do Strix (pentest).
+    Quando ACHOU vulnerabilidade, o bloco lista as falhas e carrega uma 'oferta': o server arma o pendente e o HUD
+    pergunta se pode acionar o Claude em modo FAZER pra corrigir. O server lê 'oferta' e não a repassa ao HUD."""
     prontas = []
+    ja_ofereci = False  # só um pendente por rodada (um pedido de "sim" de cada vez)
+
+    # 1) Revisões de AppSec do Claude (plan mode, só leu). Leem o resultado direto da tarefa do claude_ponte.
+    for tid, r in _revisoes.items():
+        if r["avisado"]:
+            continue
+        t = claude_ponte.tarefas.get(tid)
+        if not t or t.get("estado") == "trabalhando":
+            continue
+        r["avisado"] = True
+        ok = t.get("estado") == "pronto"
+        resposta = (t.get("resposta") or "").strip()
+        achou = ok and _achou_vuln(resposta)
+        linhas = [l for l in resposta.splitlines() if l.strip()][:8]
+        if ok:
+            estado = "Achei falhas pra corrigir" if achou else "Sem falhas aparentes"
+            fala = (f"Chefe, terminei a revisão de segurança do {r['nome']}. "
+                    + (claude_ponte.resumo_falado(resposta) if achou else "Não vi nada grave por ali."))
+        else:
+            estado, fala = "Problema", f"Chefe, a revisão de segurança do {r['nome']} teve um problema. {resposta[:200]}"
+        bloco = {"fala": fala, "cartao": {"titulo": f"Segurança · {r['nome']}", "destaque": estado,
+                                          "linhas": linhas or [resposta[:200] or "Sem resposta."]}}
+        if achou and not ja_ofereci:
+            bloco["oferta"] = _oferta_de_correcao(r["projeto"], r["nome"])
+            ja_ofereci = True
+        prontas.append(bloco)
+
+    # 2) Corridas do Strix (pentest com agentes, validou com prova de conceito).
     for s in _scans.values():
         if s["estado"] == "trabalhando" or s["avisado"]:
             continue
         s["avisado"] = True
         ok = s["estado"] == "pronto"
-        achou = s.get("achou")
+        achou = bool(s.get("achou"))
         titulo_estado = ("achou vulnerabilidades" if achou else "não achou vulnerabilidades") if ok else "teve um problema"
-        prontas.append({
+        bloco = {
             "fala": f"Chefe, o Strix terminou de varrer o {s['nome']} e {titulo_estado}. {s.get('resumo','')}",
             "cartao": {"titulo": f"Strix · {s['nome']}",
                        "destaque": ("Achados" if achou else "Limpo") if ok else "Problema",
                        "linhas": [s.get("resumo", ""), "Resultado completo em strix_runs (rode: strix view)."]},
-        })
+        }
+        if ok and achou and not ja_ofereci:
+            bloco["oferta"] = _oferta_de_correcao(s["projeto"], s["nome"])
+            ja_ofereci = True
+        prontas.append(bloco)
     return prontas
