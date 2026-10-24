@@ -47,16 +47,44 @@ def entender(texto):
             "nome": PROJETOS[chave][0], "pedido": pedido}
 
 
+def _ambiente_gratis():
+    """Claude Code apontado pro FreeLLMAPI (as IAs grátis: Gemini, Groq…), igual ao `freellmapi launch`.
+    None se o FreeLLMAPI não está instalado/ligado neste PC."""
+    import os
+    import cerebro
+    chave = cerebro.chave("freellmapi")
+    if not chave:
+        return None
+    cerebro.ligar_freellmapi()
+    env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+    env.update(ANTHROPIC_BASE_URL=cerebro.PROVEDORES["freellmapi"]["url"].removesuffix("/v1"), ANTHROPIC_AUTH_TOKEN=chave,
+               ANTHROPIC_MODEL="auto", ANTHROPIC_DEFAULT_OPUS_MODEL="auto", ANTHROPIC_DEFAULT_SONNET_MODEL="auto",
+               ANTHROPIC_DEFAULT_HAIKU_MODEL="auto", CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY="1")
+    return env
+
+
+def _rodar_claude(t, env=None):
+    r = subprocess.run(["claude", "-p", t["pedido"], "--output-format", "json", "--permission-mode", "plan",
+                        "--append-system-prompt", AVISO],
+                       cwd=PROJETOS[t["projeto"]][1], capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", timeout=15 * 60, creationflags=subprocess.CREATE_NO_WINDOW, env=env)
+    dados = json.loads(r.stdout) if r.stdout.strip().startswith("{") else {}
+    ok = bool(dados.get("result")) and not dados.get("is_error") and not r.returncode
+    return ok, (dados.get("result") or r.stderr or "O Claude não devolveu resposta.").strip()
+
+
 def _perguntar(tid):
+    """Linha de frente: o Claude pago (assinatura dele). Se ele falhar (cota acabou, sem login, fora do ar), o
+    Claude Code grátis assume o mesmo pedido pelo FreeLLMAPI (pedido dele de 24/10, pra segurança e programação)."""
     t = tarefas[tid]
     try:
-        r = subprocess.run(["claude", "-p", t["pedido"], "--output-format", "json", "--permission-mode", "plan",
-                            "--append-system-prompt", AVISO],
-                           cwd=PROJETOS[t["projeto"]][1], capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=15 * 60, creationflags=subprocess.CREATE_NO_WINDOW)
-        dados = json.loads(r.stdout) if r.stdout.strip().startswith("{") else {}
-        t.update(estado="erro" if dados.get("is_error") or r.returncode else "pronto",
-                 resposta=(dados.get("result") or r.stderr or "O Claude não devolveu resposta.").strip())
+        ok, resposta = _rodar_claude(t)
+        if not ok and (env := _ambiente_gratis()):
+            ok2, resposta2 = _rodar_claude(t, env)
+            if ok2:
+                ok, resposta = True, resposta2
+                t["gratis"] = True
+        t.update(estado="pronto" if ok else "erro", resposta=resposta)
     except Exception as e:
         t.update(estado="erro", resposta=str(e))
     t["fim"] = time.time()
@@ -92,8 +120,10 @@ def novidades():
         t["avisado"] = True
         ok = t["estado"] == "pronto"
         prontas.append({
-            "fala": f"Chefe, o Claude {'respondeu' if ok else 'teve um problema'} sobre o {t['nome']}. {resumo_falado(t['resposta'])}",
-            "cartao": {"titulo": f"Claude · {t['nome']}", "destaque": "Resposta" if ok else "Problema",
+            "fala": f"Chefe, o Claude{' grátis' if t.get('gratis') else ''} {'respondeu' if ok else 'teve um problema'} "
+                    f"sobre o {t['nome']}. {resumo_falado(t['resposta'])}",
+            "cartao": {"titulo": f"Claude{' grátis' if t.get('gratis') else ''} · {t['nome']}",
+                       "destaque": "Resposta" if ok else "Problema",
                        "linhas": [f"Pergunta: {t['pedido']}", *[l for l in t["resposta"].splitlines() if l.strip()][:6]]},
         })
     return prontas

@@ -74,6 +74,14 @@ AMPLIAR = re.compile(J + r"(?:amplia|ampliar|aumenta|abre|mostra|me\s+mostra|zoo
 FECHAR_PAINEL = re.compile(J + r"(?:fecha|fechar|tira|some\s+com)\s+(?:esse|este|o|a|essa)\s+"
                            r"(?:painel|pesquisa|leitura|foto|imagem|plano|resultado)" + FIM)
 FECHAR_TUDO = re.compile(J + r"(?:fecha|limpa|tira)\s+(?:todos\s+os\s+pain[eé]is|tudo\s+da\s+tela|a\s+tela\s+toda)" + FIM)
+# pedido dele (23/10): no PC também — "limpa a tela/interface/display", "volta ao inicial" = tudo some, volta ao começo.
+LIMPAR_DISPLAY = re.compile(J + r"(?:(?:limpa|limpar|fecha|fechar|reseta|resetar|zera|zerar|tira|apaga|esvazia)\s+"
+                            r"(?:a\s+|o\s+|as\s+|os\s+|essa\s+|esse\s+|tudo\s+d[ao]\s+|todo\s+o\s+|teu\s+|tua\s+|meu\s+|minha\s+)?"
+                            r"(?:tela|display|interface|hud|palco|pop-?ups?|not[ií]cias?)(?:\s+toda)?)"
+                            r"|volta(?:r)?\s+(?:tudo\s+)?ao\s+(?:estado\s+)?inicial|deixa\s+(?:tudo\s+)?limpo|limpa\s+tudo\b" + FIM)
+# "reinicia o Jarvis", "se reinicia", "reinicia você" (NÃO 'reinicia o computador' — isso é do sistema.py)
+REINICIAR_JARVIS = re.compile(J + r"(?:se\s+reinicia(?:r)?|(?:reinicia(?:r|e)?|reinicializa(?:r)?|reseta(?:r)?)\s+"
+                              r"(?:voc[eê](?:\s+mesmo)?|tu|ti|o\s+jarvis|a\s+si))" + FIM)
 # só no celular (tela pequena): "limpa a interface/o hud", "fecha/limpa tudo" = some com tudo que ele abriu lá.
 # No PC essas frases seguem como antes (pedido dele: "no PC tudo fica como antes").
 LIMPAR_CELULAR = re.compile(J + r"(?:fecha|fechar|limpa|limpar|tira|apaga)\s+(?:todos\s+os\s+pain[eé]is|tudo\s+da\s+tela|a\s+tela(?:\s+toda)?|"
@@ -187,6 +195,18 @@ APRESENTACAO = re.compile(
     r"(?:faz|fa[cç]a|cria|monta|me\s+faz)\s+(?:uma\s+)?apresenta[cç][aã]o\s+(?:hologr[aá]fica\s+|em\s+3\s*d\s+)?(?:de|do|da|dos|das|sobre)\s+(?P<b>.+?)|"
     r"(?:me\s+)?(?:mostra|mostrar|explica|explicar|apresenta|desmonta|abre)\s+(?:pra\s+mim\s+)?(?P<c>(?:as\s+|os\s+)?(?:camadas|partes|pe[cç]as|componentes|"
     r"estrutura|anatomia)\s+(?:d[aeo]s?|de\s+um[a]?|n[ao])\s+.+?|(?:a\s+|o\s+)?(?:terra|planeta|computador|pc)\s+por\s+dentro))" + FIM)
+# anatomia direta: "me mostra o coração", "me explica o cérebro", "mostra o corpo humano" (sem precisar dizer "em 3D").
+# "cérebro" seco fica com o núcleo neural (checado antes); aqui só "cérebro humano" e "explica/desmonta o cérebro".
+ANATOMIA = re.compile(
+    J + r"(?:me\s+)?(?:mostra|mostrar|explica|explicar|desmonta|desmontar|projeta|projetar|abre|ver|quero\s+ver|monta|montar|desenha)\s+"
+    r"(?:pra\s+mim\s+)?(?:o\s+|a\s+|os\s+|as\s+|um\s+|uma\s+|meu\s+|minha\s+)?"
+    # ATENÇÃO à ORDEM: específicas (raio-x, real) ANTES de "corpo" seco, senão "corpo" casa e bloqueia o resto.
+    r"(?P<parte>coracao|corpo\s+humano\s+real|corpo\s+(?:em\s+)?raio[\s-]?x|raio[\s-]?x|corpo\s+real|corpo\s+de\s+verdade|"
+    r"cerebro\s+humano|corpo\s+humano|corpo|pulmao|pulmoes|figado|rins?|estomago|intestinos?|"
+    r"esqueleto|ossos?|ossada|sistema\s+osseo|musculos?|musculatura|sistema\s+nervoso|nervos?|medula|"
+    r"cranio|caveira|mandibula|olho\s+humano|anatomia(?:\s+human\w*)?|sistema\s+digestivo|orgaos(?:\s+(?:do\s+)?(?:corpo|humano))?|torso)" + FIM)
+ANATOMIA_CEREBRO = re.compile(
+    J + r"(?:me\s+)?(?:explica|explicar|desmonta|desmontar|projeta|projetar)\s+(?:pra\s+mim\s+)?(?:o\s+)?cerebro\b" + FIM)
 HARDWARE = re.compile(
     J + r"(?:(?:me\s+)?(?:mostra|mostrar|abre|exibe|como\s+(?:t[aá]|est[aá])|quant[oa]s?\s+(?:de\s+)?|qua(?:l|is)\s+(?:[eé]\s+|s[aã]o\s+)?|diz|fala|me\s+diz|me\s+fala)\s*"
     r"(?:(?:o|a|os|as|meu|minha|meus|minhas|do|da|de|todos|todas|tudo|sobre)\s+)*(?:uso\s+(?:d[aoe]\s+)?)?)?(?:holograma\s+d[aoe]\s+)?"
@@ -261,6 +281,11 @@ def entender(texto):
         a = (m.group("a") or m.group("b") or m.group("c") or "").strip()
         i = _sa(texto).find(a)
         return ("apresentacao", texto[i:i + len(a)] if i >= 0 else a)
+    m = ANATOMIA.match(t)
+    if m:
+        return ("apresentacao", m.group("parte"))
+    if ANATOMIA_CEREBRO.match(t):
+        return ("apresentacao", "cerebro humano")
     m = RADAR_BUSCAR.match(t)
     if m:
         def original(x):

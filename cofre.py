@@ -47,18 +47,26 @@ def _abrir(dados: bytes) -> bytes:
         ctypes.windll.kernel32.LocalFree(saida.pbData)
 
 
-def _ler():
+def _ler(estrito=False):
+    """estrito=True (antes de gravar): cofre que existe mas não abre levanta erro, em vez de virar {} e a próxima
+    gravação apagar todas as chaves (achado do Claude na revisão de 23/10)."""
     if not ARQUIVO.exists():
         return {}
     try:
         return json.loads(_abrir(ARQUIVO.read_bytes()).decode("utf-8"))
     except Exception:
+        if estrito:
+            raise OSError("O cofre existe mas não abriu; não vou gravar por cima pra não perder as chaves.")
         return {}
 
 
 def _gravar(d):
     ARQUIVO.parent.mkdir(exist_ok=True)
-    ARQUIVO.write_bytes(_proteger(json.dumps(d, ensure_ascii=False).encode("utf-8")))
+    novo = ARQUIVO.with_suffix(".tmp")
+    novo.write_bytes(_proteger(json.dumps(d, ensure_ascii=False).encode("utf-8")))
+    if ARQUIVO.exists():
+        ARQUIVO.replace(ARQUIVO.with_suffix(".bak"))  # a versão anterior fica guardada
+    novo.replace(ARQUIVO)
 
 
 def pegar(nome, padrao=None):
@@ -68,14 +76,14 @@ def pegar(nome, padrao=None):
 
 def guardar(nome, valor):
     with _trava:
-        d = _ler()
+        d = _ler(estrito=True)
         d[nome] = valor
         _gravar(d)
 
 
 def apagar(nome):
     with _trava:
-        d = _ler()
+        d = _ler(estrito=True)
         if d.pop(nome, None) is not None:
             _gravar(d)
 

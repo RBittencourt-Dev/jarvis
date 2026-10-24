@@ -869,6 +869,11 @@ doServidor.onmessage = (m) => {
     for (const a of alvo) { cartoes.splice(cartoes.indexOf(a), 1); a.el.classList.add("saindo"); setTimeout(() => a.el.remove(), 400); }
     setTimeout(() => desenharLigacoes(null), 450);
   }
+  if (e.limpar_palco) {  // "limpa a tela": tira todos os cartões do HUD e fecha a página aberta, volta ao núcleo
+    for (const a of [...cartoes]) { cartoes.splice(cartoes.indexOf(a), 1); a.el.classList.add("saindo"); setTimeout(() => a.el.remove(), 400); }
+    setTimeout(() => desenharLigacoes(null), 450);
+    document.getElementById("ph-fechar")?.click();
+  }
   if (e.noticias) mostrarCartao({ id: e.noticias.id, onde: "aqui", titulo: `Notícias · ${e.noticias.tema}`,
     destaque: e.noticias.itens[0]?.titulo || "", imagens: e.noticias.itens.map((n) => n.imagem).filter(Boolean).slice(0, 4),
     linhas: e.noticias.itens.map((n, i) => `${i + 1}. ${n.titulo} (${n.fonte})`), rapido: false });

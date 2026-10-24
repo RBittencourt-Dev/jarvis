@@ -18,6 +18,7 @@ def _wmi():
         return _fixo
     cmd = ("$r=@{}; $r.ram=@(Get-CimInstance Win32_PhysicalMemory | Select DeviceLocator,BankLabel,Capacity,Speed,ConfiguredClockSpeed,Manufacturer,PartNumber);"
            "$r.slots=(Get-CimInstance Win32_PhysicalMemoryArray | Measure-Object -Property MemoryDevices -Sum).Sum;"
+           "$r.placa=Get-CimInstance Win32_BaseBoard | Select -First 1 Manufacturer,Product;"
            "$r.cpu=Get-CimInstance Win32_Processor | Select -First 1 Name,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed,L2CacheSize,L3CacheSize;"
            "$r.gpu=@(Get-CimInstance Win32_VideoController | Select Name,AdapterRAM,DriverVersion);"
            "$r.discos=@(Get-PhysicalDisk | Select FriendlyName,MediaType,Size,BusType); $r | ConvertTo-Json -Depth 4 -Compress")
@@ -194,12 +195,25 @@ def cena_disco():
             "passos": [{"fala": fala, "destaque": ["Chips de memória flash"], "explodir": True}]}, fala
 
 
+def placa_mae():
+    """O modelo real da placa-mãe deste PC (ex.: 'ASUS A520M'), lido do Windows."""
+    p = _wmi().get("placa") or {}
+    fab = (p.get("Manufacturer") or "").strip()
+    mod = (p.get("Product") or "").strip()
+    for marca in ("ASUS", "Gigabyte", "ASRock", "MSI", "Biostar", "Dell", "HP", "Lenovo", "Acer"):
+        if marca.lower() in fab.lower():
+            fab = marca
+            break
+    return (f"{fab} {mod}".strip()) or "?"
+
+
 def dados_tudo():
     r, pentes, modo, v = dados_ram()
     c, cpu, uso = dados_cpu()
     g = (_lista(_wmi().get("gpu")) or [{}])[0]
     d = dados_disco()
     linhas = [("Processador", (cpu.get("Name") or "?").strip().replace(" with Radeon Graphics", "")), ("Uso da CPU", f"{uso:.0f}%"),
+              ("Placa-mãe", placa_mae()),
               ("Memória RAM", f"{_gb(v.total)} · {modo}"), ("RAM em uso", f"{_gb(v.used)} ({v.percent:.0f}%)"),
               ("Vídeo", (g.get("Name") or "?").strip())]
     linhas += d["linhas"][:3]
@@ -207,35 +221,41 @@ def dados_tudo():
 
 
 def cena_tudo():
-    """"Me mostra o hardware do meu PC": o gabinete aberto com cada peça e o dado dela do lado."""
-    import apresentacoes
+    """Holograma do PC DELE: cada peça na FORMA real, dentro do gabinete, com os números ao vivo (reusa o montarPecas)."""
     d = dados_tudo()
     _, pentes, modo, v = dados_ram()
     _, cpu, uso = dados_cpu()
     g = (_lista(_wmi().get("gpu")) or [{}])[0]
     disco = dados_disco()
     nome_cpu = (cpu.get("Name") or "Processador").strip().replace(" with Radeon Graphics", "")
-    integrada = any(x in (g.get("Name") or "").lower() for x in ("radeon(tm) graphics", "uhd", "iris", "vega"))
-    rotulos = {"Processador": f"{nome_cpu} · {uso:.0f}%", "Memória RAM": f"RAM {_gb(v.total)} · {modo} · {v.percent:.0f}%",
-               "Placa de vídeo": f"{(g.get('Name') or 'Vídeo').strip()}{' (integrada)' if integrada else ''}",
-               "SSD": f"SSD · {disco['linhas'][0][1] if disco['linhas'] else ''}"}
-    partes = []
-    for p in apresentacoes.COMPUTADOR["partes"]:
-        if p["nome"] == "Placa de vídeo" and integrada:
-            continue  # vídeo integrado: não tem placa separada
-        p = dict(p)
-        p["nome"] = rotulos.get(p["nome"], p["nome"])
-        if p["nome"].startswith("RAM"):
-            p["cor"] = _cor_uso(v.percent) if v.percent >= 85 else p["cor"]
-        partes.append(p)
+    integrada = any(x in (g.get("Name") or "").lower() for x in ("radeon", "uhd", "iris", "vega", "graphics"))
+    placa = placa_mae()
+    discos_wmi = _lista(_wmi().get("discos"))
+    disco_nome = ((discos_wmi[0].get("FriendlyName") or "").strip() if discos_wmi else "") or "SSD"
+    cor_ram = _cor_uso(v.percent) if v.percent >= 85 else "#c77dff"
+    # formas corretas (forma aprovada no protótipo): gabinete fantasma + placa-mãe + CPU + cooler redondo + RAM baixa + SSD M.2.
+    # Sem placa de vídeo: este PC usa vídeo integrado (narrado nos passos).
+    partes = [
+        {"nome": "Gabinete", "forma": "caixa", "tam": [4.2, 2.4, 4.6], "cor": "#4fe3ff", "pos": [0, 1.0, 0.5], "fantasma": True, "sem_rotulo": True, "explode": [0, 0.8, 0]},
+        {"nome": f"Placa-mãe · {placa}" if placa != "?" else "Placa-mãe", "forma": "caixa", "tam": [3.0, 0.1, 3.0], "cor": "#2ee88a", "pos": [0, 0, 0], "explode": [0, -0.7, 0]},
+        {"nome": f"Processador · {nome_cpu}", "forma": "caixa", "tam": [0.62, 0.12, 0.62], "cor": "#ffd23d", "pos": [-0.5, 0.28, -0.5], "explode": [-1.3, 0.6, -0.9]},
+        {"nome": "Cooler · AMD (stock)", "forma": "cilindro", "tam": [0.5, 0.34], "cor": "#ff9b3d", "pos": [-0.5, 0.62, -0.5], "explode": [-1.5, 1.3, -1.0]},
+        {"nome": f"Memória · {_gb(v.total)} ({modo.lower()})", "forma": "caixa", "tam": [0.1, 0.55, 1.9], "cor": cor_ram, "pos": [0.82, 0.42, 0.2], "explode": [1.5, 0.9, 0.3]},
+        {"nome": f"SSD · {disco_nome}", "forma": "caixa", "tam": [2.2, 0.08, 0.6], "cor": "#7cff6b", "pos": [0.3, 0.1, 1.9], "explode": [0.6, -0.3, 1.7]},
+    ]
     nomes = [p["nome"] for p in partes]
-    pega = lambda prefixo: [n for n in nomes if n.startswith(prefixo)]
-    passos = [{"fala": f"Processador {nome_cpu}, {cpu.get('NumberOfCores', '?')} núcleos, a {uso:.0f} por cento agora.",
-               "destaque": pega(nome_cpu) + pega("Cooler"), "explodir": True},
-              {"fala": f"Memória: {_gb(v.total)} em {modo.lower()}, {v.percent:.0f} por cento em uso.", "destaque": pega("RAM"), "explodir": True},
-              {"fala": f"Vídeo: {rotulos['Placa de vídeo']}." + (" Ele usa um pedaço da RAM como memória de vídeo." if integrada else ""),
-               "destaque": pega(nome_cpu) if integrada else pega(rotulos["Placa de vídeo"]), "explodir": True},
-              {"fala": f"E o disco: {disco['linhas'][0][1] if disco['linhas'] else 'sem leitura'}.", "destaque": pega("SSD"), "explodir": True}]
+    pega = lambda pref: [n for n in nomes if n.startswith(pref)]
+    passos = [
+        {"fala": (f"A base de tudo, a placa-mãe: uma {placa}." if placa != "?" else "A base de tudo é a placa-mãe.") + " É nela que todas as peças se encaixam.",
+         "destaque": pega("Placa-mãe"), "explodir": True},
+        {"fala": f"O processador {nome_cpu}, {cpu.get('NumberOfCores', '?')} núcleos, agora a {uso:.0f} por cento. Em cima dele, o cooler da AMD tira o calor.",
+         "destaque": pega("Processador") + pega("Cooler"), "explodir": True},
+        {"fala": f"A memória: {_gb(v.total)} em {modo.lower()}, {v.percent:.0f} por cento em uso.", "destaque": pega("Memória"), "explodir": True},
+        {"fala": "O vídeo é integrado no próprio processador, chefe — você não tem placa de vídeo separada; ele usa um pedaço da RAM como memória de vídeo.",
+         "destaque": pega("Processador"), "explodir": True},
+        {"fala": f"E o armazenamento: o {disco_nome}.", "destaque": pega("SSD"), "explodir": True},
+        {"fala": "Fechando o gabinete, é o seu PC inteirinho. Pode girar com o mouse.", "destaque": nomes},
+    ]
     fala = "Teu PC por dentro, chefe, com os números ao vivo do lado."
     return {"titulo": "Este PC", "subtitulo": "HARDWARE AO VIVO", "partes": partes, "dados": d, "intro": fala, "passos": passos}, fala
 

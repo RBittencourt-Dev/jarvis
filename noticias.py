@@ -48,4 +48,29 @@ def executar(p):
     fala = f"As principais notícias{sobre}: " + " ".join(f"{i['titulo']}." for i in itens[:3])
     cartao = {"titulo": "Notícias" + (f" · {tema}" if tema else ""), "destaque": f"{len(itens)} manchetes",
               "links": [{"texto": f"{i['titulo']} ({i['fonte']})" if i["fonte"] else i["titulo"], "url": i["link"]} for i in itens]}
+    ultimo.update(itens=itens, lida=min(3, len(itens)), tema=tema)  # pra o "lê o resto"
+    return fala, [cartao]
+
+
+# memória da última leitura de notícias, pra "continua lendo" / "lê o resto"
+ultimo = {"itens": [], "lida": 0, "tema": ""}
+
+
+def resto(n=3):
+    """Lê as próximas n manchetes que ainda não foram lidas (contexto: "lê o resto das notícias")."""
+    itens = ultimo["itens"]
+    i = ultimo["lida"]
+    if not itens:
+        return "Não tem lista de notícias aberta, chefe. Pede as notícias primeiro.", []
+    if i >= len(itens):
+        return "Já li todas, chefe. Essas eram as últimas.", []
+    proximos = itens[i:i + n]
+    ultimo["lida"] = i + len(proximos)
+    faltam = len(itens) - ultimo["lida"]
+    fala = "Continuando: " + " ".join(f"{x['titulo']}." for x in proximos)
+    if faltam > 0:
+        fala += f" Ainda tem mais {faltam}, é só falar continua."
+    cartao = {"titulo": "Notícias" + (f" · {ultimo['tema']}" if ultimo["tema"] else ""),
+              "destaque": f"{ultimo['lida']} de {len(itens)}",
+              "links": [{"texto": f"{x['titulo']} ({x['fonte']})" if x["fonte"] else x["titulo"], "url": x["link"]} for x in proximos]}
     return fala, [cartao]

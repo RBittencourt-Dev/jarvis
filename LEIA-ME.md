@@ -197,3 +197,14 @@ Por voz: "ativa/desliga o não perturbe". Ele também avisa sozinho se o disco e
 - **Canva e Notion em um clique**: Configurações → Conectores → Conectar → autoriza no navegador. Sem Client ID.
 
 - **Música do artista** (21/10): "toca Tempo Perdido da Legião Urbana", "bota Evidências do Chitãozinho e Xororó" — ele separa música e artista e confere no Spotify. "Pagode gospel" / "Pagode Restaura" viraram gênero. "Pórton" falado = Porthon.
+
+## Marketing do Porthon (23/10)
+O Jarvis cria as postagens do Porthon no padrão da marca, pela voz da IA que ele já usa (Groq/Gemini). Fale:
+- **"cria um post pro Porthon sobre encomendas"** / "faz uma arte sobre a LGPD" / "escreve uma legenda sobre reserva de salão": ele escreve o gancho da arte, a linha de apoio, a legenda pronta e as hashtags; salva em `conteudo/porthon/`, **copia a legenda** pra área de transferência e **abre o Canva** pra você montar a arte e aprovar. Sem tema, ele rodízia os pilares de conteúdo.
+- **"monta a pauta da semana do Porthon"**: 7 posts com dia, tema e gancho.
+- **"monta um plano de marketing"** (ou "…com 1 post por semana, na quinta"): o plano do tamanho que você pedir, com lembretes nos dias/horários.
+
+**Tudo isso é editável (24/10)** — nada fica fixo no que a IA escolheu. O plano, a pauta e o último post ficam guardados (`conteudo/porthon/*-atual.json`) e você muda falando: "deixa só um post", "tira o de quinta", "passa o de terça pra 20h", "adiciona um post no domingo às 21h sobre reservas", "troca o tema de quarta pra ocorrências", "mostra o plano de marketing", "apaga esse plano" (apaga os lembretes junto). No post: "troca o título", "deixa a legenda mais curta", "muda o CTA pra…". Na mão: **Configurações → Marketing** (dia, horário, formato, tema, gancho, tirar/adicionar; ao salvar os lembretes acompanham). Nas **Falas programadas** agora tem botão **Editar**. Em vendas: depois de uma mensagem, "deixa ela mais curta", "mais formal", "sem emoji" reescreve a mesma.
+A identidade (tom, público, regras: nada de número/preço inventado, zero cara de robô) está em `marketing.py` → `IDENTIDADE`/`PILARES` — mexer ali muda o tom de tudo. Nunca posta sozinho no Instagram (publicar automático exige conta Business + app aprovado pela Meta): deixa pronto pra você publicar com um toque.
+
+**Canva automático (opcional):** com o Canva conectado (Configurações → Conectores) e **Canva Pro**, dá pra ele já preencher a arte sozinho. Ligue uma vez no `config.json`: `"canva_autofill_automatico": true`, `"canva_template_post": "<id do brand template>"` e `"canva_campos": {"gancho":"<campo do título>","apoio":"<campo de apoio>"}`. Sem isso, segue o caminho manual (abrir o Canva com a legenda pronta). Opcional também: `"canva_template_url"` pra abrir direto o seu modelo em vez da página de criar.

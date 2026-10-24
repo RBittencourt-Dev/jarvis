@@ -3,9 +3,9 @@
 Nada é gravado nem sai do PC enquanto ninguém chama: o volume de cada fatia de 20 ms vira
 detector de palma, e o Vosk (reconhecimento offline) só procura a palavra "Jarvis".
 
-Segundo plano: com a tela fechada, "Jarvis, abre o Spotify" é executado sem abrir nada.
-Só o trecho depois do nome é mandado pro Whisper da Groq (cerebro.transcrever) e o
-Jarvis responde pela caixa de som. "Jarvis" sozinho, ou duas palmas, abrem a tela.
+Pedido dele (23/10): NÃO responde mais em segundo plano (ficava se ativando sozinho). "Jarvis" (ou duas
+palmas) só ABRE a interface; quem ouve e responde é a tela. O código do segundo plano (segundo_plano/…)
+fica no arquivo, inativo, caso ele queira religar um dia.
 Palma = pico curto e bem acima do barulho de fundo. Duas palmas no intervalo
 certo abrem a janela (e ligam o servidor se ele estiver desligado).
 
@@ -145,14 +145,11 @@ def ouvir_o_nome():
                         httpx.post(URL + "/api/reouvir", timeout=2)
                     except Exception:
                         pass
-                print("chamaram pelo nome: a interface está aberta e ouvindo; o segundo plano fica quieto")
-            elif not cerebro.chave("groq"):
-                acordar("chamaram pelo nome: abrindo o Jarvis")  # sem Groq não há ouvido bom: abre a tela como antes
+                print("chamaram pelo nome: a interface está aberta e ouvindo")
             else:
-                try:
-                    segundo_plano(list(antes) + audio_da_espera)
-                except Exception as e:
-                    print("segundo plano falhou:", e)
+                # pedido dele (23/10): nada de responder em segundo plano (ficava se ativando sozinho).
+                # "Jarvis" (ou duas palmas) só ABRE a interface; quem ouve e responde é a tela.
+                acordar("chamaram pelo nome: abrindo o Jarvis")
             antes.clear()
             esvaziar_fila()  # o que entrou enquanto ele falava é a voz dele mesmo
 

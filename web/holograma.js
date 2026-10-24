@@ -15,6 +15,22 @@
   #holo.saindo { animation: holo-sai .45s ease-in forwards; }
   #holo canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
   #holo svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  #holo .h-menu { position: absolute; top: 70px; left: 18px; width: min(230px, 30%); max-height: 72%; overflow-y: auto; z-index: 3;
+    background: rgba(2, 18, 26, .72); border: 1px solid rgba(120, 240, 255, .25); border-radius: 12px; padding: 10px; display: none;
+    backdrop-filter: blur(4px); box-shadow: 0 0 24px rgba(0, 0, 0, .4); }
+  #holo .h-menu.ver { display: block; }
+  #holo .h-menu h4 { margin: 2px 0 7px; font: 700 10px Consolas, monospace; letter-spacing: .22em; color: #7fe8ff; }
+  #holo .h-menu h4:not(:first-child) { margin-top: 12px; border-top: 1px dashed rgba(120, 240, 255, .18); padding-top: 10px; }
+  #holo .h-menu button { display: block; width: 100%; text-align: left; margin: 3px 0; padding: 6px 9px; cursor: pointer;
+    font: 12px "Segoe UI", sans-serif; color: #d6fbff; background: rgba(120, 240, 255, .06); border: 1px solid rgba(120, 240, 255, .18);
+    border-radius: 7px; transition: all .15s; }
+  #holo .h-menu button:hover { background: rgba(120, 240, 255, .18); border-color: #4fe3ff; }
+  #holo .h-menu button.ativa { background: rgba(79, 227, 255, .22); border-color: #4fe3ff; color: #fff; }
+  #holo .h-menu button i { width: 9px; height: 9px; display: inline-block; border-radius: 50%; margin-right: 7px; vertical-align: middle; box-shadow: 0 0 6px currentColor; }
+  #holo .h-menu-btn { position: absolute; top: 18px; left: 18px; z-index: 4; width: 36px; height: 36px; cursor: pointer; border-radius: 9px;
+    background: rgba(2, 18, 26, .72); border: 1px solid rgba(120, 240, 255, .3); color: #7fe8ff; font-size: 16px; display: none; }
+  body.apresentando #holo .h-menu-btn { display: block; }
+  html.holo-celular #holo .h-menu { top: 58px; width: 46%; max-height: 40%; font-size: 11px; }
   #holo .h-titulo { position: absolute; top: 16px; left: 0; right: 0; text-align: center; font: 600 20px/1.2 "Segoe UI", sans-serif;
     letter-spacing: .32em; text-transform: uppercase; color: #8ff3ff; text-shadow: 0 0 18px #2ad4ff; pointer-events: none; }
   #holo .h-titulo small { display: block; margin-top: 6px; font: 11px Consolas, monospace; letter-spacing: .3em; color: #5fb8c8; }
@@ -100,7 +116,7 @@
   };
 
   // ------------------------------------------------------------ cena
-  let el, canvas, svg, ren, cena, cam, grupo, rede = null, raf = 0, atual = null;
+  let el, canvas, svg, ren, cena, cam, grupo, rede = null, raf = 0, atual = null, modeloAtual = null;
   let pecas = [], giroX = 0.32, giroY = 0, zoom = 7.5, zoomAlvo = 7.5, explode = 0, explodeAlvo = 0, arrastou = 0, inicio = 0, apertado = null;
 
   function montarDom() {
@@ -108,8 +124,10 @@
     el = document.createElement("div"); el.id = "holo";
     el.innerHTML = `<canvas></canvas><svg></svg><div class="h-scan"></div><div class="h-varre"></div>
       <div class="h-titulo"></div><div class="h-dados"></div><div class="h-texto"></div>
+      <button class="h-menu-btn" title="Partes">☰</button><div class="h-menu"></div>
       <div class="h-carrega">MONTANDO HOLOGRAMA</div><button class="h-fechar" title="Fechar">✕</button>`;
     document.body.append(el);
+    el.querySelector(".h-menu-btn").onclick = () => el.querySelector(".h-menu").classList.toggle("ver");
     canvas = el.querySelector("canvas"); svg = el.querySelector("svg");
     ren = new T.WebGLRenderer({ canvas, antialias: true, alpha: true });
     ren.setPixelRatio(Math.min(2, devicePixelRatio || 1));
@@ -173,8 +191,33 @@
       const c = grupo.children.pop();
       c.traverse?.((o) => { o.geometry?.dispose(); o.material?.dispose?.(); });
     }
-    rede = null;
+    rede = null; modeloAtual = null;
     el.querySelector(".h-dados").classList.remove("ver");
+  }
+
+  // ------------------------------------------------------------ modelo 3D real (.glb), ex.: corpo humano em raio-x
+  function montarModelo(c) {
+    if (!T.GLTFLoader) { el.querySelector(".h-texto").textContent = "Modelo 3D indisponível (GLTFLoader não carregou)."; return; }
+    new T.GLTFLoader().load(c.modelo, (gltf) => {
+      if (atual !== c) return;  // trocou de cena enquanto baixava
+      const raiox = c.estilo === "raiox";
+      const obj = gltf.scene;
+      obj.traverse((o) => {
+        if (!o.isMesh) return;
+        o.material = raiox
+          ? new T.MeshPhongMaterial({ color: 0x4aa8ff, emissive: 0x1f6fd0, transparent: true, opacity: 0.3,
+              side: T.DoubleSide, depthWrite: false, blending: T.AdditiveBlending, shininess: 70 })
+          : new T.MeshStandardMaterial({ color: 0xd8c6b0, roughness: 0.8, metalness: 0 });
+      });
+      const box = new T.Box3().setFromObject(obj);
+      const size = box.getSize(new T.Vector3()), centro = box.getCenter(new T.Vector3());
+      const escala = 4.8 / (Math.max(size.x, size.y, size.z) || 1);
+      obj.scale.setScalar(escala);
+      obj.position.copy(centro).multiplyScalar(-escala);
+      grupo.add(obj); modeloAtual = obj;
+      el.classList.remove("carregando");
+      zoomAlvo = c.zoom || 11;
+    }, undefined, () => { if (atual === c) el.querySelector(".h-texto").textContent = "Não consegui carregar o modelo 3D, chefe."; });
   }
 
   function montarPecas(lista) {
@@ -182,9 +225,13 @@
       const cor = new T.Color(p.cor || "#4fe3ff");
       const geo = geometria(p);
       const fantasma = !!p.fantasma;
+      const solido = !!p.solido;  // órgãos/coisas "de verdade": preenchimento opaco, não o wireframe fantasma
       // estilo "contorno" (igual o globo holograma): preenchimento quase transparente, contorno forte e uma grade fina
-      const mat = new T.MeshPhongMaterial({ color: cor, emissive: cor.clone().multiplyScalar(0.5), transparent: true, opacity: fantasma ? 0.02 : 0.07,
-        shininess: 90, side: T.DoubleSide, depthWrite: false, blending: T.AdditiveBlending });
+      const mat = solido
+        ? new T.MeshPhongMaterial({ color: cor, emissive: cor.clone().multiplyScalar(0.12), transparent: true, opacity: 0.9,
+            shininess: 35, side: T.FrontSide, depthWrite: true })
+        : new T.MeshPhongMaterial({ color: cor, emissive: cor.clone().multiplyScalar(0.5), transparent: true, opacity: fantasma ? 0.02 : 0.07,
+            shininess: 90, side: T.DoubleSide, depthWrite: false, blending: T.AdditiveBlending });
       const malha = new T.Mesh(geo, mat);
       let grade = null;
       if (!(p.forma.startsWith("esfera") || p.forma === "toro")) {
@@ -211,8 +258,8 @@
       const linha = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
       linha.setAttribute("fill", "none"); linha.setAttribute("stroke", p.cor || "#4fe3ff"); linha.setAttribute("stroke-width", "1"); linha.setAttribute("opacity", ".7");
       svg.append(linha);
-      pecas.push({ p, g, mat, linhaMat: arestas.material, base: pos, explode: new T.Vector3(...(p.explode || [0, 0, 0])),
-                   ancora: p.ancora ? new T.Vector3(...p.ancora) : null, opBase: fantasma ? 0.02 : 0.07, op: fantasma ? 0.02 : 0.07, grade,
+      pecas.push({ p, g, mat, solido, linhaMat: arestas.material, base: pos, explode: new T.Vector3(...(p.explode || [0, 0, 0])),
+                   ancora: p.ancora ? new T.Vector3(...p.ancora) : null, opBase: fantasma ? 0.02 : solido ? 0.9 : 0.07, op: fantasma ? 0.02 : solido ? 0.9 : 0.07, grade,
                    linhaBase: p.forma.startsWith("esfera") || p.forma === "toro" ? 0.35 : 0.95,
                    aceso: false, nasce: 300 + i * 220, rot, linha, somou: false, i });
     });
@@ -299,7 +346,8 @@
     if (c.carregando) { if (!mesma) somH.liga(); limparCena(); arrancar(); return; }
     if (mesma && c.so_dados) { dados(c.dados); return; }
     limparCena();
-    if (c.rede) montarRede(c.rede); else montarPecas(c.partes || []);
+    if (c.modelo) montarModelo(c); else if (c.rede) montarRede(c.rede); else montarPecas(c.partes || []);
+    montarMenu(c);
     dados(c.dados);
     let raio = 2.2;
     for (const p of c.partes || []) {
@@ -325,7 +373,7 @@
     const acesos = new Set(s?.destaque || []);
     for (const p of pecas) {
       p.aceso = acesos.has(p.p.nome);
-      p.op = acesos.size ? (p.aceso ? 0.28 : p.opBase * 0.3) : p.opBase;
+      p.op = acesos.size ? (p.aceso ? (p.solido ? 1 : 0.28) : p.opBase * (p.solido ? 0.5 : 0.3)) : p.opBase;
       p.rot.classList.toggle("aceso", p.aceso);
       p.rot.classList.toggle("apagado", acesos.size > 0 && !p.aceso);
     }
@@ -337,6 +385,38 @@
     t.textContent = s ? s.fala : atual.intro || "";
     t.classList.remove("troca"); void t.offsetWidth; t.classList.add("troca");
     somH.passo();
+  }
+
+  // ------------------------------------------------------------ janelinha de anatomia (filtrar partes e trocar de sistema)
+  const SISTEMAS = [
+    ["Corpo humano", "mostra o corpo humano"], ["Esqueleto", "mostra o esqueleto"], ["Músculos", "mostra os músculos"],
+    ["Sistema nervoso", "mostra o sistema nervoso"], ["Crânio", "mostra o crânio"], ["Coração", "mostra o coração"],
+    ["Cérebro", "mostra o cérebro humano"],
+  ];
+  function trocarSistema(cmd) {
+    fetch("/api/holograma/mostrar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assunto: cmd }) }).catch(() => {});
+  }
+  function focarParte(nome, btn) {
+    const i = (atual && atual.passos || []).findIndex((s) => (s.destaque || []).includes(nome));
+    passo(i >= 0 ? i : -1);
+    for (const b of el.querySelectorAll(".h-menu .parte")) b.classList.toggle("ativa", b === btn);
+  }
+  function montarMenu(c) {
+    const m = el && el.querySelector(".h-menu"); if (!m) return;
+    m.innerHTML = "<h4>SISTEMAS</h4>";
+    for (const [rot, cmd] of SISTEMAS) {
+      const b = document.createElement("button"); b.textContent = rot; b.onclick = () => trocarSistema(cmd); m.append(b);
+    }
+    const partes = (c.partes || []).filter((p) => !p.sem_rotulo);
+    if (partes.length) {
+      const h = document.createElement("h4"); h.textContent = "PARTES"; m.append(h);
+      for (const p of partes) {
+        const b = document.createElement("button"); b.className = "parte";
+        b.innerHTML = `<i style="color:${p.cor || "#4fe3ff"}"></i>${p.nome}`;
+        b.onclick = () => focarParte(p.nome, b); m.append(b);
+      }
+    }
+    m.classList.toggle("ver", partes.length > 0 && !CELULAR_HOLO);
   }
 
   function fechar() {

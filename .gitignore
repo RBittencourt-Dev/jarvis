@@ -59,3 +59,10 @@ login-*.json
 celular.json
 celular-log.txt
 versao.txt
+freellmapi.json
+
+# gerado no PC (posts, textos, imagens) e avisos falados deste PC
+conteudo/
+falas-programadas.json
+cofre.bak
+cofre.tmp

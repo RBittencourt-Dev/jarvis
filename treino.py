@@ -549,6 +549,13 @@ FRASES = [
     ("quais aviões estão sobrevoando", "interno avioes_lista"),
     ("mostra a segunda visão da terra", "interno modo_globo satelite"),
     ("mostra os aviões sobrevoando a Argentina", "interno camada ('avioes', True, 'Argentina'"),
+    # --- plano de marketing editável (24/10): "pedi pra ser só um post e ele não conseguiu"
+    ("monta um plano de marketing com um post por semana", "marketing plano"),
+    ("monta um plano de marketing pro porthon", "marketing plano"),
+    ("apaga esse plano", "marketing apagar_plano"),
+    ("cancela os lembretes do plano", "marketing apagar_plano"),
+    ("mostra o plano de marketing", "marketing ver_plano"),
+    ("muda o plano pra dois posts", "marketing plano|marketing editar"),
 ]
 
 

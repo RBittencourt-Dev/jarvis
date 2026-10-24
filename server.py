@@ -60,6 +60,13 @@ import vocabulario
 import sinonimos
 import falas_programadas
 import instagram
+import marketing
+import vendas
+import imagens
+import professor
+import especialistas
+import voz_efeito
+import habilidades
 import pronuncia as pronuncia_
 import telas
 import web
@@ -732,6 +739,7 @@ LUGARES (país, cidade, rua, loja, estabelecimentos): no globo.
 Pesquisa e "me fala sobre X": pesquisar_e_mostrar (painel dentro de você). NUNCA abra navegador, Google ou Maps
 por conta própria — só se ele pedir "no Google", "no navegador", "abre o site".
 Coisa pra LER (lista, passo a passo, comparação, texto longo): mostrar_na_tela e fale só o resumo. Código: mostrar_codigo.
+VISUAL quando ajuda de verdade: lugar/objeto/conceito que se vê melhor → mostra (mostrar_holograma pra 3D, pesquisar_e_mostrar/foto pra ver como é). Pergunta simples (hora, data, sim/não, conta) responde direto, SEM imagem.
 HONESTIDADE: se não tiver certeza ou for algo atual (preço, notícia, versão, resultado), PESQUISE antes de afirmar.
 Se mesmo assim não souber, diga "não sei" — nunca invente nome, número, link ou fato.
 PEDIDO VAGO: se der pra entender pelo contexto (resumo, histórico, ver_registro pra "aquilo de ontem"), faça.
@@ -752,7 +760,8 @@ vez em quando), mas fica sério e direto quando ele tá trabalhando ou com probl
 SEJA ASSISTENTE: converse de verdade, com opinião e curiosidade, lembrando do que ele contou. Quando fizer sentido,
 termine oferecendo o próximo passo ("Quer que eu abra?"). [Assunto da conversa] e [Anotações] vêm na mensagem: fique
 no assunto e use as anotações só se ajudarem.
-{perfil_do_pc()}Habilidades que ele te ensinou (siga sempre):
+{perfil_do_pc()}{habilidades.para_prompt()}
+Habilidades que ele te ensinou (siga sempre):
 {aprendizado.ensinadas_para_prompt()}
 O que você sabe dele:
 {lembrancas() or "(nada ainda)"}"""
@@ -937,7 +946,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, timer, lembretes, pomodoro, anotacoes, noticias, sistemas)
+RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, imagens, professor, especialistas, timer, lembretes, pomodoro, anotacoes, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
@@ -1048,6 +1057,11 @@ async def ligar_relogio_dos_avisos():
     tarefas_de_fundo.add(asyncio.create_task(relogio_dos_avisos()))
 
 
+@app.on_event("startup")
+async def ligar_freellmapi():
+    await asyncio.to_thread(cerebro.ligar_freellmapi)
+
+
 @app.get("/api/painel")
 def painel_da_extensao():
     """Mini-painel da extensão: números do PC e o pomodoro."""
@@ -1120,16 +1134,29 @@ MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "a
 PERGUNTA_HORA = re.compile(r"\b(?:que horas|que hora [eé]|horas s[aã]o|me diz a hora)\b", re.I)
 PERGUNTA_DATA = re.compile(r"\b(?:que dia [eé] hoje|qual [eé] a data|que data [eé] hoje|hoje [eé] que dia|dia da semana)\b", re.I)
 PERGUNTA_TEMPO = re.compile(r"\b(?:previs[aã]o do tempo|vai chover|como (?:t[aá]|est[aá]) o tempo|clima de hoje|temperatura)\b", re.I)
-AGRADECIMENTO = re.compile(r"^(?:obrigad[oa]|brigad[oa]|valeu|vlw|tmj|show|perfeito|boa|massa|tri|bah,? valeu)\b[\w\s,!.]{0,20}$", re.I)
+# acknowledgements/expressões: quando NÃO há nada pendente, viram um "de nada" natural — nunca um comando errado.
+# (se houver pergunta pendente, o sim/não é checado ANTES, então "beleza/ok" ali vale como "sim".)
+AGRADECIMENTO = re.compile(
+    r"^(?:jarvis[ ,]*)?(?:obrigad[oa]|brigad[oa]|muito\s+obrigad[oa]|valeu(?:\s+mesmo)?|vlw|vlws|tmj|tamo\s+junto|"
+    r"show(?:\s+de\s+bola)?|perfeito|[oó]timo|massa|tri|maneiro|bacana|demais|top|"
+    r"beleza|bele?za|blz|ok|okay|okey|tranquil[oa]|de\s+boa|dboa|suave|firmeza|fechou|fechado|combinado|"
+    r"isso(?:\s+a[íi])?|exato|exatamente|entendi|saquei|joia|j[óo]ia|bah,?\s+valeu|"
+    r"t[aá]\s+(?:bom|certo|[oó]timo|joia|tranquilo))\b[\wçãõáéíóúâêôà\s,!.]{0,15}$", re.I)
 RESPOSTAS_DE_NADA = falas.DE_NADA
-PERGUNTA_HABILIDADES = re.compile(r"\b(?:o que (?:voc[eê]|tu) (?:sabe|consegue|pode) fazer|o que (?:voc[eê]|tu) faz|"
-                                  r"quais (?:s[aã]o )?(?:as )?suas (?:fun[cç][oõ]es|habilidades)|me ajuda com o qu[eê])\b", re.I)
+PERGUNTA_HABILIDADES = re.compile(
+    r"\b(?:"
+    r"o que (?:voc[eê]|tu) (?:sabe|consegue|pode|sabes|consegues) fazer|"
+    r"o que (?:voc[eê]|tu) faz(?:es)?|"
+    r"(?:me\s+)?(?:mostra|lista|diz|fala)\s+(?:tudo\s+)?(?:(?:o\s+)?que\s+)?(?:voc[eê]|tu)\s+(?:sabe|faz|consegue)(?:\s+fazer)?|"
+    r"(?:me\s+)?(?:mostra|lista)\s+(?:todas\s+as\s+|as\s+)?(?:tuas\s+|suas\s+)?(?:habilidades|fun[cç][oõ]es|capacidades)|"
+    r"quais (?:s[aã]o )?(?:as )?(?:tuas |suas )?(?:fun[cç][oõ]es|habilidades|capacidades)|"
+    r"do que (?:voc[eê]|tu) (?:[eé]|és) capaz|me ajuda com o qu[eê]"
+    r")\b", re.I)
 PERGUNTA_QUEM_E = re.compile(r"^(?:jarvis[ ,]*)?(?:quem (?:[eé]|és) (?:voc[eê]|tu)|qual (?:[eé] )?o seu nome)\??$", re.I)
-HABILIDADES = ("Eu abro programas e sites, toco e controlo o Spotify, mando mensagem no WhatsApp, "
-               "marco reunião e mexo no CRM do Radar, te conto o caixa, os leads e o andamento do Pórton, "
-               "pesquiso na internet, controlo o computador e passo pedidos pro Claude. É só pedir, chefe.")
-
-
+# contexto: continuar a leitura (ex.: leu 3 de 10 notícias, "lê o resto")
+CONTINUAR_LENDO = re.compile(r"^(?:jarvis[ ,]*)?(?:continua(?:r)?\s+(?:lendo|a leitura|a ler|as not[ií]cias|de ler)|"
+                             r"l[eê] o resto|l[eê] mais|me l[eê] o resto|l[eê] as outras|mais not[ií]cias|e o resto das not[ií]cias|"
+                             r"continua as not[ií]cias)\b[\s\w]{0,12}$", re.I)
 def resposta_rapida(texto):
     """Perguntas simples que não precisam do cérebro (e que ele poderia errar, como a hora)."""
     import random
@@ -1140,8 +1167,6 @@ def resposta_rapida(texto):
         return f"Hoje é {DIAS_DA_SEMANA[agora.weekday()]}, {agora.day} de {MESES[agora.month - 1]}."
     if AGRADECIMENTO.match(texto.strip()):
         return falas.escolher(RESPOSTAS_DE_NADA)
-    if PERGUNTA_HABILIDADES.search(texto):
-        return HABILIDADES
     if PERGUNTA_QUEM_E.match(texto.strip()):
         return "Sou o Jarvis, o assistente da SevenCode. Estou aqui pra trabalhar pra você, chefe."
     return None
@@ -1711,6 +1736,17 @@ async def conversar(p: Pergunta):
         # no celular "fecha tudo"/"limpa a tela" é o que ELE abriu lá; no PC "fecha tudo" fecha os pop-ups do Windows
         extensao.publicar({"limpar_palco": True})
         return em_linhas(sid, responder_ja("Limpei a tela, chefe."))
+    _limpo = vocabulario.limpar(p.texto.strip())
+    if internos.REINICIAR_JARVIS.match(p.texto.strip()) or internos.REINICIAR_JARVIS.match(_limpo):
+        instalacao.reiniciar(atraso=6)  # reiniciar.ps1: mata e sobe server+palmas e reabre a janela; o atraso deixa a fala sair
+        return em_linhas(sid, responder_ja("Reiniciando, chefe. Já volto num instante."))
+    if internos.LIMPAR_DISPLAY.match(p.texto.strip()) or internos.LIMPAR_DISPLAY.match(_limpo):
+        # pedido dele (23/10): no PC também — volta ao estado inicial (holograma, notícias, popups, tudo some).
+        extensao.publicar({"limpar_palco": True})
+        extensao.publicar({"limpar_palco": True}, canal="hud")
+        return em_linhas(sid, responder_ja("Limpei a tela, chefe. Tudo no lugar de novo."))
+    if CONTINUAR_LENDO.match(p.texto.strip()) and noticias.ultimo.get("itens") and noticias.ultimo["lida"] < len(noticias.ultimo["itens"]):
+        return em_linhas(sid, responder_ja(*noticias.resto()))
     # "deixa eu ver X", "tu pode me mostrar X", "abra X"… → um jeito só (no meio de um diálogo a fala vai como foi dita:
     # pode ser o texto de uma mensagem)
     if not sessao.get("dialogo"):
@@ -2702,6 +2738,10 @@ async def _rotear(sid, sessao, texto, interpretar=True):
             olhos_e_maos.ver_tela, p.texto, olhos_e_maos.qual_tela(p.texto))))
     if RESUMO_DO_DIA.search(p.texto):
         return em_linhas(sid, falar_resumo_do_dia())
+    if PERGUNTA_HABILIDADES.search(p.texto):  # abre o popup com tudo que ele sabe fazer
+        # se ele pediu pra LER/FALAR (não só mostrar), lê a lista inteira em voz alta
+        ler = re.search(r"\b(?:l[eê]|leia|me\s+(?:l[eê]|fala|diz)|fala|diz|conta)\b", p.texto, re.I)
+        return em_linhas(sid, responder_ja(habilidades.falar_tudo() if ler else habilidades.fala(), [habilidades.cartao()]))
     rapida = resposta_rapida(p.texto)
     if rapida:
         return em_linhas(sid, responder_ja(rapida))
@@ -2829,6 +2869,41 @@ def novidades():
     blocos = claude_ponte.novidades() + novidades_de_leads[:]
     novidades_de_leads.clear()
     return {"blocos": blocos}
+
+
+class Aviso(BaseModel):
+    texto: str
+    importancia: str = "marcado"  # "marcado" fala mesmo em proatividade média (ele PEDIU o aviso)
+
+
+@app.post("/api/aviso")
+def api_aviso(a: Aviso):
+    """Fala um aviso curto que veio de fora (ex.: o Claude Code terminou uma tarefa). Respeita o Não perturbe."""
+    fala = (a.texto or "").strip()[:300]
+    if not fala:
+        return {"ok": False}
+    avisar(fala, importancia=a.importancia)
+    return {"ok": True}
+
+
+class Holo(BaseModel):
+    assunto: str
+
+
+@app.post("/api/holograma/mostrar")
+async def api_holograma(h: Holo):
+    """A janelinha de anatomia clicou um sistema (esqueleto, músculos...): monta e mostra o holograma na tela."""
+    assunto = (h.assunto or "").strip()[:60]
+    if not assunto:
+        return {"ok": False}
+    try:
+        cena = await apresentacoes.montar(assunto)
+    except Exception as e:
+        return {"ok": False, "erro": str(e)[:100]}
+    cena["id"] = _novo_id()
+    holo_atual.clear()
+    extensao.publicar_tela({"apresentacao": cena})
+    return {"ok": True, "titulo": cena.get("titulo")}
 
 
 class Microfone(BaseModel):
@@ -3039,6 +3114,22 @@ def testar_fala_programada(f: dict):
     return {"ok": True}
 
 
+@app.get("/api/marketing/plano")
+def ver_plano_marketing():
+    return {"plano": marketing.plano_atual()}
+
+
+@app.post("/api/marketing/plano")
+def salvar_plano_marketing(d: dict):
+    """Configurações → Marketing: ele edita o plano à mão (dia, horário, tema…) e os lembretes acompanham."""
+    return {"plano": marketing.salvar_plano(d.get("plano") or [])}
+
+
+@app.delete("/api/marketing/plano")
+def apagar_plano_marketing():
+    return {"lembretes_apagados": marketing.apagar_plano()}
+
+
 @app.get("/api/automacoes")
 def listar_automacoes():
     return {"automacoes": automacoes.todas()}
@@ -3072,7 +3163,9 @@ class Fundo(BaseModel):
     texto: str
 
 
-SIM_FALADO = re.compile(r"^(sim|pode|pode sim|autoriz\w*|confirm\w*|manda ver|pode ir|vai|claro|isso|positivo|bora)\b", re.I)
+SIM_FALADO = re.compile(r"^(sim|pode|pode sim|pode ser|autoriz\w*|confirm\w*|manda(?: ver)?|pode ir|vai|claro|isso(?: a[íi])?|"
+                        r"positivo|bora|beleza|blz|ok|okay|okey|tranquil[oa]|fechou|fechado|combinado|de boa|dboa|exato|"
+                        r"t[aá] (?:bom|certo|[oó]timo))\b", re.I)
 NAO_FALADO = re.compile(r"^(n[aã]o|cancela|negativo|deixa|para|esquece)\b", re.I)
 
 
@@ -3318,7 +3411,37 @@ def config_da_abertura():
     """O que entra no resumo do dia DESTE PC (Configurações → Abertura). No colégio: 7planner + avisos; em casa: tudo."""
     a = (json.loads((RAIZ / "config.json").read_text(encoding="utf-8")).get("abertura") or {})  # avisos por voz gravam direto no arquivo
     return {"porthon": a.get("porthon", True), "painel": a.get("painel", True), "planner": a.get("planner", True),
+            "estado": a.get("estado", True), "noticias": a.get("noticias", True),
             "avisos": [x for x in a.get("avisos") or [] if isinstance(x, dict) and str(x.get("texto", "")).strip()]}
+
+
+def bloco_estado():
+    """O Jarvis se reconhece: cérebro em uso e conectores ligados (igual o 'todos os sistemas online' do filme)."""
+    try:
+        cerebro_nome = cerebro.nome_do_cerebro()
+    except Exception:
+        cerebro_nome = "local"
+    try:
+        import conectores
+        conns = conectores.nomes_ligados()
+    except Exception:
+        conns = []
+    linhas = [f"Cérebro: {cerebro_nome}", f"Conectores: {len(conns)} ligado" + ("s" if len(conns) != 1 else "")
+              + (f" ({', '.join(conns)})" if conns else "")]
+    fala = (f"Todos os sistemas online, chefe. Estou rodando com o cérebro {cerebro_nome.split(' · ')[0]}"
+            + (f", {len(conns)} conector{'es' if len(conns) != 1 else ''} ligado{'s' if len(conns) != 1 else ''}." if conns else "."))
+    return {"fala": fala, "cartao": {"titulo": "Estado do J.A.R.V.I.S.", "destaque": "Online", "linhas": linhas}}
+
+
+def bloco_noticias_tech():
+    """As principais notícias de tecnologia e IA do dia, pra ele começar por dentro."""
+    try:
+        fala, carts = noticias.executar({"tema": "tecnologia e inteligência artificial"})
+    except Exception:
+        return None
+    if not carts:
+        return None
+    return {"fala": fala, "cartao": carts[0]}
 
 
 def bloco_7planner():
@@ -3344,8 +3467,10 @@ async def blocos_do_dia(fecho="O que vamos fazer hoje?"):
     agora = datetime.now()
     saudacao = "Bom dia" if agora.hour < 12 else "Boa tarde" if agora.hour < 18 else "Boa noite"
     cfg = config_da_abertura()
+    noticias_bloco = await asyncio.to_thread(bloco_noticias_tech) if cfg["noticias"] else None
     blocos = [
-        {"fala": f"{saudacao}. Todos os sistemas online.", "cartao": None},
+        {"fala": f"{saudacao}, chefe.", "cartao": None},
+        *([bloco_estado()] if cfg["estado"] else []),
         {"fala": f"Hoje é {DIAS[agora.weekday()]}, e são {agora:%H:%M}.", "cartao": {
             "titulo": "Agora", "destaque": f"{agora:%H:%M}", "linhas": [f"{DIAS[agora.weekday()]}, {agora:%d/%m/%Y}"]}},
         *[b for b in (bloco_dos_avisos(cfg["avisos"]),
@@ -3354,6 +3479,7 @@ async def blocos_do_dia(fecho="O que vamos fazer hoje?"):
                       await asyncio.to_thread(bloco_porthon_numeros) if cfg["porthon"] else None,
                       # painel sem login neste PC (o do colégio): nem aparece, em vez do cartão "falta o login"
                       *(await asyncio.to_thread(blocos_do_painel) if cfg["painel"] and painel.configurado() else [])) if b],
+        *([noticias_bloco] if noticias_bloco else []),
         *([{"fala": fecho, "cartao": None}] if fecho else []),
     ]
     return blocos
@@ -3375,7 +3501,8 @@ async def falar_resumo_do_dia():
 def arquivo_de_voz(texto, tom=None, ritmo=None):
     tom = tom or CONFIG["voz_tom"]
     ritmo = ritmo or CONFIG["voz_velocidade"]
-    chave = f"{CONFIG['voz']}|{tom}|{texto}" + (f"|{ritmo}" if ritmo != "+0%" else "")  # mudou o ritmo: grava de novo
+    filtro = CONFIG.get("voz_filtro") or ""  # filtrada e normal têm cache separado
+    chave = f"{CONFIG['voz']}|{tom}|{filtro}|{texto}" + (f"|{ritmo}" if ritmo != "+0%" else "")  # mudou o ritmo: grava de novo
     return PASTA_DE_VOZ / (hashlib.sha1(chave.encode()).hexdigest() + ".mp3")
 
 
@@ -3421,6 +3548,8 @@ async def preparar_frases_fixas():
                     if parte["type"] == "audio":
                         audio += parte["data"]
                 destino.write_bytes(audio)
+                if CONFIG.get("voz_filtro") == "ia":  # já deixa as frases fixas com o filtro
+                    await asyncio.to_thread(voz_efeito.processar_mp3, destino)
             except Exception:
                 continue  # sem internet agora: essa frase sai na hora em que for falada
     # a tarefa precisa ficar guardada: sem referência, o Python pode descartá-la no meio
@@ -3442,6 +3571,11 @@ async def voz(texto: str):
     tom, ritmo = ("-9Hz", "+14%") if modo_atual() == "caverna" else (CONFIG["voz_tom"], CONFIG["voz_velocidade"])
     guardado = arquivo_de_voz(texto, tom, ritmo)
     if guardado.exists():
+        return FileResponse(guardado, media_type="audio/mpeg")
+    if CONFIG.get("voz_filtro") == "ia":  # filtro "de IA": precisa do áudio inteiro, então gera tudo, filtra e entrega
+        PASTA_DE_VOZ.mkdir(exist_ok=True)
+        await edge_tts.Communicate(texto, CONFIG["voz"], rate=ritmo, pitch=tom).save(str(guardado))
+        await asyncio.to_thread(voz_efeito.processar_mp3, guardado)
         return FileResponse(guardado, media_type="audio/mpeg")
     # senão entrega o áudio aos pedaços: o navegador começa a tocar antes da frase inteira ficar pronta
     falar = edge_tts.Communicate(texto, CONFIG["voz"], rate=ritmo, pitch=tom)
@@ -3728,7 +3862,8 @@ async def celular_estado(request: Request):
     return celular.receber(d if isinstance(d, dict) else {})
 
 
-SIM_SIRI = re.compile(r"^(?:sim|pode|pode sim|confirmo|manda|claro|isso|vai)\b", re.I)
+SIM_SIRI = re.compile(r"^(?:sim|pode|pode sim|pode ser|confirmo|manda|claro|isso(?: a[íi])?|vai|beleza|blz|ok|okay|okey|"
+                      r"tranquil[oa]|fechou|fechado|combinado|de boa|dboa|exato|t[aá] (?:bom|certo|[oó]timo))\b", re.I)
 NAO_SIRI = re.compile(r"^(?:n[aã]o|cancela|deixa|esquece)\b", re.I)
 
 
@@ -3913,7 +4048,8 @@ async def api_instalacao_chave(c: ChaveInstalacao):
     valor = c.valor.strip()
     prefixo = cerebro.PROVEDORES.get(c.provedor, {}).get("prefixo", "")
     if not valor.startswith(prefixo):
-        return {"ok": False, "texto": f"Essa não parece uma chave do {c.provedor.capitalize()} (começa com {prefixo})."}
+        mostra = " ou ".join(prefixo) if isinstance(prefixo, tuple) else prefixo
+        return {"ok": False, "texto": f"Essa não parece uma chave do {c.provedor.capitalize()} (começa com {mostra})."}
     try:
         r = await asyncio.to_thread(lambda: httpx.get(cerebro.PROVEDORES[c.provedor]["url"] + "/models",
                                                       headers={"Authorization": f"Bearer {valor}"}, timeout=10))

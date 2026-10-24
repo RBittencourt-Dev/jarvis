@@ -3,7 +3,7 @@
 (() => {
   const ABAS = [
     ["geral", "Geral"], ["modelos", "Modelos"], ["voz", "Voz"], ["proatividade", "Proatividade"], ["memoria", "Memória"],
-    ["privacidade", "Privacidade"], ["automacoes", "Automações"], ["falas", "Falas programadas"], ["conectores", "Conectores"], ["planner", "7planner"], ["abertura", "Abertura"], ["instalacao", "Instalação"],
+    ["privacidade", "Privacidade"], ["automacoes", "Automações"], ["falas", "Falas programadas"], ["marketing", "Marketing"], ["conectores", "Conectores"], ["planner", "7planner"], ["abertura", "Abertura"], ["instalacao", "Instalação"],
   ];
   const painel = $("configuracoes"), corpo = $("cfg-corpo"), abas = $("cfg-abas"), botao = $("abrir-configuracoes");
   let dados = null, abaAtual = "geral";
@@ -251,9 +251,21 @@
           ouvir.onclick = () => api("/api/falas-programadas/testar", "POST", { texto: f.texto });
           const apagar = h("button", { className: "secundario", textContent: "Apagar" });
           apagar.onclick = async () => { await api("/api/falas-programadas/" + f.id, "DELETE"); carregar(); };
-          lista.append(h("li", {}, ativa, h("div", {}, h("strong", {}, f.texto), h("small", {}, quando(f))), ouvir, apagar));
+          const editar = h("button", { className: "secundario", textContent: "Editar" });
+          editar.onclick = () => editarFala(f);
+          lista.append(h("li", {}, ativa, h("div", {}, h("strong", {}, f.texto), h("small", {}, quando(f))), ouvir, editar, apagar));
         }
       };
+      // "Editar" joga a fala no formulário de baixo; salvar grava por cima (mesmo id) em vez de criar outra
+      let editando = null;
+      const editarFala = (f) => {
+        editando = f;
+        texto.value = f.texto; hora.value = f.hora; umaVez.value = f.data || "";
+        marcas.forEach((m) => (m.firstChild.checked = f.dias.includes(+m.firstChild.dataset.dia)));
+        criar.textContent = "Salvar alteração"; cancelar.hidden = false;
+        texto.focus(); texto.scrollIntoView({ block: "center" });
+      };
+      const pararDeEditar = () => { editando = null; criar.textContent = "Programar fala"; cancelar.hidden = true; texto.value = ""; umaVez.value = ""; };
       carregar().catch((e) => (lista.textContent = "Erro: " + e.message));
       const texto = h("input", { placeholder: "O que ele vai falar. Ex.: São {hora}, chefe. Hora de ir embora." });
       const hora = h("input", { type: "time", value: "18:00" });
@@ -264,10 +276,12 @@
       criar.onclick = async () => {
         const dias = marcas.map((m) => m.firstChild).filter((c) => c.checked).map((c) => +c.dataset.dia);
         try {
-          await api("/api/falas-programadas", "POST", { texto: texto.value, hora: hora.value, dias, data: umaVez.value || null });
-          texto.value = ""; umaVez.value = ""; aviso("Programado."); carregar();
+          await api("/api/falas-programadas", "POST", { ...(editando || {}), texto: texto.value, hora: hora.value, dias, data: umaVez.value || null });
+          aviso(editando ? "Alterado." : "Programado."); pararDeEditar(); carregar();
         } catch (e) { aviso("Não salvei: " + e.message, true); }
       };
+      const cancelar = h("button", { className: "secundario", textContent: "Cancelar edição", hidden: true });
+      cancelar.onclick = pararDeEditar;
       const testar = h("button", { className: "secundario", textContent: "Ouvir agora" });
       testar.onclick = () => texto.value.trim() && api("/api/falas-programadas/testar", "POST", { texto: texto.value });
       return [
@@ -278,7 +292,45 @@
           campo("Horário", hora),
           campo("Dias", h("div", { className: "cfg-linha" }, ...marcas)),
           campo("Só uma vez, no dia", umaVez, "Se escolher um dia aqui, os dias da semana são ignorados e ela some depois de falada."),
-          h("div", { className: "botoes" }, criar, testar)),
+          h("div", { className: "botoes" }, criar, cancelar, testar)),
+      ];
+    },
+
+    // o plano de marketing que ele montou por voz, editável à mão: o que ficar aqui é o que vale (e os lembretes seguem)
+    marketing() {
+      const DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+      const FORMATOS = ["Post", "Reels", "Carrossel", "Story"];
+      let plano = [];
+      const lista = h("div", { className: "cfg-lista" }, "Carregando…");
+      const desenhar = () => {
+        lista.innerHTML = "";
+        if (!plano.length) lista.append(h("p", { className: "cfg-texto" }, "Nenhum plano agora. Fale “monta um plano de marketing com 1 post por semana” ou adicione aqui embaixo."));
+        plano.forEach((i, n) => {
+          const dia = seletor(DIAS.map((d) => [d, d]), DIAS.includes(i.dia) ? i.dia : "Terça", (v) => (i.dia = v));
+          const hora = h("input", { type: "time", value: /^\d{1,2}/.test(i.horario || "") ? (i.horario.match(/\d{1,2}/)[0].padStart(2, "0") + ":" + ((i.horario.match(/[h:](\d{2})/) || [])[1] || "00")) : "19:00" });
+          hora.onchange = () => (i.horario = hora.value.replace(":00", "h").replace(":", "h"));
+          const formato = seletor(FORMATOS.map((f) => [f, f]), FORMATOS.includes(i.formato) ? i.formato : "Post", (v) => (i.formato = v));
+          const tema = h("input", { value: i.tema || "", placeholder: "Tema" }); tema.oninput = () => (i.tema = tema.value);
+          const gancho = h("input", { value: i.gancho || "", placeholder: "Gancho (título da arte)" }); gancho.oninput = () => (i.gancho = gancho.value);
+          const tirar = h("button", { className: "secundario", textContent: "Tirar" });
+          tirar.onclick = () => { plano.splice(n, 1); desenhar(); };
+          lista.append(h("div", { className: "cfg-secao" }, h("div", { className: "cfg-linha" }, dia, hora, formato, tirar), campo("Tema", tema), campo("Gancho", gancho)));
+        });
+      };
+      api("/api/marketing/plano").then((r) => { plano = r.plano; desenhar(); }).catch((e) => (lista.textContent = "Erro: " + e.message));
+      const adicionar = h("button", { className: "secundario", textContent: "Adicionar post" });
+      adicionar.onclick = () => { plano.push({ dia: "Terça", horario: "19h", formato: "Post", tema: "", gancho: "" }); desenhar(); };
+      const salvar = h("button", { textContent: "Salvar plano" });
+      salvar.onclick = async () => {
+        try { plano = (await api("/api/marketing/plano", "POST", { plano })).plano; desenhar(); aviso(plano.length ? "Plano salvo. Lembretes acertados." : "Plano vazio: apaguei os lembretes."); }
+        catch (e) { aviso("Não salvei: " + e.message, true); }
+      };
+      const apagar = h("button", { className: "secundario", textContent: "Apagar plano" });
+      apagar.onclick = async () => { await api("/api/marketing/plano", "DELETE"); plano = []; desenhar(); aviso("Plano e lembretes apagados."); };
+      return [
+        secao("Plano de marketing do Porthon", h("p", { className: "cfg-texto" },
+          "O que estiver aqui é o que vale: mude dia, horário, formato, tema e gancho, tire ou adicione posts. Ao salvar, os lembretes de “hoje é dia de postar” acompanham. Por voz também: “deixa só um post”, “tira o de quinta”, “passa o de terça pra 20h”."),
+          lista, h("div", { className: "botoes" }, adicionar, salvar, apagar)),
       ];
     },
 

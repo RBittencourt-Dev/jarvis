@@ -13,7 +13,10 @@ from pathlib import Path
 import telas
 
 # onde abrem os sites que o Jarvis abre sozinho: "outra" = tela vertical (o HUD fica livre na horizontal)
-TELA_DOS_SITES = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8")).get("tela_dos_sites", "outra")
+_CFG = json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8"))
+TELA_DOS_SITES = _CFG.get("tela_dos_sites", "outra")
+# pedido dele (24/10): reaproveitar a janela já aberta (abrir como ABA nova) em vez de abrir janela nova toda vez.
+SITES_EM_ABA = _CFG.get("sites_em_aba", True)
 
 LOCAL = Path(os.environ.get("LOCALAPPDATA", ""))
 NAVEGADORES = {  # nome falado → executáveis possíveis (o primeiro que existir)
@@ -77,7 +80,8 @@ def abrir(url, navegador=None, janela_nova=False, tela="padrao"):
         extensao.publicar({"link": {"url": url}})
         return
     if tela == "padrao":
-        tela = TELA_DOS_SITES or None
+        # com sites_em_aba: ignora a tela fixa e abre como ABA na janela já aberta (reaproveita o Chrome aberto).
+        tela = None if SITES_EM_ABA else (TELA_DOS_SITES or None)
     exe = executavel(navegador) or executavel(PADRAO)
     if tela and exe and telas.monitor(tela):
         threading.Thread(target=telas.abrir_em, args=(tela, lambda: subprocess.Popen([str(exe), "--new-window", url])),

@@ -60,6 +60,24 @@ CATALOGO = {
                  "custo": "Pelo app do WhatsApp no PC: grátis. A API oficial (WhatsApp Cloud API) é paga por conversa e "
                           "exige conta de empresa verificada na Meta.",
                  "como": "Já funciona por voz (\"manda pro Fulano…\"), pelo app do WhatsApp no PC."},
+    # Conectores MCP remotos oficiais (é só Conectar e autorizar no navegador, igual Canva/Notion). Se algum
+    # endereço mudar, dá pra corrigir aqui ou adicionar um MCP próprio em "Conectores".
+    "linear": {"titulo": "Linear", "tipo": "http", "url": "https://mcp.linear.app/sse", "oauth": True,
+               "custo": "Grátis (MCP oficial do Linear).", "como": "Clique em Conectar e autorize no navegador."},
+    "atlassian": {"titulo": "Atlassian (Jira e Confluence)", "tipo": "http", "url": "https://mcp.atlassian.com/v1/sse", "oauth": True,
+                  "custo": "Grátis (MCP oficial da Atlassian).", "como": "Clique em Conectar e autorize no navegador."},
+    "asana": {"titulo": "Asana", "tipo": "http", "url": "https://mcp.asana.com/sse", "oauth": True,
+              "custo": "Grátis (MCP oficial da Asana).", "como": "Clique em Conectar e autorize no navegador."},
+    "sentry": {"titulo": "Sentry", "tipo": "http", "url": "https://mcp.sentry.dev/mcp", "oauth": True,
+               "custo": "Grátis (MCP oficial do Sentry).", "como": "Clique em Conectar e autorize no navegador."},
+    "stripe": {"titulo": "Stripe", "tipo": "http", "url": "https://mcp.stripe.com", "oauth": True,
+               "custo": "Grátis usar o MCP; as cobranças são as do Stripe. CUIDADO: pode mexer em pagamentos.",
+               "como": "Clique em Conectar e autorize no navegador."},
+    "paypal": {"titulo": "PayPal", "tipo": "http", "url": "https://mcp.paypal.com/mcp", "oauth": True,
+               "custo": "Grátis usar o MCP; as taxas são as do PayPal. CUIDADO: mexe com pagamentos.",
+               "como": "Clique em Conectar e autorize no navegador."},
+    "intercom": {"titulo": "Intercom", "tipo": "http", "url": "https://mcp.intercom.com/sse", "oauth": True,
+                 "custo": "Depende do seu plano Intercom.", "como": "Clique em Conectar e autorize no navegador."},
 }
 CITA_O_APP = {"canva": r"canva", "notion": r"notion", "github": r"github|reposit[oó]rio|issue|pull request|\bpr\b",
               "google": r"agenda|calend[aá]rio|compromisso|evento|gmail|e-?mail|drive|google",
@@ -276,8 +294,10 @@ async def atualizar_ferramentas(nome):
         for t in r.tools:
             anot = getattr(t, "annotations", None)
             so_le = bool(anot and getattr(anot, "readOnlyHint", None)) or bool(LEITURA.match(t.name))
+            # a lib do MCP renomeou inputSchema -> input_schema; aceita os dois pra não quebrar o cache das ferramentas
+            esquema = getattr(t, "input_schema", None) or getattr(t, "inputSchema", None) or {"type": "object", "properties": {}}
             saida.append({"name": t.name, "description": (t.description or "")[:400],
-                          "inputSchema": t.inputSchema or {"type": "object", "properties": {}}, "leitura": so_le})
+                          "inputSchema": esquema, "leitura": so_le})
         return saida
     ferramentas = await _com_sessao(nome, listar)
     cache = _cache()
