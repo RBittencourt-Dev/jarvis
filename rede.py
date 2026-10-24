@@ -12,6 +12,7 @@ import json
 import os
 import re
 import socket
+import struct
 import subprocess
 import time
 import unicodedata
@@ -25,6 +26,12 @@ _POOL = ThreadPoolExecutor(max_workers=120, thread_name_prefix="rede")
 
 # portas que denunciam câmera/DVR/NVR (RTSP e os apps das marcas)
 PORTAS_CAMERA = [554, 8000, 37777, 34567, 8899, 9000]
+# portas que denunciam impressora (RAW/JetDirect, IPP, LPD) e PC Windows (SMB, NetBIOS, RDP)
+PORTAS_IMPRESSORA = [9100, 631, 515]
+PORTAS_PC = [445, 139, 3389]
+# tudo que a varredura testa pra classificar cada aparelho
+PROBE = PORTAS_CAMERA + PORTAS_IMPRESSORA + PORTAS_PC
+TIPO_NOME = {"roteador": "roteador", "impressora": "impressora", "camera": "câmera/DVR", "pc": "PC", "aparelho": "aparelho"}
 # fabricante pelos 3 primeiros pares do MAC (OUI). Foco no que aparece em escola; o que não estiver aqui fica sem nome.
 OUI = {
     "BC-32-5F": "Intelbras", "3C-E1-A1": "Intelbras", "90-02-A9": "Hikvision", "C0-56-E3": "Hikvision",
@@ -77,6 +84,90 @@ def _fabricante(mac):
     if not mac:
         return ""
     return OUI.get(mac.upper().replace(":", "-")[:8], "")
+
+
+def _tipo(portas, fab, ehgw):
+    """Classifica o aparelho pelo que ele tem aberto (bem mais confiável que o MAC): roteador, impressora, câmera, PC."""
+    s = set(portas)
+    if ehgw:
+        return "roteador", "📡"
+    if s & set(PORTAS_IMPRESSORA):
+        return "impressora", "🖨️"
+    if s & set(PORTAS_CAMERA) or fab in CAMERA_MARCAS:
+        return "camera", "📷"
+    if s & set(PORTAS_PC):
+        return "pc", "🖥️"
+    return "aparelho", "•"
+
+
+def _limpa_nome(n):
+    """Deixa só o hostname (tira domínio e ponto final). Descarta quando o 'nome' é só o IP."""
+    if not n:
+        return None
+    n = n.rstrip(".").split(".")[0].strip()
+    if not n or n.replace("-", "").isdigit():
+        return None
+    return n
+
+
+def _read_dns_name(data, off):
+    """Lê um nome DNS (com ponteiros de compressão) a partir de um offset. Pra decodificar a resposta do LLMNR/mDNS."""
+    labels = []
+    for _ in range(128):
+        if off >= len(data):
+            break
+        length = data[off]
+        if length == 0:
+            break
+        if length & 0xC0 == 0xC0:  # ponteiro de compressão
+            off = ((length & 0x3F) << 8) | data[off + 1]
+            continue
+        labels.append(data[off + 1:off + 1 + length].decode("ascii", "replace"))
+        off += 1 + length
+    return ".".join(labels)
+
+
+def _resolver_porta(ip, porta, timeout=0.8):
+    """Pergunta o nome do host por LLMNR (5355) ou mDNS (5353), unicast, consulta PTR reversa. O Windows responde o
+    próprio nome mesmo com NetBIOS desligado — é assim que a gente pega o nome sem senha."""
+    rev = ".".join(reversed(ip.split("."))) + ".in-addr.arpa"
+    pkt = struct.pack(">HHHHHH", 0x1234, 0x0000, 1, 0, 0, 0)
+    for parte in rev.split("."):
+        pkt += bytes([len(parte)]) + parte.encode()
+    pkt += b"\x00" + struct.pack(">HH", 12, 1)  # QTYPE=PTR, QCLASS=IN
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(timeout)
+    try:
+        s.sendto(pkt, (ip, porta))
+        data, _ = s.recvfrom(2048)
+    except Exception:
+        return None
+    finally:
+        s.close()
+    try:
+        off = 12
+        while off < len(data) and data[off] != 0:  # pula a pergunta
+            if data[off] & 0xC0 == 0xC0:
+                off += 1
+                break
+            off += data[off] + 1
+        off += 1 + 4  # fim do nome + QTYPE + QCLASS
+        if off + 12 > len(data):
+            return None
+        if data[off] & 0xC0 == 0xC0:  # nome da resposta
+            off += 2
+        else:
+            while off < len(data) and data[off] != 0:
+                off += data[off] + 1
+            off += 1
+        off += 10  # TYPE(2) CLASS(2) TTL(4) RDLEN(2)
+        return _read_dns_name(data, off)
+    except Exception:
+        return None
+
+
+def _llmnr(ip):
+    return _resolver_porta(ip, 5355) or _resolver_porta(ip, 5353)
 
 
 # ------------------------------------------------------------------ configuração da própria rede
@@ -174,20 +265,23 @@ def _nbt(ip):
 
 
 def pcs_da_rede():
-    """Os outros PCs (Windows) na rede: nome, quem está logado, grupo e se compartilha pasta — tudo sem senha."""
-    aparelhos, cfg = escanear(com_cameras=False)
+    """Os PCs (Windows) na rede: nome, quem está logado, grupo e se compartilha pasta — tudo sem senha.
+    Candidato a PC = tem SMB/NetBIOS/RDP aberto. O nome vem do DNS/LLMNR (varredura) e o nbtstat enriquece com o
+    usuário logado quando o NetBIOS está ligado. Devolve (pcs, cfg, todos_aparelhos, outros)."""
+    aparelhos, cfg = escanear()
     outros = [a for a in aparelhos if not a["eu"]]
-    prazo = time.time() + 13
-    futuros = {a["ip"]: _POOL.submit(_nbt, a["ip"]) for a in outros}
+    cand = [a for a in outros if a["tipo"] == "pc"]
+    prazo = time.time() + 8
+    futuros = {a["ip"]: _POOL.submit(_nbt, a["ip"]) for a in cand}
     pcs = []
-    for a in outros:
+    for a in cand:
         try:
-            info = futuros[a["ip"]].result(timeout=max(0.1, prazo - time.time()))
+            info = futuros[a["ip"]].result(timeout=max(0.1, prazo - time.time())) or {}
         except Exception:
-            info = None
-        if info and info.get("nome"):
-            pcs.append({"ip": a["ip"], "fabricante": a["fabricante"], **info})
-    return pcs, cfg, aparelhos
+            info = {}
+        pcs.append({"ip": a["ip"], "fabricante": a["fabricante"], "nome": info.get("nome") or a["nome"],
+                    "grupo": info.get("grupo"), "usuario": info.get("usuario"), "shares": info.get("shares", False)})
+    return pcs, cfg, aparelhos, outros
 
 
 def _remoto_usuarios(ip, user, senhas):
@@ -239,7 +333,9 @@ def _porta(ip, porta, timeout=0.5):
 
 
 def escanear(com_cameras=True):
-    """Lista de aparelhos na rede: [{ip, mac, nome, fabricante, portas:[...], camera:bool}]. Ordenada por IP."""
+    """Aparelhos na rede: [{ip,mac,nome,fabricante,portas,camera,tipo,icone,eu,roteador}]. Ordenado por IP.
+    Sempre classifica cada aparelho (PC/câmera/impressora/roteador) pelas portas e busca o nome por DNS reverso +
+    LLMNR/mDNS (pega o nome do Windows mesmo com NetBIOS desligado). `com_cameras` fica só por compatibilidade."""
     cfg = config()
     ip_meu, gw = cfg.get("ip"), cfg.get("gw")
     if not ip_meu:
@@ -258,25 +354,39 @@ def escanear(com_cameras=True):
     # 2) MACs do cache + inclui quem tem MAC mas não respondeu ping
     macs = _vizinhos()
     ips = sorted(vivos | set(macs), key=lambda x: tuple(int(o) for o in x.split(".")))
-    # 3) nomes (DNS reverso, em paralelo, com teto) e portas de câmera
+    # 3) portas abertas de cada um (classificação), em paralelo
+    futp = {(ip, p): _POOL.submit(_porta, ip, p) for ip in ips for p in PROBE}
+    abertas = {ip: [] for ip in ips}
+    for (ip, p), fp in futp.items():
+        try:
+            if fp.result(timeout=1.6):
+                abertas[ip].append(p)
+        except Exception:
+            pass
+    # 4) nomes: DNS reverso primeiro, LLMNR/mDNS pra quem não resolveu
     prazo_nome = time.time() + 6
-    nomes = {ip: _nome(ip, prazo_nome) for ip in ips}
+    fdns = {ip: _POOL.submit(socket.gethostbyaddr, ip) for ip in ips}
+    nomes = {}
+    for ip in ips:
+        try:
+            nomes[ip] = _limpa_nome(fdns[ip].result(timeout=max(0.1, prazo_nome - time.time()))[0])
+        except Exception:
+            nomes[ip] = None
+    faltam = [ip for ip in ips if not nomes.get(ip)]
+    fll = {ip: _POOL.submit(_llmnr, ip) for ip in faltam}
+    for ip in faltam:
+        try:
+            nomes[ip] = _limpa_nome(fll[ip].result(timeout=1.6))
+        except Exception:
+            pass
     aparelhos = []
     for ip in ips:
         mac = macs.get(ip)
         fab = _fabricante(mac)
-        portas = []
-        if com_cameras:
-            fut = {p: _POOL.submit(_porta, ip, p) for p in PORTAS_CAMERA}
-            for p, fp in fut.items():
-                try:
-                    if fp.result(timeout=1.2):
-                        portas.append(p)
-                except Exception:
-                    pass
-        ehcam = bool(portas) or fab in CAMERA_MARCAS
+        portas = sorted(abertas.get(ip, []))
+        tipo, icone = _tipo(portas, fab, ip == gw)
         aparelhos.append({"ip": ip, "mac": mac, "nome": nomes.get(ip), "fabricante": fab,
-                          "portas": portas, "camera": ehcam,
+                          "portas": portas, "camera": tipo == "camera", "tipo": tipo, "icone": icone,
                           "eu": ip == ip_meu, "roteador": ip == gw})
     return aparelhos, cfg
 
@@ -363,7 +473,7 @@ CAMERA = r"\b(c[aâ]mera\w*|cftv|dvr|nvr|v[ií]deo\s?monitoramento|circuito\s+in
 VER = r"\b(mostra\w*|ver|vej\w*|olha\w*|exib\w*|imagem|imagens|print\w*|ao vivo|tela|abre|abrir|visualiz\w*|espia\w*|d[aá] uma olhada)\b"
 REDE = r"\b(rede|wi-?fi|lan|intranet)\b"
 # achar/listar de verdade (verbo forte) — não confundir com só mencionar o assunto
-ACHAR = (r"\b(acha\w*|ach[aá]|procur\w*|lista\w*|list[aá]\w*|relacion\w*|cad[eê]|quais|quant\w*|tem|t[eê]m|existe\w*|"
+ACHAR = (r"\b(acha\w*|ach[aá]|procur\w*|busc\w*|lista\w*|list[aá]\w*|relacion\w*|cad[eê]|quais|quant\w*|tem|t[eê]m|existe\w*|"
          r"varre\w*|escane\w*|scane\w*|mape\w*|descobr\w*|localiz\w*|encontr\w*|detect\w*|enxerg\w*|v[eê]|me (?:d[aá]|mostra|lista|traz)|"
          r"quero (?:ver|saber|a lista)|quais s[aã]o|me diz quais|rastre\w*)\b")
 USUARIO = r"\b(usu[aá]ri\w+|contas? (?:de usu[aá]rio|do (?:pc|dom[ií]nio|windows|computador)|da rede)|pessoas? (?:da|na) rede|quem (?:usa|acessa|tem (?:conta|acesso|login)))\b"
@@ -387,6 +497,9 @@ def entender(texto):
         if re.search(ACHAR, sa):
             return {"acao": "cameras"}
         return {"acao": "menu_cam"}  # só tocou no assunto "câmera" → ofereço as opções
+    # IMPRESSORAS (achar/listar na rede) — "impressora não imprime" (suporte) cai fora: sem achar/rede/ver
+    if re.search(r"\b(impressor\w*|printer\w*|multifuncion\w*)\b", sa) and (re.search(ACHAR, sa) or re.search(REDE, sa) or re.search(VER, sa)):
+        return {"acao": "impressoras"}
     # USUÁRIOS DE UM PC ESPECÍFICO (por IP): "lista os usuários do 192.168.0.67"
     _ip = re.search(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b", t)
     if _ip and re.search(r"usu[aá]ri|contas?", sa):
@@ -419,11 +532,10 @@ def entender(texto):
 
 
 def _linha_aparelho(a):
-    tag = " (este PC)" if a["eu"] else " (roteador)" if a["roteador"] else ""
-    quem = a["nome"] or a["fabricante"] or "—"
+    tag = " (este PC)" if a["eu"] else ""
+    quem = a["nome"] or a["fabricante"] or TIPO_NOME.get(a["tipo"], "aparelho")
     extra = (f" · {a['fabricante']}" if a["fabricante"] and a["nome"] else "")
-    cam = " · 📷 câmera/DVR" if a["camera"] else ""
-    return f"{a['ip']}{tag} · {quem}{extra} · {a['mac'] or 'sem MAC'}{cam}"
+    return f"{a['icone']} {a['ip']}{tag} · {quem}{extra} · {a['mac'] or 'sem MAC'}"
 
 
 def executar(p):
@@ -483,32 +595,49 @@ def executar(p):
         return fala, [{"titulo": "Diagnóstico de rede", "destaque": "Rede ok" if (gw_ms is not None and g8 is not None and gd is not None) else "Atenção", "linhas": linhas}]
 
     if acao == "pcs":
-        pcs, cfg, aparelhos = pcs_da_rede()
+        pcs, cfg, aparelhos, outros = pcs_da_rede()
+        if not cfg.get("ip"):
+            return "Não consegui ler a rede deste PC, chefe. Parece sem conexão.", []
+        imp = [a for a in outros if a["tipo"] == "impressora"]
+        extra_imp = f" Também vi {len(imp)} impressora{'s' if len(imp) != 1 else ''}." if imp else ""
         if not pcs:
-            if not cfg.get("ip"):
-                return "Não consegui ler a rede deste PC, chefe. Parece sem conexão.", []
-            # NetBIOS desligado: não dá o nome dos PCs, mas mostro todos os aparelhos pra você ver as máquinas
-            outros = [a for a in aparelhos if not a["eu"]]
+            # ninguém abriu porta de PC: mostro todos os aparelhos classificados pra você ver as máquinas
             linhas = [_linha_aparelho(a) for a in outros]
-            return (f"Não consegui os nomes dos PCs (o NetBIOS parece desligado na rede), chefe, mas achei {len(outros)} "
-                    f"aparelho{'s' if len(outros) != 1 else ''} na rede. Aqui está o que respondeu:",
+            return (f"Não separei nenhum PC com SMB aberto agora, chefe (pode estar com firewall/compartilhamento desligado), "
+                    f"mas achei {len(outros)} aparelho{'s' if len(outros) != 1 else ''} na rede.{extra_imp} Aqui está tudo:",
                     [{"titulo": "Aparelhos na rede", "destaque": f"{len(outros)} na rede", "linhas": linhas}])
         linhas = []
-        for p in pcs:
-            l = f"🖥️ {p['nome']} · {p['ip']}"
-            if p.get("usuario"):
-                l += f" · logado: {p['usuario']}"
-            if p.get("grupo"):
-                l += f" · {p['grupo']}"
-            if p.get("shares"):
-                l += " · compartilha pasta"
+        for pp in pcs:
+            l = f"🖥️ {pp['nome'] or pp['ip']}" + (f" · {pp['ip']}" if pp.get("nome") else "")
+            if pp.get("usuario"):
+                l += f" · logado: {pp['usuario']}"
+            if pp.get("grupo"):
+                l += f" · {pp['grupo']}"
+            if pp.get("shares"):
+                l += " · compartilha"
             linhas.append(l)
-        logados = [p["usuario"] for p in pcs if p.get("usuario")]
-        fala = (f"Achei {len(pcs)} PC{'s' if len(pcs) != 1 else ''} na rede, chefe: " + ", ".join(p["nome"] for p in pcs[:6])
+        comnome = [pp for pp in pcs if pp.get("nome")]
+        logados = [pp["usuario"] for pp in pcs if pp.get("usuario")]
+        fala = (f"Achei {len(pcs)} PC{'s' if len(pcs) != 1 else ''} na rede, chefe"
+                + (": " + ", ".join(pp["nome"] for pp in comnome[:6]) if comnome else " (sem nome por enquanto)")
                 + ("." if len(pcs) <= 6 else f" e mais {len(pcs) - 6}.")
-                + (f" Logados agora: {', '.join(logados[:4])}." if logados else ""))
+                + (f" Logados: {', '.join(logados[:4])}." if logados else "")
+                + extra_imp)
         return fala, [{"titulo": "PCs na rede", "destaque": f"{len(pcs)} PCs", "linhas": linhas,
-                       "copiar": "Pra ver todos os usuários de um PC: \"lista os usuários do <IP>\"."}]
+                       "copiar": "Usuários de um PC: \"lista os usuários do <IP>\"."}]
+
+    if acao == "impressoras":
+        aparelhos, cfg = escanear()
+        if not aparelhos:
+            return "Não achei nada na rede, chefe — este PC parece sem conexão ou a varredura foi bloqueada.", []
+        imp = [a for a in aparelhos if a["tipo"] == "impressora"]
+        if not imp:
+            return ("Não achei impressora na rede agora, chefe. Pode estar desligada, ligada por USB direto num PC, "
+                    "ou numa rede/VLAN separada.", [])
+        linhas = [f"🖨️ {a['ip']} · {a['nome'] or a['fabricante'] or 'impressora'} · portas {', '.join(map(str, a['portas']))} · http://{a['ip']}"
+                  for a in imp]
+        return (f"Achei {len(imp)} impressora{'s' if len(imp) != 1 else ''} na rede, chefe.",
+                [{"titulo": "Impressoras na rede", "destaque": f"{len(imp)}", "linhas": linhas}])
 
     if acao == "usuarios_pc":
         ip = p["alvo"]
@@ -577,10 +706,23 @@ def executar(p):
         return "Não achei nada na rede, chefe — este PC parece sem conexão ou a varredura foi bloqueada.", []
 
     if acao == "dispositivos":
-        linhas = [_linha_aparelho(a) for a in aparelhos]
-        cams = [a for a in aparelhos if a["camera"]]
-        fala = f"Achei {len(aparelhos)} aparelho{'s' if len(aparelhos) != 1 else ''} na rede, chefe." + (f" {len(cams)} parece{'m' if len(cams) != 1 else ''} câmera/DVR." if cams else "")
-        return fala, [{"titulo": "Aparelhos na rede", "destaque": f"{len(aparelhos)} na rede", "linhas": linhas[:40]}]
+        # um quadro (cartão) por tipo: PCs, câmeras, impressoras, roteador, outros
+        ordem = [("pc", "🖥️ PCs na rede", "PC"), ("camera", "📷 Câmeras / DVR", "câmera"),
+                 ("impressora", "🖨️ Impressoras", "impressora"), ("roteador", "📡 Roteador", None),
+                 ("aparelho", "• Outros aparelhos", None)]
+        cartoes, resumo = [], []
+        for chave, titulo, rotulo in ordem:
+            grupo = [a for a in aparelhos if a["tipo"] == chave]
+            if not grupo:
+                continue
+            cartoes.append({"titulo": titulo, "destaque": f"{len(grupo)}",
+                            "linhas": [_linha_aparelho(a) for a in grupo]})
+            if rotulo:
+                resumo.append(f"{len(grupo)} {rotulo}{'s' if len(grupo) != 1 else ''}")
+        fala = (f"Achei {len(aparelhos)} aparelho{'s' if len(aparelhos) != 1 else ''} na rede, chefe"
+                + (": " + ", ".join(resumo) + "." if resumo else ".")
+                + f" Separei em {len(cartoes)} quadro{'s' if len(cartoes) != 1 else ''} por tipo.")
+        return fala, cartoes
 
     # câmeras (achar, e mostrar se tiver login)
     cams = [a for a in aparelhos if a["camera"]]
