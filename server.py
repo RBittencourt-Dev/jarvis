@@ -66,6 +66,7 @@ import vendas
 import documentos
 import imagens
 import professor
+import seguranca
 import especialistas
 import voz_efeito
 import habilidades
@@ -948,7 +949,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, documentos, imagens, professor, rede, especialistas, timer, lembretes, pomodoro, anotacoes, noticias, sistemas)
+RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, documentos, imagens, professor, rede, seguranca, especialistas, timer, lembretes, pomodoro, anotacoes, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
@@ -2849,7 +2850,7 @@ async def pedir_confirmacao(pendente):
 @app.get("/api/novidades")
 def novidades():
     """Respostas do Claude que chegaram enquanto o Rafael fazia outra coisa."""
-    blocos = claude_ponte.novidades() + novidades_de_leads[:]
+    blocos = claude_ponte.novidades() + seguranca.novidades() + novidades_de_leads[:]
     novidades_de_leads.clear()
     return {"blocos": blocos}
 
