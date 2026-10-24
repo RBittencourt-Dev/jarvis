@@ -7,7 +7,7 @@
 <link rel="icon" href="/web/marca/jarvis.ico" sizes="any">
 <link rel="icon" href="/web/marca/jarvis-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/web/marca/jarvis-192.png">
-<link rel="stylesheet" href="/web/jarvis.css?v=2410g">
+<link rel="stylesheet" href="/web/jarvis.css?v=2410h">
 <link rel="stylesheet" href="/web/vendor/highlight.css">
 </head>
 <body>
@@ -21,10 +21,28 @@
   </section>
   <main>
     <header>
-      <span class="marca">J.A.R.V.I.S.</span>
+      <span class="marca-grupo">
+        <button id="menu-jarvis" class="icone-menu" title="Menu" aria-label="Abrir menu" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <span class="marca">J.A.R.V.I.S.</span>
+      </span>
       <img class="logo" src="/web/marca/sevencode.png" alt="7 SevenCode">
       <span id="relogio"></span>
     </header>
+
+    <!-- barra minimalista: abre no ícone ao lado do nome; guarda Digitar / Automações / Configurações (antes flutuavam nos cantos) -->
+    <nav id="barra" aria-label="Ações do Jarvis">
+      <button id="abrir-chat" class="icone" title="Digitar" aria-label="Digitar uma mensagem" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/></svg>
+      </button>
+      <button id="abrir-automacoes" class="icone" title="Automações" aria-label="Configurar automações" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+      </button>
+      <button id="abrir-configuracoes" class="icone" title="Configurações" aria-label="Abrir configurações" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+      </button>
+    </nav>
 
     <!-- overlays decorativos do HUD: molduras de canto + varredura de radar (não captura clique) -->
     <div id="molduras" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
@@ -69,17 +87,6 @@
       </div>
     </section>
 
-    <!-- só voz; o teclado aparece quando ele toca no ícone -->
-    <button id="abrir-chat" class="icone" title="Digitar" aria-label="Digitar uma mensagem" aria-expanded="false">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>
-      </svg>
-    </button>
-    <button id="abrir-automacoes" class="icone" title="Automações" aria-label="Configurar automações" aria-expanded="false">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>
-      </svg>
-    </button>
     <section id="automacoes" hidden aria-label="Automações">
       <header class="topo-auto"><h2>Automações</h2><button id="fechar-automacoes" class="secundario" aria-label="Fechar">✕</button></header>
       <ul id="lista-auto"></ul>
@@ -110,12 +117,7 @@
         <div class="botoes"><button type="submit">Salvar</button><button type="button" id="nova-auto" class="secundario">Limpar</button></div>
       </form>
     </section>
-    <!-- Configurações: painel com abas (o ⚙ das automações continua aqui do lado e vira uma das abas) -->
-    <button id="abrir-configuracoes" class="icone" title="Configurações" aria-label="Abrir configurações" aria-expanded="false">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>
-      </svg>
-    </button>
+    <!-- Configurações: painel com abas (o botão agora mora na barra lateral ao lado do nome) -->
     <section id="configuracoes" hidden aria-label="Configurações">
       <header class="topo-auto"><h2>Configurações</h2><p id="cfg-aviso" hidden></p>
         <button id="fechar-configuracoes" class="secundario" aria-label="Fechar">✕</button></header>
@@ -137,7 +139,7 @@
   <script src="/web/vendor/highlight.min.js"></script>
   <script src="/web/instalacao.js?v=2210c"></script>
   <script src="/web/rosto.js?v=2210c"></script>
-  <script src="/web/jarvis.js?v=2410e"></script>
+  <script src="/web/jarvis.js?v=2410h"></script>
 <script src="/web/popups.js?v=2210c"></script>
   <script src="/web/automacoes.js?v=2210c"></script>
   <script src="/web/configuracoes.js?v=2210c"></script>

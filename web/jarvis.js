@@ -939,3 +939,15 @@ setInterval(() => ($("relogio").textContent = new Date().toLocaleTimeString("pt-
   // cada cartão aparece na hora em que o Jarvis começa a falar dele
   await falarBlocos(blocos);
 })();
+
+// ------------------------------------------------------------- barra lateral: o menu ao lado do nome recolhe Digitar/Automações/Configurações
+(function () {
+  const menu = document.getElementById("menu-jarvis");
+  const barra = document.getElementById("barra");
+  if (!menu || !barra) return;
+  const fechar = () => { document.body.classList.remove("barra-aberta"); menu.setAttribute("aria-expanded", "false"); };
+  menu.addEventListener("click", (e) => { e.stopPropagation(); const aberto = document.body.classList.toggle("barra-aberta"); menu.setAttribute("aria-expanded", aberto ? "true" : "false"); });
+  document.addEventListener("click", (e) => { if (document.body.classList.contains("barra-aberta") && !barra.contains(e.target) && !menu.contains(e.target)) fechar(); });
+  addEventListener("keydown", (e) => { if (e.key === "Escape") fechar(); });
+  barra.querySelectorAll(".icone").forEach((b) => b.addEventListener("click", fechar)); // abrir uma ação já recolhe a barra
+})();
