@@ -1134,7 +1134,12 @@ async def comentando(comentarios, tarefa):
     """Fala um comentário curto JÁ e faz o trabalho enquanto isso: nada de silêncio esperando o Spotify ou o painel."""
     import random
     yield {"trecho": falas.escolher(comentarios) + " ", "falar_ja": True}
-    resultado = await tarefa
+    try:
+        resultado = await tarefa
+    except Exception as e:  # antes o erro matava a resposta e ele ficava mudo depois do "Deixa eu ver"
+        import traceback
+        traceback.print_exc()
+        resultado = (f"Deu um erro aqui, chefe: {type(e).__name__}: {str(e)[:150]}", [])
     fala, cartoes = resultado if isinstance(resultado, tuple) else (resultado, [])
     for c in cartoes:
         yield {"cartao": c}
