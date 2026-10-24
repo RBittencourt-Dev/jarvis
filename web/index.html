@@ -7,7 +7,7 @@
 <link rel="icon" href="/web/marca/jarvis.ico" sizes="any">
 <link rel="icon" href="/web/marca/jarvis-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/web/marca/jarvis-192.png">
-<link rel="stylesheet" href="/web/jarvis.css?v=2410b">
+<link rel="stylesheet" href="/web/jarvis.css?v=2410c">
 <link rel="stylesheet" href="/web/vendor/highlight.css">
 </head>
 <body>
@@ -25,6 +25,10 @@
       <img class="logo" src="/web/marca/sevencode.png" alt="7 SevenCode">
       <span id="relogio"></span>
     </header>
+
+    <!-- overlays decorativos do HUD: molduras de canto + varredura de radar (não captura clique) -->
+    <div id="molduras" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <div id="radar-hud" aria-hidden="true"><span class="sweep"></span><b id="radar-num"></b></div>
 
     <!-- palco: o centro da tela principal (a mesma página da extensão, embutida). Com algo nele, o núcleo encolhe. -->
     <iframe id="palco-hud" src="/extensao?embutido=1" title="Painel central" allow="autoplay; fullscreen; accelerometer; gyroscope"></iframe>
