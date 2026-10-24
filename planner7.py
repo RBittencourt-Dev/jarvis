@@ -34,6 +34,15 @@ _horarios = {"em": 0.0, "mapa": {}}
 falhas = []  # agendas que não responderam na última leitura
 _vigia = {"espera": 0.0}  # até quando o vigiar fica quieto depois de um erro (evita martelar toda hora)
 
+from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _FTimeout
+_POOL = _TPE(max_workers=24, thread_name_prefix="7planner")  # persistente: thread presa na rede do colégio vaza, mas não trava o resto
+
+
+def _com_teto(fn, segundos):
+    """Roda fn com teto de tempo. Se a rede do colégio pendurar o socket/DNS, abandona a thread
+    (Python não mata thread) e levanta TimeoutError — a resposta volta rápido em vez de travar minutos."""
+    return _POOL.submit(fn).result(timeout=segundos)
+
 
 def _sa(t):
     return "".join(c for c in unicodedata.normalize("NFD", (t or "").lower()) if unicodedata.category(c) != "Mn")
@@ -85,8 +94,13 @@ _trava_token = threading.Lock()
 
 
 def _acesso():
-    with _trava_token:  # o aviso de 1 em 1 min e uma pergunta ao mesmo tempo: renova uma vez só
+    # trava com teto: se outra renovação travou na rede do colégio, não prende o usuário pra sempre.
+    if not _trava_token.acquire(timeout=12):
+        raise TimeoutError("renovação do 7planner travada (internet lenta)")
+    try:
         return _acesso_sem_trava()
+    finally:
+        _trava_token.release()
 
 
 def _acesso_sem_trava():
@@ -127,11 +141,21 @@ def _mapa_de_horarios():
 
 def agendamentos(inicio, fim, agendas=None):
     """[{agenda, data, inicio, fim, quem, setor, descricao, status}] de inicio a fim (datas), sem os cancelados."""
-    from concurrent.futures import ThreadPoolExecutor
-    token = _acesso()  # um token só pra todas: renovar em paralelo queimaria o refresh (o Supabase troca a cada uso)
-    horarios = _mapa_de_horarios()
     saida = []
     falhas.clear()
+    # token e mapa de horários com teto de tempo: se a rede do colégio pendurar o socket/DNS do Supabase,
+    # a thread fica pra trás, mas a resposta volta rápido com "internet lenta" em vez de travar minutos.
+    try:
+        token = _com_teto(_acesso, 12)
+    except PermissionError:
+        raise  # token vencido/corrompido: deixa o executar pedir reconexão
+    except Exception:
+        falhas.append("o 7planner (a internet tá lenta, não deu pra conectar)")
+        return []
+    try:
+        horarios = _com_teto(_mapa_de_horarios, 12)
+    except Exception:
+        horarios = _horarios.get("mapa") or {}  # usa o mapa velho se tiver; senão segue sem faixa
 
     def ler(chave):
         try:
@@ -140,12 +164,20 @@ def agendamentos(inicio, fim, agendas=None):
                                                    "order": "date"}, token)
         except httpx.HTTPStatusError:
             return chave, []  # agenda que a conta dele não enxerga
-        except httpx.HTTPError:
+        except Exception:
             falhas.append(AGENDAS[chave][1])  # demorou/caiu: segue com as outras e avisa
             return chave, []
 
-    with ThreadPoolExecutor(6) as pool:  # as 6 agendas juntas: 1 espera em vez de 6
-        lidas = list(pool.map(ler, agendas or AGENDAS))
+    chaves = list(agendas or AGENDAS)
+    futuros = {chave: _POOL.submit(ler, chave) for chave in chaves}  # as 6 agendas juntas
+    lidas = []
+    prazo = time.time() + 14  # UM teto pra todas (rodam em paralelo), não 14s por agenda
+    for chave in chaves:
+        try:
+            lidas.append(futuros[chave].result(timeout=max(0.1, prazo - time.time())))
+        except Exception:
+            falhas.append(AGENDAS[chave][1])
+            lidas.append((chave, []))
     for chave, linhas in lidas:
         nome = AGENDAS[chave][1]
         for a in linhas:
@@ -157,8 +189,11 @@ def agendamentos(inicio, fim, agendas=None):
     pessoas = {x["user_id"] for x in saida if x["user_id"]}
     nomes = {}
     if pessoas:  # profiles à parte: user_id aponta pro auth.users, o banco não junta sozinho
-        for p in _get("profiles", {"select": "id,full_name,sector", "id": "in.(" + ",".join(pessoas) + ")"}, token):
-            nomes[p["id"]] = (p.get("full_name") or "", p.get("sector") or "")
+        try:
+            for p in _com_teto(lambda: _get("profiles", {"select": "id,full_name,sector", "id": "in.(" + ",".join(pessoas) + ")"}, token), 12):
+                nomes[p["id"]] = (p.get("full_name") or "", p.get("sector") or "")
+        except Exception:
+            pass  # sem os nomes, mostra os horários mesmo assim
     for x in saida:
         x["quem"], x["setor"] = nomes.get(x.pop("user_id"), ("", ""))
     return sorted(saida, key=lambda x: (x["data"], x["inicio"], x["agenda"]))
@@ -348,7 +383,10 @@ def vigiar(agora=None):
     if not cfg["ligado"] or not conectado() or time.time() < _vigia["espera"]:
         return []
     try:
-        return _vigiar(cfg, agora or datetime.now())
+        saida = _vigiar(cfg, agora or datetime.now())
+        if falhas:  # leu, mas a internet do colégio falhou em alguma agenda: recua pra não martelar
+            _vigia["espera"] = time.time() + 300
+        return saida
     except PermissionError:
         return []  # desconectou (token vencido): fica quieto até ele reconectar
     except Exception as e:
