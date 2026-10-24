@@ -37,6 +37,46 @@ _vigia = {"espera": 0.0}  # até quando o vigiar fica quieto depois de um erro (
 from concurrent.futures import ThreadPoolExecutor as _TPE, TimeoutError as _FTimeout
 _POOL = _TPE(max_workers=24, thread_name_prefix="7planner")  # persistente: thread presa na rede do colégio vaza, mas não trava o resto
 
+import urllib.request
+
+
+def _proxy_do_sistema():
+    """No colégio o navegador sai pra internet por um PROXY da escola; o httpx do Python não lê o proxy do
+    Windows sozinho, então ia direto e o firewall segurava. Aqui pego o MESMO proxy do sistema (registro do
+    Windows / variáveis de ambiente) pra sair pelo mesmo caminho que o navegador — que já provou alcançar o Supabase."""
+    try:
+        p = urllib.request.getproxies()  # no Windows lê o proxy do sistema; em qualquer lugar lê HTTP(S)_PROXY
+        return p.get("https") or p.get("http") or None
+    except Exception:
+        return None
+
+
+def _novo_cliente():
+    px = _proxy_do_sistema()
+    t = httpx.Timeout(10, connect=5)
+    try:
+        return httpx.Client(proxy=px, timeout=t) if px else httpx.Client(timeout=t)
+    except Exception:
+        return httpx.Client(timeout=t)
+
+
+_cli = _novo_cliente()  # cliente único (thread-safe) que respeita o proxy do colégio
+
+
+def recarregar_rede():
+    """Se o proxy do colégio mudar, recria o cliente. Chamável sem quebrar nada."""
+    global _cli
+    try:
+        novo = _novo_cliente()
+        velho, _cli = _cli, novo
+        try:
+            velho.close()
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return _proxy_do_sistema()
+
 
 def _com_teto(fn, segundos):
     """Roda fn com teto de tempo. Se a rede do colégio pendurar o socket/DNS, abandona a thread
@@ -60,8 +100,8 @@ def quem():
 
 
 def _auth(corpo, tipo):
-    r = httpx.post(f"{URL}/auth/v1/token?grant_type={tipo}", json=corpo, timeout=15,
-                   headers={"apikey": ANON, "Content-Type": "application/json"})
+    r = _cli.post(f"{URL}/auth/v1/token?grant_type={tipo}", json=corpo, timeout=15,
+                  headers={"apikey": ANON, "Content-Type": "application/json"})
     if r.status_code >= 400:
         msg = (r.json() if r.headers.get("content-type", "").startswith("application/json") else {}).get("error_description") or r.text[:120]
         raise PermissionError("Email ou senha não conferem." if "invalid" in msg.lower() else msg)
@@ -124,8 +164,8 @@ def _acesso_sem_trava():
 
 
 def _get(tabela, params, token=None):
-    r = httpx.get(f"{URL}/rest/v1/{tabela}", params=params, timeout=httpx.Timeout(10, connect=5),
-                  headers={"apikey": ANON, "Authorization": f"Bearer {token or _acesso()}"})
+    r = _cli.get(f"{URL}/rest/v1/{tabela}", params=params,
+                 headers={"apikey": ANON, "Authorization": f"Bearer {token or _acesso()}"})
     r.raise_for_status()
     return r.json()
 
@@ -262,6 +302,8 @@ def agenda_padrao():
 
 def entender(texto):
     t = texto.strip()
+    if re.search(r"\b(diagn[oó]stico|testa\w*|teste|checa\w*)\b", t, re.I) and re.search(SETE, t, re.I):
+        return {"acao": "diagnostico"}
     if ABRIR.match(t):
         return {"acao": "abrir"}
     if CONECTAR.search(t):
@@ -290,7 +332,31 @@ def _fala_de(x, varios_dias):
     return f"{x['agenda']}, {quando}, {x['quem'].split(' ')[0] if x['quem'] else 'alguém'}{o_que}"
 
 
+def diagnostico():
+    px = _proxy_do_sistema()
+    partes = [f"Proxy do sistema: {px or 'nenhum, conexão direta'}."]
+    t = time.time()
+    try:
+        r = _cli.get(f"{URL}/auth/v1/health", timeout=8)
+        partes.append(f"O Supabase respondeu {r.status_code} em {round(time.time()-t,1)} segundos.")
+    except Exception as e:
+        partes.append(f"O Supabase não respondeu em {round(time.time()-t,1)} segundos: {type(e).__name__}.")
+    if conectado():
+        t = time.time()
+        try:
+            n = len(agendamentos(date.today().isoformat(), date.today().isoformat()))
+            extra = (f", mas falhou em {', '.join(falhas)}" if falhas else ", sem falhas")
+            partes.append(f"A leitura real da agenda trouxe {n} em {round(time.time()-t,1)} segundos{extra}.")
+        except Exception as e:
+            partes.append(f"A leitura real falhou em {round(time.time()-t,1)} segundos: {type(e).__name__}.")
+    else:
+        partes.append("O 7planner não está conectado.")
+    return " ".join(partes)
+
+
 def executar(p):
+    if p["acao"] == "diagnostico":
+        return (diagnostico(),)
     if p["acao"] == "abrir":
         import navegadores
         navegadores.abrir(SITE)
