@@ -81,6 +81,14 @@ GRUPOS = [
         ("Educação Adventista e Igreja Adventista: crenças, Escola Sabatina, Desbravadores, filosofia da escola", "modo adventista, o que é a Semana de Oração"),
         ("Marketing de escola: matrícula, rematrícula, Instagram e posts com autorização de imagem", "chama o especialista em marketing, ideias pra matrícula"),
     ]),
+    ("T.I de rede (faz na hora)", [
+        ("Achar os aparelhos da rede: IP, nome, fabricante e MAC de quem está conectado", "acha os aparelhos da rede"),
+        ("Achar as câmeras e DVRs na rede (pela porta de vídeo e pelo fabricante)", "acha as câmeras"),
+        ("Mostrar a imagem da câmera no HUD — precisa do login dela (sem senha não dá, é por segurança)", "mostra as câmeras"),
+        ("Listar os usuários do Windows (deste PC e do domínio, se houver)", "lista os usuários da rede"),
+        ("Diagnóstico da rede: IP, Wi-Fi, internet, DNS e compartilhamentos, com o que está errado", "diagnóstico da rede"),
+        ("Explicar e ensinar sobre redes: entrar/acessar roteador, câmeras, compartilhamento, VLAN, recuperar senha", "como acesso a câmera / o que é VLAN"),
+    ]),
     ("Agenda (7planner)", [
         ("Ler as suas agendas do 7planner", "o que tem na minha agenda hoje"),
         ("Falar a agenda do dia sozinho às 7h e avisar 10 min antes de cada agendamento do Marketing e da T.I", "(automático)"),

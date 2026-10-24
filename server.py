@@ -38,6 +38,7 @@ import cerebro
 import avisos_diarios
 import celular
 import planner7
+import rede
 import claude_ponte
 import ferramentas_extra
 import extensao
@@ -946,7 +947,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, imagens, professor, especialistas, timer, lembretes, pomodoro, anotacoes, noticias, sistemas)
+RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, imagens, professor, rede, especialistas, timer, lembretes, pomodoro, anotacoes, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
@@ -1848,7 +1849,7 @@ async def conversar(p: Pergunta):
     interno = internos.no_contexto_hw(p.texto, holo_atual.get("tipo")) or internos.entender(p.texto)
     # hologramas, câmeras e Radar são sempre dele mesmo: não podem cair no "fechar janela"/"abrir programa" antigos
     SEMPRE_INTERNO = ("fechar_holo", "apresentacao", "hardware", "hardware_info", "neural", "neural_adicionar", "neural_buscar",
-                      "cameras", "radar_pedido", "radar_buscar", "radar_estado", "radar_parar")
+                      "radar_pedido", "radar_buscar", "radar_estado", "radar_parar")
     if interno and (interno[0] in SEMPRE_INTERNO or
                     interno[0] in ("mover", "fechar_mostrado") and extensao.tem_mostrado(300 if interno[0] == "fechar_mostrado" else 1800)):
         sessao["ultimo_pedido"] = (p.texto.strip(), time.time())
@@ -2201,44 +2202,6 @@ async def holo_hardware(tipo):
     yield {"fim": True}
 
 
-async def ver_cameras(onde):
-    """"Mostra as câmeras ao vivo de Florianópolis": câmeras públicas no globo; clicou, abre a imagem ao vivo."""
-    if onde is None:
-        extensao.publicar({"cameras": {"lista": []}})
-        yield {"trecho": "Câmeras fora do globo, chefe."}
-        yield {"fim": True}
-        return
-    chave = cofre.pegar("windy")
-    if not chave:
-        yield {"trecho": "Pra câmeras ao vivo eu uso a Windy, que só tem câmeras públicas e oficiais. Preciso de uma chave grátis: "
-                         "entra em api.windy.com/keys, cria uma e cola nas Configurações, Privacidade, cofre, com o nome windy."}
-        yield {"fim": True}
-        return
-    lugar = await asyncio.to_thread(olho.area, onde) if onde else {"nome": "aqui perto", **lugares.CASA, "caixa": None}
-    if not lugar:
-        yield {"trecho": f"Não achei {onde} no mapa, chefe."}
-        yield {"fim": True}
-        return
-    raio = 60
-    if lugar.get("caixa"):
-        s_, n_, o_, l_ = lugar["caixa"]
-        raio = max(25, min(250, int(max(n_ - s_, l_ - o_) * 111 / 2)))
-    if not extensao.aberta() and not extensao.tem_palco():
-        extensao.abrir(CONFIG["porta"])
-    extensao.publicar({"mostrar_globo": True})
-    try:
-        lista = await asyncio.to_thread(olho.cameras, chave, lugar["lat"], lugar["lng"], raio)
-    except Exception as e:
-        yield {"trecho": f"A Windy não respondeu: {str(e)[:100]}"}
-        yield {"fim": True}
-        return
-    extensao.publicar({"cameras": {"lista": lista, "lugar": lugar}})
-    ativas = sum(1 for c in lista if c["ativa"])
-    yield {"trecho": (f"{len(lista)} câmeras públicas em {lugar['nome']}, {ativas} transmitindo. Clica em qualquer uma pra ver ao vivo."
-                      if lista else f"Não achei câmera pública em {lugar['nome']}, chefe.")}
-    yield {"fim": True}
-
-
 async def info_hardware(qual):
     """"E a temperatura?" / "a velocidade" com uma peça na tela: o dado aparece do lado do holograma aberto."""
     tipo = holo_atual.get("tipo") or "tudo"
@@ -2515,8 +2478,6 @@ async def pedido_interno(sid, sessao, tipo, valor):
         return pedir_confirmacao(sessao["pendente"])
     if tipo in ("aviao_info", "avioes_lista"):
         return falar_dos_avioes(sessao, tipo, valor)
-    if tipo == "cameras":
-        return ver_cameras(valor)
     if tipo == "apresentacao":
         return apresentar(valor)
     if tipo == "hardware":

@@ -60,8 +60,8 @@ EXPERTS = {
                    "nome, diz isso. Português do Brasil.", None),
 }
 
-# Conhecimento que vai junto no pedido (especialidades/*.md, viaja com o Jarvis pra todo PC).
-BASE = {"suporte": "suporte-ti.md", "adventista": "educacao-adventista-e-igreja.md", "copy": "marketing-escolar.md"}
+# Conhecimento que vai junto no pedido (especialidades/*.md, viaja com o Jarvis pra todo PC). Pode ser uma lista de arquivos.
+BASE = {"suporte": ["suporte-ti.md", "redes.md"], "adventista": "educacao-adventista-e-igreja.md", "copy": "marketing-escolar.md"}
 
 # Problema de T.I dito do jeito comum ("a impressora não imprime") já chama o suporte, sem dizer "especialista".
 PROBLEMA_TI = re.compile(
@@ -74,7 +74,8 @@ PROBLEMA_TI = re.compile(
 
 # como ele chama cada um (palavras → chave)
 AREA = [
-    (r"suporte|t\.?\s?i\b|impressora|rede|wi-?fi|internet|roteador|projetor|chromebook|computador|notebook|tela azul", "suporte"),
+    (r"suporte|t\.?\s?i\b|impressora|rede|wi-?fi|internet|roteador|projetor|chromebook|computador|notebook|tela azul|"
+     r"c[aâ]mera\w*|cftv|dvr|nvr|vlan|switch|dns|dhcp|vpn|rdp|anydesk|compartilh\w*|smb|servidor", "suporte"),
     (r"adventista|igreja|iasd|educa[cç][aã]o adventista|desbravador\w*|escola sabatina|sabado|ellen white|biblia|crencas?", "adventista"),
     (r"program\w*|c[oó]digo|codar|dev|software|script|bug", "programacao"),
     (r"seguran[çc]\w*|hacker|pentest|vulnerab\w*|cibersegur\w*|invas\w*|appsec", "seguranca"),
@@ -89,6 +90,11 @@ AREA = [
 CHAMAR = re.compile(r"\b(?:chama|chamar|aciona|acionar|quero|me\s+(?:d[aá]|passa)|usa|p[oõ]e)\b.{0,20}?"
                     r"(?:o\s+|a\s+|um\s+|uma\s+)?(?:especialista|expert|agente|sub-?agente)\b", re.I)
 COMO = re.compile(r"\bcomo\s+(?:um\s+|uma\s+)?(?:especialista|expert|profissional)\s+(?:em|de|d[oa])\b", re.I)
+# "ensina sobre rede", "como acesso a câmera", "o que é VLAN", "como recupero a senha do DVR" → especialista de suporte (tem a base de redes)
+EXPLICAR_REDE = re.compile(
+    r"\b(?:como|explica\w*|ensina\w*|o que (?:e|é|s[aã]o)|pra que serve|me (?:ensina|explica)|diferen[çc]a|aprende\w*)\b.{0,45}"
+    r"\b(rede|redes|wi-?fi|roteador|switch|vlan|dns|dhcp|ip\b|c[aâ]mera\w*|cftv|dvr|nvr|vpn|rdp|anydesk|acesso remoto|"
+    r"compartilh\w*|smb|porta\w*|firewall|servidor|nmap|mac\b)\b", re.I)
 MODO = re.compile(r"\bmodo\s+(?:especialista\s+)?(?:de\s+|em\s+)?(?P<area>program\w*|seguran[çc]\w*|cibersegur\w*|"
                   r"copy\w*|marketing|dados|an[aá]lise|finan[çc]\w*|design|suporte|adventista|igreja)\b", re.I)
 
@@ -119,6 +125,9 @@ def entender(texto):
         import sistemas  # "o pc tá lento" é ESTE PC: quem responde é o sistemas (mede CPU/RAM na hora)
         if PROBLEMA_TI.search(t) and not sistemas.entender(t) and not re.match(r"^(?:jarvis[ ,]*)?(?:abre|abrir|liga|desliga|reinicia|fecha)\b", t, re.I):
             return {"area": "suporte", "pergunta": t.strip()}
+        import rede  # ação ("acha as câmeras") tem prioridade; aqui é só a EXPLICAÇÃO ("como acesso a câmera")
+        if EXPLICAR_REDE.search(t) and not rede.entender(t):
+            return {"area": "suporte", "pergunta": t.strip()}
         return None
     area = _area(t)
     if not area:
@@ -134,10 +143,15 @@ def executar(p):
         dica = f" Pra {pede_claude}, dá pra eu mandar pro Claude." if pede_claude else ""
         return f"Especialista em {nome} na linha, chefe. Pode mandar sua dúvida.{dica}", []
     if area in BASE:
-        try:
-            persona += "\n\nBase de conhecimento (use quando servir):\n" + (RAIZ / "especialidades" / BASE[area]).read_text(encoding="utf-8")[:9000]
-        except OSError:
-            pass
+        arquivos = BASE[area] if isinstance(BASE[area], list) else [BASE[area]]
+        textos = []
+        for nome_arq in arquivos:
+            try:
+                textos.append((RAIZ / "especialidades" / nome_arq).read_text(encoding="utf-8"))
+            except OSError:
+                pass
+        if textos:
+            persona += "\n\nBase de conhecimento (use quando servir):\n" + "\n\n".join(textos)[:16000]
     try:
         resposta = asyncio.run(cerebro.completar(
             [{"role": "system", "content": persona}, {"role": "user", "content": pergunta}],

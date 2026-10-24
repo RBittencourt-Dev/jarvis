@@ -340,22 +340,3 @@ def mais_perto(lat, lng, lista=None):
     return min(lista, key=lambda a: (a["lat"] - lat) ** 2 + ((a["lng"] - lng) * math.cos(math.radians(lat))) ** 2)
 
 
-# ------------------------------------------------------------------ câmeras ao vivo (só públicas e oficiais: Windy Webcams)
-
-def cameras(chave, lat, lng, raio_km=60, limite=40):
-    """Câmeras públicas perto de um ponto (estrada, praia, cidade, aeroporto). Chave grátis em api.windy.com/keys."""
-    r = httpx.get("https://api.windy.com/webcams/api/v3/webcams", headers={"x-windy-api-key": chave}, timeout=15,
-                  params={"nearby": f"{lat},{lng},{min(250, int(raio_km))}", "limit": limite, "include": "images,location,player,urls",
-                          "lang": "pt"})
-    if r.status_code == 401:
-        raise PermissionError("a chave da Windy foi recusada")
-    r.raise_for_status()
-    lista = []
-    for w in r.json().get("webcams", []):
-        loc, img, pl = w.get("location") or {}, (w.get("images") or {}).get("current") or {}, w.get("player") or {}
-        if loc.get("latitude") is None:
-            continue
-        lista.append({"id": str(w.get("webcamId")), "nome": w.get("title") or "Câmera", "lat": loc["latitude"], "lng": loc["longitude"],
-                      "cidade": loc.get("city") or "", "foto": img.get("preview") or img.get("thumbnail"),
-                      "player": pl.get("live") or pl.get("day") or "", "ativa": w.get("status") == "active"})
-    return lista

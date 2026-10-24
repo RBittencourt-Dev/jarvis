@@ -225,11 +225,6 @@ FECHAR_HOLO = re.compile(J + r"(?:fecha|fechar|oculta|ocultar|esconde|esconder|t
                          r"(?:n[uú]cleo(?:\s+neural)?|c[eé]rebro|rede\s+neural|holograma|apresenta[cç][aã]o|modelo\s+3\s*d|3\s*d|mem[oó]ria\s+ram|processador|"
                          r"placa\s+de\s+v[ií]deo|disco)" + FIM)
 
-CAMERAS = re.compile(J + r"(?:(?:me\s+)?(?:mostra|mostrar|liga|ativa|abre|bota|coloca|quero\s+ver|procura|acha)\s+)?(?:as\s+|a\s+|uma\s+)?"
-                     r"(?:c[aâ]meras?|webcams?)(?:\s+(?:ao\s+vivo|online|em\s+tempo\s+real|p[uú]blicas?|abertas?))*"
-                     r"(?:\s+(?:de|do|da|dos|das|em|no|na|nos|nas|sobre|perto\s+d[eoa])\s+(?P<onde>.+?))?" + FIM)
-CAMERAS_DESLIGAR = re.compile(J + r"(?:tira|esconde|oculta|ocultar|desliga|apaga|remove|fecha)\s+(?:as\s+)?(?:c[aâ]meras?|webcams?)" + FIM)
-
 RUIDO_INICIAL = re.compile(r"^(?:jarvis[ ,]*)?(?:ent[aã]o|a[ií]|agora|e|ah|bom|n[aã]o)[ ,]+(?=(?:me\s+)?(?:mostra|liga|ativa|desativa|desliga|conta|abre|passa|traz))")
 
 DESFAZER = re.compile(J + r"(?:desfaz|desfazer|desfa[cç]a|volta\s+atr[aá]s|reverte|cancela)\s*(?:isso|o\s+que\s+(?:voc[eê]|tu)\s+fez|"
@@ -246,17 +241,16 @@ def entender(texto):
     t = RUIDO_INICIAL.sub("", t)  # "então me mostra…" ("não me mostra" é o Chrome ouvindo "então")
     if not t:
         return None
+    # T.I de rede (módulo rede) tem prioridade sobre o mapa/POIs: "acha os aparelhos da rede", "câmeras da rede",
+    # "lista os usuários", "diagnóstico da rede" — deixa o módulo rede pegar em vez do POI/lugar.
+    try:
+        import rede as _rede
+        if _rede.entender(texto):
+            return None
+    except Exception:
+        pass
     if GLOBO_NORMAL.match(t):
         return ("globo_normal", None)
-    if CAMERAS_DESLIGAR.match(t):
-        return ("cameras", None)
-    m = CAMERAS.match(t)
-    if m and re.search(r"c[aâ]mera|webcam", t) and not re.search(r"\b(?:do\s+pc|do\s+notebook|minha\s+c[aâ]mera|webcam\s+do\s+pc)\b", t):
-        onde = m.group("onde")
-        if onde:
-            i = _sa(texto).find(onde)
-            onde = texto[i:i + len(onde)] if i >= 0 else onde
-        return ("cameras", onde or "")
     if FECHAR_HOLO.match(t):
         return ("fechar_holo", None)
     if NEURAL_ABRIR.match(t):
