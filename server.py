@@ -41,6 +41,7 @@ import planner7
 import rede
 import claude_ponte
 import claude_conversa
+import hud_paineis
 import ferramentas_extra
 import extensao
 import fontes
@@ -1085,6 +1086,12 @@ def painel_da_extensao():
     """Mini-painel da extensão: números do PC e o pomodoro."""
     return {"pc": sistemas.numeros_do_pc(), "pomodoro": pomodoro.situacao(), "agora": time.time(),
             "autenticado": rosto_ja_conferido() or not ARQUIVO_ROSTO.exists()}
+
+
+@app.get("/api/hud")
+async def hud_dados():
+    """Dados ao vivo dos painéis fixos do HUD (sistema, rede, clima, notícias). Ver hud_paineis.py e web/hud-paineis.js."""
+    return await asyncio.to_thread(hud_paineis.tudo)
 
 
 musica_tocando = {"agora": False}

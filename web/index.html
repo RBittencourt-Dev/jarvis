@@ -7,7 +7,7 @@
 <link rel="icon" href="/web/marca/jarvis.ico" sizes="any">
 <link rel="icon" href="/web/marca/jarvis-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/web/marca/jarvis-192.png">
-<link rel="stylesheet" href="/web/jarvis.css?v=2410c">
+<link rel="stylesheet" href="/web/jarvis.css?v=2410d">
 <link rel="stylesheet" href="/web/vendor/highlight.css">
 </head>
 <body>
@@ -29,6 +29,14 @@
     <!-- overlays decorativos do HUD: molduras de canto + varredura de radar (não captura clique) -->
     <div id="molduras" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     <div id="radar-hud" aria-hidden="true"><span class="sweep"></span><b id="radar-num"></b></div>
+
+    <!-- painéis fixos do HUD (SISTEMA/REDE/VISÃO/HOJE), preenchidos pelo hud-paineis.js -->
+    <section id="hud-paineis" aria-hidden="true">
+      <div class="hudp" id="hp-sistema"><h3>SISTEMA</h3><div class="corpo"></div></div>
+      <div class="hudp" id="hp-rede"><h3>REDE</h3><div class="corpo"></div></div>
+      <div class="hudp stub" id="hp-visao"><h3>VISÃO</h3><div class="corpo">Câmera desligada.<br><small>Entra com o controle por gestos (em breve).</small></div></div>
+      <div class="hudp" id="hp-hoje"><h3>HOJE</h3><div class="corpo"></div></div>
+    </section>
 
     <!-- palco: o centro da tela principal (a mesma página da extensão, embutida). Com algo nele, o núcleo encolhe. -->
     <iframe id="palco-hud" src="/extensao?embutido=1" title="Painel central" allow="autoplay; fullscreen; accelerometer; gyroscope"></iframe>
@@ -133,5 +141,6 @@
   <script src="/web/automacoes.js?v=2210c"></script>
   <script src="/web/configuracoes.js?v=2210c"></script>
   <script src="/web/timers.js?v=2210f" data-onde="hud"></script>
+  <script src="/web/hud-paineis.js?v=2410c"></script>
 </body>
 </html>

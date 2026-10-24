@@ -400,3 +400,39 @@ body.palco-ativo #conversa { bottom: 18px; }
   body.palco-ativo #paineis { display: none; }
   #pagina-hud { inset: 8px 8px 80px; }
 }
+
+/* ============================================================ passo 3: painéis fixos (SISTEMA/REDE/VISÃO/HOJE) */
+#hud-paineis { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+.hudp { position: absolute; width: 300px; max-width: 26vw; padding: 10px 12px; pointer-events: auto;
+  background: linear-gradient(135deg, #0c2236cc, #06121dcc); border: 1px solid var(--ciano-fraco); backdrop-filter: blur(4px);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); }
+.hudp::before { content: ""; position: absolute; left: 0; top: 0; width: 3px; height: 100%; background: var(--ciano); box-shadow: 0 0 10px var(--ciano); }
+.hudp h3 { margin: 0 0 8px; font: 700 11px/1 var(--display); letter-spacing: .22em; color: var(--ciano); }
+#hp-sistema { left: 20px; top: 62px; }
+#hp-rede { left: 20px; bottom: 22px; }
+#hp-visao { right: 20px; top: 62px; }
+#hp-hoje { right: 20px; bottom: 22px; }
+.hudp .corpo { display: grid; gap: 6px; font-size: 12px; }
+.hudp.stub .corpo { color: var(--apagado); }
+.hudp.stub small { color: #4e6b80; }
+.hudp .g { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; }
+.hudp .g .gl { color: var(--apagado); letter-spacing: .12em; font-size: 11px; }
+.hudp .g .gv { color: var(--ciano); font-family: var(--mono); }
+.hudp .g b { grid-column: 1 / -1; height: 3px; margin-top: 3px; background: var(--ciano); box-shadow: 0 0 8px var(--ciano-fraco); transition: width .4s; }
+.hudp .g.aviso .gv { color: var(--aviso); } .hudp .g.aviso b { background: var(--aviso); box-shadow: 0 0 8px var(--aviso); }
+.hudp .g.perigo .gv { color: var(--perigo); } .hudp .g.perigo b { background: var(--perigo); box-shadow: 0 0 8px var(--perigo); }
+.hudp .kv { display: flex; justify-content: space-between; gap: 10px; }
+.hudp .kv span { color: var(--apagado); letter-spacing: .1em; font-size: 11px; }
+.hudp .kv strong { color: var(--texto); font-weight: 500; font-family: var(--mono); }
+.hudp .sub { color: var(--apagado); font-size: 11px; }
+.hudp .relogio-g { font: 700 26px/1 var(--display); color: var(--ciano); text-shadow: 0 0 12px var(--ciano-fraco); }
+.hudp .data-g { color: var(--apagado); text-transform: capitalize; font-size: 12px; margin-bottom: 2px; }
+.hudp .ticker { color: var(--texto); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-top: 1px solid #39d0ff1f; padding-top: 6px; }
+/* com os painéis ligados, os cartões flutuantes vão pro miolo vertical (fora dos cantos) */
+body.hud-on .cartao.v1 { left: 4vw; top: 34vh; } body.hud-on .cartao.v0 { right: 4vw; top: 34vh; }
+body.hud-on .cartao.v3 { left: 4vw; top: 50vh; } body.hud-on .cartao.v2 { right: 4vw; top: 50vh; }
+body.hud-on .cartao.v5 { left: 4vw; top: 66vh; } body.hud-on .cartao.v4 { right: 4vw; top: 66vh; }
+/* durante um holograma (palco), os painéis somem pra não competir */
+body.palco-ativo #hud-paineis { opacity: 0; pointer-events: none; transition: opacity .4s; }
+@media (max-width: 1100px) { .hudp { width: 240px; } }
+@media (max-width: 900px) { #hud-paineis { display: none; } }

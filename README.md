@@ -44,7 +44,10 @@ As chaves **não** vão: o cofre é criptografado pelo Windows e só abre no PC 
 O HUD (tela do Jarvis, `web/`) segue a referência `jarvis_hud.json`: tema ciano `#00E5FF` com âmbar/vermelho/verde
 para aviso/perigo/ok, fontes **Orbitron** (títulos e números) e **Share Tech Mono** (código/relógio), ambas locais em
 `web/vendor/fonts/` (offline), e scanlines finas por cima. O núcleo "arc reactor" muda de estado
-(ouvindo/pensando/falando/alerta), os painéis giram em volta e o holograma 3D aparece no palco central.
+(ouvindo/pensando/falando/alerta), e o holograma 3D aparece no palco central. Nos quatro cantos ficam painéis fixos ao
+vivo — **SISTEMA** (CPU/RAM/GPU/disco/temp/bateria), **REDE** (download/upload/ping/dispositivos), **VISÃO** (câmera,
+ainda stub) e **HOJE** (relógio, clima de Porto Alegre via open-meteo, notícias do G1) — servidos por `hud_paineis.py`
+em `/api/hud` e desenhados por `web/hud-paineis.js`. Os cartões transitórios continuam aparecendo no miolo.
 Tudo responsivo (PC, monitor em pé, janela pequena/celular). O "modo leve" (Configurações → Geral) desliga os efeitos
 pesados. Evoluindo em passos; ver progresso nos commits "HUD:".
 
