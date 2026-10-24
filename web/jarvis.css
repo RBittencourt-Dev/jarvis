@@ -457,3 +457,8 @@ body.modo-seguranca .marca::after { content: " · SEGURANÇA"; color: var(--peri
 body.barra-aberta #barra { opacity: 1; transform: none; pointer-events: auto; }
 #barra .icone { position: static; inset: auto; width: 44px; height: 44px; z-index: auto; }
 @media (max-width: 900px) { #barra { top: 50px; left: 12px; } }
+
+/* rótulo do radar de rede (deixa claro que o número é a contagem de aparelhos) */
+#radar-hud .radar-cap { position: absolute; left: 0; right: 0; bottom: 11px; text-align: center; pointer-events: none;
+  font: 700 8px var(--display); letter-spacing: .22em; color: color-mix(in srgb, var(--ciano) 72%, transparent); }
+#radar-hud b { align-content: center; padding-bottom: 7px; }  /* sobe o número pra caber o rótulo embaixo */
