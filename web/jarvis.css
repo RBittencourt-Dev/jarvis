@@ -436,3 +436,10 @@ body.hud-on .cartao.v5 { left: 4vw; top: 66vh; } body.hud-on .cartao.v4 { right:
 body.palco-ativo #hud-paineis { opacity: 0; pointer-events: none; transition: opacity .4s; }
 @media (max-width: 1100px) { .hudp { width: 240px; } }
 @media (max-width: 900px) { #hud-paineis { display: none; } }
+
+/* ============================================================ passo 6: modos de vista (completo=padrão / foco / segurança) */
+body.modo-foco #hud-paineis, body.modo-foco #paineis, body.modo-foco #molduras, body.modo-foco #radar-hud { display: none; }
+body.modo-foco #conversa { bottom: 110px; }
+body.modo-seguranca #hp-sistema, body.modo-seguranca #hp-hoje { display: none; }   /* segurança: só REDE + VISÃO */
+body.modo-seguranca .nucleo { --nuc: var(--perigo); }                              /* núcleo em alerta */
+body.modo-seguranca .marca::after { content: " · SEGURANÇA"; color: var(--perigo); letter-spacing: .2em; }

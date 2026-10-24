@@ -79,6 +79,25 @@ function aplicarModo(modo) {
 }
 fetch("/api/status").then((r) => r.json()).then((s) => aplicarModo(s.modo)).catch(() => {});
 
+// modos de vista do HUD (ref jarvis_hud.json): completo (padrão) / foco / segurança. Fica guardado neste PC.
+function aplicarVista(nome) {
+  const cls = { foco: "modo-foco", minimalista: "modo-foco", completo: "", completa: "", seguranca: "modo-seguranca" }[nome];
+  document.body.classList.remove("modo-foco", "modo-seguranca");
+  if (cls) document.body.classList.add(cls);
+  try { localStorage.setItem("vista", nome); } catch {}
+}
+try { const v = localStorage.getItem("vista"); if (v) aplicarVista(v); } catch {}
+// "modo foco/completo/segurança" dito por voz troca a vista aqui mesmo, sem ir pro servidor
+function trocouVista(texto) {
+  const m = texto.toLowerCase().match(/\bmodo\s+(foco|minimalista|complet[oa]|seguran[çc]a)\b/);
+  if (!m) return false;
+  const nome = m[1].startsWith("complet") ? "completo" : m[1].replace("ç", "c");
+  aplicarVista(nome === "minimalista" ? "foco" : nome);
+  escrever(m[0], "eu");
+  estado("", "Modo " + (nome === "foco" || nome === "minimalista" ? "foco" : nome));
+  return true;
+}
+
 function estado(classe, texto) {
   if (classe === "pensando" && !document.body.classList.contains("pensando")) { sons.pensando(); sons.radar(true); }
   if (classe !== "pensando") sons.radar(false);
@@ -479,6 +498,7 @@ async function chamar(url, corpo) {
         if (e.dormir) dormir = true;
         if (e.minimizar) minimizar = true;
         if (e.modo) { aplicarModo(e.modo); sons.modo(e.modo === "caverna"); }
+        if (e.vista) aplicarVista(e.vista);
         if (e.microfone) aplicarMicrofone(e.microfone);
         if (e.trecho && !texto && /^(Abrindo|Abri|Pesquisando|Tocando)/.test(e.trecho)) sons.abrir();
         if (e.entendido) {
@@ -548,6 +568,7 @@ async function chamar(url, corpo) {
 function perguntar(texto, alternativas = []) {
   texto = texto.trim();
   if (!texto) return;
+  if (trocouVista(texto)) return;  // "modo foco/completo/segurança" é resolvido no HUD, não vai pro servidor
   escrever(texto, "eu");
   chamar("/api/conversar", { sessao, texto, alternativas });
 }
