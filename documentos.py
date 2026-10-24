@@ -36,6 +36,28 @@ RAIZ = Path(__file__).parent
 PASTA = Path(os.path.expanduser("~")) / "Documents" / "7 SevenCode"
 
 PALETA = {"fundo": "#17191f", "azul": "#0479da", "texto": "#1a1a1a", "apoio": "#555"}
+PREVIA_DIR = RAIZ / "web" / "docs-preview"  # prévias servidas em /web/docs-preview/<id>.html (mesma origem do HUD)
+
+_logo_cache = {"uri": None}
+
+
+def _logo_data_uri():
+    """O logo da 7code embutido (base64), pra prévia e .docx não dependerem de caminho externo."""
+    if _logo_cache["uri"] is None:
+        try:
+            import base64
+            dados = (RAIZ / "web" / "marca" / "sevencode.png").read_bytes()
+            _logo_cache["uri"] = "data:image/png;base64," + base64.b64encode(dados).decode()
+        except OSError:
+            _logo_cache["uri"] = ""
+    return _logo_cache["uri"]
+
+
+def _porta():
+    try:
+        return json.loads((RAIZ / "config.json").read_text(encoding="utf-8")).get("porta", 8765)
+    except (OSError, ValueError):
+        return 8765
 
 
 def _sa(t):
@@ -174,7 +196,9 @@ def _html(doc):
 <style>
   body {{ font-family: 'Segoe UI', Arial, sans-serif; color: {PALETA['texto']}; max-width: 720px; margin: 40px auto;
           line-height: 1.55; font-size: 11pt; }}
-  .topo {{ border-bottom: 3px solid {PALETA['azul']}; padding-bottom: 10px; margin-bottom: 18px; }}
+  .topo {{ border-bottom: 3px solid {PALETA['azul']}; padding-bottom: 10px; margin-bottom: 18px;
+           display: flex; align-items: center; gap: 12px; }}
+  .logo {{ height: 34px; width: auto; }}
   .marca {{ color: {PALETA['azul']}; font-size: 20pt; font-weight: 700; letter-spacing: .5px; }}
   .marca small {{ color: {PALETA['apoio']}; font-weight: 400; font-size: 10pt; }}
   h1 {{ font-size: 16pt; margin: 6px 0 2px; }}
@@ -188,7 +212,7 @@ def _html(doc):
   .assin .linha {{ flex: 1; border-top: 1px solid #333; padding-top: 6px; text-align: center; font-size: 9pt; }}
   .obs {{ color: {PALETA['apoio']}; font-size: 8.5pt; margin-top: 26px; border-top: 1px solid #ddd; padding-top: 8px; }}
 </style></head><body>
-<div class="topo"><div class="marca">7 SevenCode <small>· software sob medida</small></div></div>
+<div class="topo">{('<img class="logo" src="' + _logo_data_uri() + '" alt="7 SevenCode">') if _logo_data_uri() else ''}<div class="marca">7 SevenCode <small>· software sob medida</small></div></div>
 <h1>{_esc(doc['titulo'])}</h1>
 <p class="sub">{_esc(doc.get('subtitulo') or '')}</p>
 <p class="data">Documento gerado em {hoje} — 7sevencode.com.br</p>
@@ -265,6 +289,79 @@ def _copiar(texto):
         return False
 
 
+# ---------------------------------------------------------------- salvar no painel (folha em branco) + HUD
+def _corpo_painel(doc):
+    """Monta o corpo em HTML com as tags que o painel aceita (p, h2, strong, ul/li) + o bloco de assinatura.
+    O painel aplica o timbre e o logo da 7code por cima; aqui vai só o conteúdo."""
+    partes = []
+    for i, s in enumerate(doc["secoes"]):
+        t = (s.get("titulo") or "").strip()
+        # a 1ª seção costuma ser a qualificação das partes: vai como parágrafo de abertura
+        classe = ' class="partes"' if i == 0 and re.search(r"\bparte", _sa(t)) else ""
+        if t and not classe:
+            partes.append(f"<h2>{_esc(t)}</h2>")
+        for p in (s.get("paragrafos") or []):
+            if str(p).strip():
+                partes.append(f"<p{classe}>{_esc(p)}</p>")
+                classe = ""
+        itens = [x for x in (s.get("itens") or []) if str(x).strip()]
+        if itens:
+            partes.append("<ul>" + "".join(f"<li>{_esc(x)}</li>" for x in itens) + "</ul>")
+    campos = [c for c in (doc.get("campos") or []) if str(c).strip()]
+    if campos:
+        partes.append('<p class="nota"><strong>A preencher antes de enviar:</strong> ' + _esc("; ".join(campos)) + "</p>")
+    partes.append('<p class="assinaturas"><span class="linha-assinatura"></span>7 SevenCode — Rafael Bittencourt'
+                  '&nbsp;&nbsp;&nbsp;<span class="linha-assinatura"></span>Contratante</p>')
+    return "\n".join(partes)
+
+
+def _cliente_do_assunto(assunto):
+    """Tira um nome de cliente razoável do assunto ('pro condomínio Ventos do Sul' → 'Condomínio Ventos do Sul')."""
+    a = re.sub(r"\b(?:licen[çc]a|do\s+porthon|de\s+software|pra|para|pro)\b", " ", assunto or "", flags=re.I)
+    a = re.sub(r"\s+", " ", a).strip(" ,.:-")
+    return a[:120].title() if a else None
+
+
+def _escrever_previa(doc_id, doc):
+    """Grava a prévia formatada em web/docs-preview/<id>.html e devolve a URL servida (mesma origem do HUD)."""
+    PREVIA_DIR.mkdir(parents=True, exist_ok=True)
+    arq = PREVIA_DIR / f"{doc_id}.html"
+    arq.write_text(_html(doc), encoding="utf-8")
+    return f"http://127.0.0.1:{_porta()}/web/docs-preview/{doc_id}.html"
+
+
+def _mostrar_no_hud(titulo, previa_url):
+    try:
+        import uuid
+        import extensao
+        extensao.publicar_tela({"pagina": {"id": "doc" + uuid.uuid4().hex[:6], "url": previa_url,
+                                           "titulo": titulo[:80], "fonte": "7 SevenCode"}})
+        return True
+    except Exception:
+        return False
+
+
+def _abrir_no_painel(url):
+    try:
+        import navegadores
+        navegadores.abrir(url)
+        return True
+    except Exception:
+        return False
+
+
+def _salvar_no_painel(doc, assunto):
+    """Cria o documento na folha em branco do painel. Devolve o resultado ou None (cai pro .docx local)."""
+    try:
+        import painel
+        if not painel.configurado():
+            return None
+        return painel.criar_documento(doc["titulo"], _corpo_painel(doc), tipo="livre",
+                                      cliente_nome=_cliente_do_assunto(assunto))
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------- executar
 def _explicar(pergunta):
     persona = (PERSONA + "\n\nResponda à dúvida do Rafael sobre documentos da 7 SevenCode de forma direta e prática, em "
@@ -299,27 +396,49 @@ def executar(p):
     if not doc:
         return (f"Não consegui montar o {NOMES[tipo]} agora, chefe. Tenta de novo, ou me diz pra quem e sobre o quê?", [])
 
-    caminho, como = _salvar_e_abrir(doc)
     texto = _texto(doc)
     copiou = _copiar(texto)
-
     campos = [str(c) for c in (doc.get("campos") or []) if str(c).strip()]
+    nota = ""
+    if assunto and re.search(r"\bnota\s+fiscal|\bnota\b|\bnf\b", _sa(assunto)):
+        nota = (" Lembrando: enquanto a empresa recebe como PF não tem nota fiscal — se o cliente exige nota, "
+                "é o gatilho pra abrir o CNPJ.")
+
+    # 1) Caminho principal: salvar na FOLHA EM BRANCO do painel (formatação da 7code, assinável, fica na lista de docs).
+    res = _salvar_no_painel(doc, assunto)
+    if res and res.get("id"):
+        previa = _escrever_previa(res["id"], doc)
+        _mostrar_no_hud(doc["titulo"], previa)
+        _abrir_no_painel(res["url"])
+        numero = f"{res['ano']}/{str(res['numero']).zfill(3)}" if res.get("numero") else ""
+        linhas = [s.get("titulo", "") for s in doc["secoes"] if s.get("titulo")]
+        if campos:
+            linhas += ["", "A preencher: " + "; ".join(campos[:6])]
+        linhas.append("Tá no painel em Documentos — é só revisar, preencher e assinar por lá.")
+        cartao = {"titulo": doc["titulo"],
+                  "destaque": (f"Documento {numero} · no painel" if numero else "Salvo no painel"),
+                  "linhas": linhas, "copiar": texto}
+        fala = (f"Prontinho, chefe. Montei o {NOMES[tipo]} \"{doc['titulo']}\" e salvei direto na folha em branco do "
+                f"painel da 7code" + (f", documento {numero}" if numero else "") + " — já com a formatação da empresa. "
+                "Tá aí na tela, e abri no painel pra você revisar e assinar."
+                + (f" Deixei {len(campos)} campo{'s' if len(campos) != 1 else ''} pra preencher." if campos else "")
+                + nota)
+        return fala, [cartao]
+
+    # 2) Reserva: painel indisponível/não configurado (ex.: PC sem o painel) → gera o .docx local e abre no Word.
+    caminho, como = _salvar_e_abrir(doc)
     linhas = [s.get("titulo", "") for s in doc["secoes"] if s.get("titulo")]
     if campos:
         linhas += ["", "A preencher: " + "; ".join(campos[:6])]
     linhas.append("Pra mudar: \"tira a cláusula de…\", \"deixa o prazo em 30 dias\", \"inclui a parte de LGPD\".")
     cartao = {"titulo": doc["titulo"], "destaque": doc.get("subtitulo") or NOMES[tipo].capitalize(),
               "linhas": linhas, "copiar": texto}
-
-    onde = {"word": "e já abri no Word pra você revisar e assinar",
+    onde = {"word": "e abri no Word pra você revisar e assinar",
             "doc": "e abri o arquivo pra você revisar",
             "html": "e abri a prévia pra você",
             "erro": "mas não consegui abrir o arquivo automaticamente"}[como]
-    nota = ""
-    if assunto and re.search(r"\bnota\s+fiscal|nota\b|nf\b", _sa(assunto)):
-        nota = " Lembrando: enquanto a empresa recebe como PF não tem nota fiscal — se o cliente exige nota, é o gatilho pra abrir o CNPJ."
-    fala = (f"Prontinho, chefe. Montei o {NOMES[tipo]} \"{doc['titulo']}\" {onde}"
-            + (", e o texto já tá copiado." if copiou else ".")
-            + (f" Deixei {len(campos)} campo{'s' if len(campos) != 1 else ''} pra você preencher." if campos else "")
+    fala = (f"Prontinho, chefe. Montei o {NOMES[tipo]} \"{doc['titulo']}\" {onde} (não consegui falar com o painel "
+            "agora, então deixei em arquivo)" + (", e o texto já tá copiado." if copiou else ".")
+            + (f" Deixei {len(campos)} campo{'s' if len(campos) != 1 else ''} pra preencher." if campos else "")
             + " É um documento base: revisa antes de enviar." + nota)
     return fala, [cartao]

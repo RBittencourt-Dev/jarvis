@@ -23,6 +23,15 @@ STATUS = {"novo": "novos", "contatado": "contatados", "respondeu": "responderam"
 
 _sessao = {"token": None, "expira": 0}
 
+# Endereço de produção do painel (pra abrir o documento criado no navegador/HUD).
+BASE_PAINEL = "https://painel-7sevencode.vercel.app"
+
+# O "papel do Word" que a folha em branco grava (lib/pagina-documento.ts → PAGINA_WORD): Calibri 11, margem Normal,
+# entrelinha 1,08. É o que dá a formatação certa da 7code no documento novo.
+PAGINA_WORD = {"margens": {"topo": 25, "baixo": 25, "esquerda": 30, "direita": 30},
+               "fonte": "Calibri, Carlito, 'Segoe UI', Arial, sans-serif",
+               "tamanho": 11, "entrelinha": 1.08, "depois": 8}
+
 
 def configurado():
     return ARQUIVO_LOGIN.exists() and ENV_DO_PAINEL.exists()
@@ -54,6 +63,35 @@ def _ler(tabela, consulta):
                   headers={"apikey": anon, "Authorization": f"Bearer {token}", "Range": "0-9999"}, timeout=8)
     r.raise_for_status()
     return r.json()
+
+
+def criar_documento(titulo, corpo, tipo="livre", cliente_nome=None, cliente_documento=None, cliente_endereco=None):
+    """Cria um documento no painel (tabela sv_documentos), como o Rafael, igual à 'folha em branco'.
+
+    Escreve com o token DELE (login-painel.json): a RLS de sv_documentos exige estar em sv_usuarios, então nada aqui
+    contorna a permissão — ele cria porque é da equipe. Nasce como rascunho (default da tabela); o número é dado pelo
+    gatilho do banco. Grava a 'pagina' do Word (PAGINA_WORD) pra sair com a formatação certa; se a coluna não existir
+    nesse banco, grava sem ela. Devolve {id, numero, ano, url} ou levanta exceção.
+    """
+    url, anon, token = _token()
+    login = json.loads(ARQUIVO_LOGIN.read_text(encoding="utf-8"))
+    cab = {"apikey": anon, "Authorization": f"Bearer {token}", "Content-Type": "application/json",
+           "Prefer": "return=representation"}
+    linha = {"tipo": tipo, "titulo": titulo, "corpo": corpo,
+             "cliente_nome": (cliente_nome or None), "cliente_documento": (cliente_documento or None),
+             "cliente_endereco": (cliente_endereco or None), "criado_por": login.get("email"),
+             "pagina": PAGINA_WORD}
+    r = httpx.post(f"{url}/rest/v1/sv_documentos", headers=cab, json=linha, timeout=15)
+    if r.status_code >= 400 and "pagina" in (r.text or ""):
+        linha.pop("pagina", None)  # banco sem a coluna 'pagina' (SQL de 02/10 não rodou): grava sem ela
+        r = httpx.post(f"{url}/rest/v1/sv_documentos", headers=cab, json=linha, timeout=15)
+    if r.status_code >= 300:
+        raise RuntimeError(f"painel recusou ({r.status_code}): {(r.text or '')[:160]}")
+    dados = r.json()
+    criado = dados[0] if isinstance(dados, list) else dados
+    doc_id = criado.get("id")
+    return {"id": doc_id, "numero": criado.get("numero"), "ano": criado.get("ano"),
+            "url": f"{BASE_PAINEL}/painel/documentos/{doc_id}"}
 
 
 def reais(v):
