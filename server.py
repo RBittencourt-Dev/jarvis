@@ -41,7 +41,6 @@ import planner7
 import rede
 import claude_ponte
 import claude_conversa
-import arquivos
 import ferramentas_extra
 import extensao
 import fontes
@@ -2656,15 +2655,6 @@ async def _rotear(sid, sessao, texto, interpretar=True):
                               "args": {"pedido": para_o_claude["pedido"]},
                               "fala": f"Vou {acao}, no {para_o_claude['nome']}: {para_o_claude['pedido']}. Confirma?"}
         return em_linhas(sid, pedir_confirmacao(sessao["pendente"]))
-    # Jarvis age no PC: criar/abrir/listar/apagar arquivo ou pasta. Abrir/listar faz direto; o que mexe, confirma antes.
-    fa = arquivos.entender(p.texto)
-    if fa:
-        if fa["op"] in ("abrir", "listar"):
-            return em_linhas(sid, responder_ja(await asyncio.to_thread(arquivos.executar, fa)))
-        sessao["pendente"] = {"arquivo": fa, "nome": arquivos.nome_curto(fa),
-                              "args": {"o que": arquivos.descrever(fa)},
-                              "fala": f"{arquivos.descrever(fa)} Confirma?"}
-        return em_linhas(sid, pedir_confirmacao(sessao["pendente"]))
     if proatividade.CRIAR_SUGERIDA.match(p.texto.strip()):
         return em_linhas(sid, responder_ja(await asyncio.to_thread(proatividade.criar_sugerida)))
     perturbe = NAO_PERTURBE.match(p.texto.strip())
@@ -3310,9 +3300,6 @@ async def decidir(d: Decisao):
         return em_linhas(d.sessao, responder_ja("Chefe, tudo pronto, subindo atualização!"))
     if "claude" in pend:
         fala = claude_ponte.executar(pend["claude"]) if d.autorizado else "Cancelado, chefe. Não mandei nada."
-        return em_linhas(d.sessao, responder_ja(fala))
-    if "arquivo" in pend:  # Jarvis mexendo em arquivo/pasta: no "sim" executa e fala o resultado de verdade
-        fala = await asyncio.to_thread(arquivos.executar, pend["arquivo"]) if d.autorizado else "Cancelado, chefe. Não mexi em nada."
         return em_linhas(d.sessao, responder_ja(fala))
     if "acao" in pend:  # comando do Windows (desligar, reiniciar…): responde direto, sem modelo
         if d.autorizado:
