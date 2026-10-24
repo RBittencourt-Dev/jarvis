@@ -43,22 +43,36 @@ header { position: absolute; top: 20px; left: 32px; right: 32px; display: flex; 
 .palco { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; z-index: 1; }
 #onda { position: absolute; left: 50%; top: calc(var(--nucleo) / 2); width: calc(var(--nucleo) * 1.8); height: calc(var(--nucleo) * 1.8);
   transform: translate(-50%, -50%); pointer-events: none; }
-.nucleo { position: relative; width: var(--nucleo); height: var(--nucleo); cursor: pointer; }
+/* núcleo: --nuc é a cor do estado atual (idle=ciano); os estados só trocam --nuc, o resto do HUD fica ciano */
+.nucleo { position: relative; width: var(--nucleo); height: var(--nucleo); cursor: pointer; --nuc: var(--ciano);
+  animation: respira 4s ease-in-out infinite; }  /* idle: pulso lento */
 .anel, .centro { position: absolute; border-radius: 50%; inset: 0; }
-.a1 { border: 2px solid var(--ciano-fraco); border-top-color: var(--ciano); animation: gira 6s linear infinite; }
-.a2 { inset: 10%; border: 6px dotted var(--ciano-fraco); animation: gira 14s linear infinite reverse; }
-.a3 { inset: 21%; border: 2px solid var(--ciano); border-left-color: transparent; border-right-color: transparent; animation: gira 3s linear infinite; }
-.centro { inset: 27%; background: radial-gradient(circle, #39d0ff66 0%, #39d0ff22 45%, transparent 72%);
-  box-shadow: 0 0 calc(40px + var(--nivel) * 80px) var(--ciano); }
+.a1 { border: 2px solid color-mix(in srgb, var(--nuc) 25%, transparent); border-top-color: var(--nuc); animation: gira 6s linear infinite; }
+.a2 { inset: 10%; border: 6px dotted color-mix(in srgb, var(--nuc) 25%, transparent); animation: gira 14s linear infinite reverse; }
+.a3 { inset: 21%; border: 2px solid var(--nuc); border-left-color: transparent; border-right-color: transparent; animation: gira 3s linear infinite; }
+.centro { inset: 27%; transition: box-shadow .3s;
+  background: radial-gradient(circle, color-mix(in srgb, var(--nuc) 40%, transparent) 0%, color-mix(in srgb, var(--nuc) 13%, transparent) 45%, transparent 72%);
+  box-shadow: 0 0 calc(40px + var(--nivel) * 80px) var(--nuc); }
 .sete { position: absolute; left: 50%; top: 50%; width: 36%; height: 36%; pointer-events: none;
   transform: translate(-50%, -50%) scale(calc(1 + var(--nivel) * .28));
-  filter: drop-shadow(0 0 6px var(--ciano)) drop-shadow(0 0 calc(14px + var(--nivel) * 30px) var(--ciano)); }
-body.ouvindo .centro { animation: pulsa 1.4s ease-in-out infinite; }
+  filter: drop-shadow(0 0 6px var(--nuc)) drop-shadow(0 0 calc(14px + var(--nivel) * 30px) var(--nuc)); }
+#onda { transition: opacity .3s; opacity: .4; }
+/* estados (ref jarvis_hud.json): ouvindo=verde+pulso rápido+onda, pensando=âmbar+giro, falando=azul+onda, alerta=vermelho+pisca */
+body.ouvindo .nucleo { --nuc: var(--ok); }
+body.ouvindo .centro { animation: pulsa 1s ease-in-out infinite; }
+body.ouvindo #onda, body.falando #onda { opacity: 1; }
+body.pensando .nucleo { --nuc: var(--aviso); animation: none; }
 body.pensando .a3 { animation-duration: .7s; }
 body.pensando .a1 { animation-duration: 1.5s; }
+body.falando .nucleo { --nuc: var(--secundario); }
+body.agindo .nucleo { --nuc: var(--secundario); }
+body.agindo .a1 { animation-duration: 1.5s; } body.agindo .a3 { animation-duration: .9s; }
+body.alerta .nucleo { --nuc: var(--perigo); animation: pisca 1s step-end infinite; }
 body.mudo .centro, body.mudo .sete { filter: grayscale(1) brightness(.5); box-shadow: none; }
 @keyframes gira { to { transform: rotate(360deg); } }
 @keyframes pulsa { 50% { transform: scale(1.12); } }
+@keyframes respira { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.16); } }
+@keyframes pisca { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 
 #estado { margin: 22px 0 0; text-align: center; color: var(--apagado); letter-spacing: .3em; font-size: 12px; text-transform: uppercase; font-family: var(--display); }
 

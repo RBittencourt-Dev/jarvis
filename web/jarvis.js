@@ -82,7 +82,7 @@ fetch("/api/status").then((r) => r.json()).then((s) => aplicarModo(s.modo)).catc
 function estado(classe, texto) {
   if (classe === "pensando" && !document.body.classList.contains("pensando")) { sons.pensando(); sons.radar(true); }
   if (classe !== "pensando") sons.radar(false);
-  document.body.classList.remove("ouvindo", "falando", "pensando", "agindo");
+  document.body.classList.remove("ouvindo", "falando", "pensando", "agindo", "alerta");
   if (classe) document.body.classList.add(classe);
   $("estado").textContent = texto;
   if (classe !== estado.ultimo) {
@@ -117,6 +117,10 @@ function mostrarCartao({ id, onde, titulo, destaque, linhas = [], aguardando, te
   if (onde === "outra" || onde === "palco" || (onde !== "aqui" && extensaoAberta && !aguardando)) { sons.cartao(); return; }
   const repetido = id && cartoes.find((x) => x.el.dataset.id === id);
   if (repetido) { cartoes.splice(cartoes.indexOf(repetido), 1); repetido.el.remove(); }
+  if (alerta) {  // cartão de alerta acende o núcleo em vermelho por alguns segundos
+    document.body.classList.add("alerta");
+    clearTimeout(mostrarCartao._al); mostrarCartao._al = setTimeout(() => document.body.classList.remove("alerta"), 7000);
+  }
   const vaga = proximaVaga++ % VAGAS;
   const ocupante = cartoes.find((c) => c.vaga === vaga);
   if (ocupante) {
