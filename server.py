@@ -31,6 +31,7 @@ import transcricao
 import gestos
 import aprendizado
 import autocorrecao
+import bilingue
 import skills
 import lembretes
 import noticias
@@ -795,6 +796,8 @@ def mensagem_do_usuario(texto, assunto=None):
     """A pergunta, com o assunto da conversa e as anotações que COMBINAM com ele."""
     contexto = f"\n\n[Assunto da conversa: {assunto}. Responda dentro dele.]" if assunto else ""
     contexto += skills.para_pedido(texto)  # as skills do assunto ("me explica…" → professor, "deu erro" → depurador)
+    if bilingue.parece_ingles(texto):  # a regra da skill sozinha o modelo às vezes ignora: aqui vai junto da frase
+        contexto += "\n\n[Ele falou em INGLÊS (está aprendendo): responda EM INGLÊS simples e natural.]"
     if selecao_do_globo and time.time() - selecao_do_globo.get("quando", 0) < 1800:
         contexto += f"\n[Selecionado no globo agora: {selecao_do_globo['nome']} ({selecao_do_globo.get('tipo', 'lugar')}). " \
                     "\"Aqui/esse lugar/esse país\" = isso.]"
