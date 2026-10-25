@@ -48,31 +48,42 @@
     c.agarrado = perto; c.gx0 = x; c.gy0 = y; c.base = lerOff(perto);
     perto.__pego = c; perto.classList.add("mao-arrastando");
   }
-  // passar pra outra tela com a mão (25/10): a câmera só cobre ESTA tela, então segurando o card e encostando a mão
-  // na borda do lado da outra tela (no PC dele a tela 1 fica à ESQUERDA) o card desliza reto pra lá e fica lá
-  const LADO_DA_OUTRA_TELA = -1;  // -1 = esquerda, 1 = direita
+  // passar pra outra tela com a mão (25/10), igual ao mouse: quem manda é o CARD (a mão some antes da borda).
+  // O card começou a passar da borda → a parte que saiu já aparece na outra tela, na mesma altura (travessia).
+  // Soltou a pinça (ou a mão saiu da câmera) com 30%+ do card do outro lado → ele termina de deslizar e fica lá.
+  // Mão já bem perto da borda (6%) com o card passando → completa sozinho (não precisa esticar o braço até o fim).
   function arrastar(c, x, y) {
     if (!c.agarrado || c.agarrado.__indo) return;
     c.agarrado.style.transform = `translate(${c.base.x + (x - c.gx0)}px, ${c.base.y + (y - c.gy0)}px)`;
-    const naBorda = LADO_DA_OUTRA_TELA < 0 ? x < innerWidth * 0.025 : x > innerWidth * 0.975;
-    if (naBorda && window.travessia?.deslizar) {
-      const el = c.agarrado;
-      el.__indo = true;
-      soltar(c);
-      window.travessia.deslizar(el, LADO_DA_OUTRA_TELA, EH_TOPO ? "hud" : "palco", el.__dado).then((ok) => {
-        el.__indo = false;
-        if (!ok) { el.style.opacity = ""; el.style.transform = ""; return; }  // não deu: volta pro lugar
-        if (EH_TOPO && typeof cartoes !== "undefined") {  // cartão do HUD: sai da lista dele (o servidor já mostrou na outra)
-          const achado = cartoes.find((k) => k.el === el); if (achado) cartoes.splice(cartoes.indexOf(achado), 1);
-          el.remove();
-        }
-      });
-    }
+    const fora = window.travessia?.acompanhar(c.agarrado) || 0;
+    if (fora > 0 && (x < innerWidth * 0.06 || x > innerWidth * 0.94)) soltar(c, true);
   }
-  function soltar(c) {
+  function soltar(c, completar = false) {
     if (!c.agarrado) return;
-    c.agarrado.classList.remove("mao-arrastando"); c.agarrado.__pego = null; c.agarrado = null;
+    const el = c.agarrado;
+    el.classList.remove("mao-arrastando"); el.__pego = null; c.agarrado = null;
     try { window.desenharLigacoes && window.desenharLigacoes(null); } catch (e) {}
+    if (!window.travessia) return;
+    el.__indo = true;
+    window.travessia.largar(el, EH_TOPO ? "hud" : "palco", el.__dado, completar).then((ok) => {
+      el.__indo = false;
+      if (!ok) { el.style.opacity = ""; voltarPraDentro(el); return; }  // ficou nesta tela: inteiro, sem cortar na borda
+      if (EH_TOPO && typeof cartoes !== "undefined") {  // cartão do HUD: sai da lista dele (o servidor já mostrou na outra)
+        const achado = cartoes.find((k) => k.el === el); if (achado) cartoes.splice(cartoes.indexOf(achado), 1);
+        el.remove();
+      }
+    });
+  }
+  // largou um pedaço pra fora da tela (sem passar pra outra): desliza de volta até aparecer inteiro
+  function voltarPraDentro(el) {
+    const r = el.getBoundingClientRect(), m = 16;
+    const dx = r.left < m ? m - r.left : r.right > innerWidth - m ? innerWidth - m - r.right : 0;
+    const dy = r.top < m ? m - r.top : r.bottom > innerHeight - m ? innerHeight - m - r.bottom : 0;
+    if (!dx && !dy) return;
+    const o = lerOff(el);
+    el.style.transition = "transform .35s cubic-bezier(.2, .9, .3, 1)";
+    el.style.transform = `translate(${o.x + dx}px, ${o.y + dy}px)`;
+    setTimeout(() => { el.style.transition = ""; }, 400);
   }
   function clicar(x, y) {   // pinça rápida = clique no que está sob o cursor (botões, fechar, fotos…)
     const alvo = document.elementFromPoint(x, y);

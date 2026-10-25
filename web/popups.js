@@ -154,10 +154,20 @@
 window.travessia = (() => {
   const EU = Math.random().toString(36).slice(2);
   const TOPO = window.top === window;
-  let arraste = null, ultimoEnvio = 0, pendente = null;
+  let arraste = null;
 
-  const mandar = (msg) => fetch("/api/arraste", { method: "POST", headers: { "Content-Type": "application/json" },
+  // as mensagens vão EM FILA, na ordem: soltas em paralelo, o "fim" chegava antes do "início" (que é a maior) e a
+  // cópia ficava presa na outra tela. Movimento que fica esperando é trocado pelo mais novo (sem atraso acumulado).
+  let fila = Promise.resolve(), moverEsperando = null;
+  const enviar = (msg) => fetch("/api/arraste", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...msg, de: EU, topo: TOPO }) }).catch(() => {});
+  const mandar = (msg) => { moverEsperando = null; fila = fila.then(() => enviar(msg)); return fila; };
+  function mandarMover(msg) {
+    const jaTinha = moverEsperando;
+    moverEsperando = msg;
+    if (jaTinha) return;  // já tem um na fila: ele sai com a posição mais nova
+    fila = fila.then(() => { const m = moverEsperando; moverEsperando = null; return m && enviar(m); });
+  }
 
   // retângulo da janela inteira na área de trabalho (no palco, que é um iframe, é a janela do HUD em volta dele)
   function minhaTela(e) {
@@ -211,43 +221,70 @@ window.travessia = (() => {
   function mover(el, e) {
     if (!arraste) return false;
     const msg = { acao: "mover", id: arraste.id, x: e.screenX - arraste.px, y: e.screenY - arraste.py, tela: arraste.tela };
-    const agora = performance.now();
-    if (agora - ultimoEnvio > 33) { ultimoEnvio = agora; mandar(msg); pendente = null; }
-    else pendente = msg;  // o último ponto sempre chega (no fim)
+    mandarMover(msg);  // a fila manda o mais novo assim que a anterior chega (sem acumular atraso)
     return !dentro(arraste.tela, e.screenX, e.screenY);  // true = o mouse já está na outra tela
   }
 
   function fim(el, e) {
     if (!arraste) return false;
-    if (pendente) mandar(pendente);
     const fora = !dentro(arraste.tela, e.screenX, e.screenY);
     mandar({ acao: "fim", id: arraste.id, fora, tela: arraste.tela });
-    arraste = pendente = null;
+    arraste = null;
     return fora;
   }
 
-  // COM A MÃO (gestos): a câmera só cobre esta tela, então segurou o card e encostou a mão na borda do lado da
-  // outra tela → o card DESLIZA reto (mesma altura) pra lá, aparecendo do outro lado enquanto passa, e fica lá.
-  // de = "palco" | "hud" (pro servidor saber de onde sai); dado = o cartão do HUD (que não fica guardado no servidor)
-  function deslizar(el, lado, de, dado) {
-    const r = el.getBoundingClientRect();
-    const canto = TOPO ? { x: screenX, y: screenY }
-      : (() => { const f = frameElement.getBoundingClientRect(); return { x: top.screenX + f.left, y: top.screenY + f.top }; })();
-    const tela = TOPO ? { x: screenX, y: screenY, w: innerWidth, h: innerHeight }
-      : { x: top.screenX, y: top.screenY, w: top.innerWidth, h: top.innerHeight };
-    const x0 = canto.x + r.left, y = canto.y + r.top;
-    const alvo = lado < 0 ? tela.x - r.width - 60 : tela.x + tela.w + 60;  // inteiro do outro lado da borda
-    arraste = { id: el.dataset.id || "", tela };
-    mandar({ acao: "inicio", id: arraste.id, html: copiaFiel(el).outerHTML, w: r.width, h: r.height, tela, dados: el.__dados || null, foto: el.__foto || null });
-    el.style.opacity = "0";  // daqui pra frente quem aparece é a cópia que desliza (nas duas telas)
-    const t0 = performance.now(), dur = 700;
+  // ---- COM A MÃO (gestos). A câmera só cobre esta tela e a mão some antes de chegar na borda, então quem manda é o
+  // CARD, não o cursor: o card começou a passar da borda → a parte que saiu já aparece na outra tela, na mesma altura
+  // (igual ao mouse). Soltou a pinça com 30%+ do card do outro lado → ele termina de deslizar reto e fica lá;
+  // menos que isso → volta inteiro pra dentro desta tela.
+  const cantoDaPagina = () => TOPO ? { x: screenX, y: screenY }
+    : (() => { const f = frameElement.getBoundingClientRect(); return { x: top.screenX + f.left, y: top.screenY + f.top }; })();
+  const telaToda = () => TOPO ? { x: screenX, y: screenY, w: innerWidth, h: innerHeight }
+    : { x: top.screenX, y: top.screenY, w: top.innerWidth, h: top.innerHeight };
+  const maos = new Map();  // card → {id, tela} enquanto a mão está levando ele pela borda
+
+  // chamado a cada quadro da mão: devolve quanto do card já passou da borda (0 a 1)
+  function acompanhar(el) {
+    const r = el.getBoundingClientRect(), tela = telaToda(), c = cantoDaPagina();
+    const x = c.x + r.left, y = c.y + r.top;
+    const fora = Math.max(0, tela.x - x, x + r.width - (tela.x + tela.w)) / r.width;  // fração do card fora desta tela
+    let m = maos.get(el);
+    if (fora > 0 && !m) {
+      m = { id: el.dataset.id || "", tela };
+      maos.set(el, m);
+      mandar({ acao: "inicio", id: m.id, html: copiaFiel(el).outerHTML, w: r.width, h: r.height, tela,
+        dados: el.__dados || null, foto: el.__foto || null });
+      if (!TOPO) el.style.opacity = "0";  // no palco quem desenha é o HUD (o quadro cortaria o card)
+    }
+    if (m) mandarMover({ acao: "mover", id: m.id, x, y, tela: m.tela });
+    if (m && fora === 0) { mandar({ acao: "fim", id: m.id, fora: false, tela: m.tela }); maos.delete(el); el.style.opacity = ""; }
+    return fora;
+  }
+
+  // soltou a pinça: passa pra outra tela (desliza o resto e o servidor mostra lá) ou fica onde largou
+  // completar = a mão já chegou na beirada: passa mesmo com menos de 40% do outro lado
+  function largar(el, de, dado, completar = false) {
+    const m = maos.get(el);
+    if (!m) return Promise.resolve(false);
+    maos.delete(el);
+    const r = el.getBoundingClientRect(), c = cantoDaPagina();
+    const x0 = c.x + r.left, y = c.y + r.top;
+    const paraEsquerda = x0 + r.width / 2 < m.tela.x + m.tela.w / 2;
+    const fora = Math.max(0, m.tela.x - x0, x0 + r.width - (m.tela.x + m.tela.w)) / r.width;
+    if (fora < 0.3 && !completar) {  // pouco do outro lado: fica nesta tela
+      mandar({ acao: "fim", id: m.id, fora: false, tela: m.tela });
+      el.style.opacity = "";
+      return Promise.resolve(false);
+    }
+    el.style.opacity = "0";
+    const alvo = paraEsquerda ? m.tela.x - r.width - 60 : m.tela.x + m.tela.w + 60;  // inteiro do outro lado
+    const t0 = performance.now(), dur = 450;
     return new Promise((pronto) => {
       const passo = () => {
         const p = Math.min(1, (performance.now() - t0) / dur), k = 1 - Math.pow(1 - p, 3);
-        mandar({ acao: "mover", id: arraste.id, x: Math.round(x0 + (alvo - x0) * k), y, tela });
+        mandarMover({ acao: "mover", id: m.id, x: Math.round(x0 + (alvo - x0) * k), y, tela: m.tela });
         if (p < 1) return setTimeout(passo, 33);
-        mandar({ acao: "fim", id: arraste.id, fora: true, tela });
-        arraste = null;
+        mandar({ acao: "fim", id: m.id, fora: true, tela: m.tela });
         fetch("/api/mover_item", { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: el.dataset.id || "", de, dado: dado || null }) })
           .then((x) => x.json()).then((j) => pronto(!!j.ok)).catch(() => pronto(false));
@@ -283,6 +320,12 @@ window.travessia = (() => {
     // onde fica o canto desta janela no Windows (janela sem barra: o Jarvis abre em tela cheia)
     const meuCanto = () => ({ x: screenX + (outerWidth - innerWidth) / 2, y: screenY + (outerHeight - innerHeight) });
     const mesmaTela = (t) => t && Math.abs(t.x - meuCanto().x) < 40 && Math.abs(t.y - meuCanto().y) < 80 && Math.abs(t.w - innerWidth) < 40;
+    // cópia sem notícia há 8 s (a outra tela fechou, a mensagem de fim se perdeu…): some sozinha, nunca fica presa
+    function vigiar(chave) {
+      const f = fantasmas[chave]; if (!f) return;
+      clearTimeout(f.__vigia);
+      f.__vigia = setTimeout(() => { if (fantasmas[chave] === f) { delete fantasmas[chave]; f.remove(); } }, 8000);
+    }
     const fonte = new EventSource("/api/extensao/eventos?canal=arraste");
     fonte.onmessage = (m) => {
       let d; try { d = JSON.parse(m.data); } catch { return; }
@@ -299,17 +342,20 @@ window.travessia = (() => {
         if (vaga && d.foto) vaga.attachShadow({ mode: "open" }).append(limpo(d.foto));
         document.body.append(f);
         fantasmas[chave] = f;
+        vigiar(chave);
       } else if (d.acao === "mover" && fantasmas[chave]) {
         const c = meuCanto();
         fantasmas[chave].style.left = (d.x - c.x) + "px";
         fantasmas[chave].style.top = (d.y - c.y) + "px";
+        vigiar(chave);
       } else if (d.acao === "fim" && fantasmas[chave]) {
         const f = fantasmas[chave]; delete fantasmas[chave];
+        clearTimeout(f.__vigia);
         if (!d.fora) return f.remove();
         // soltou aqui: o popup de verdade chega em instantes pelo servidor; o fantasma some devagar por cima
         setTimeout(() => { f.classList.add("sumindo"); setTimeout(() => f.remove(), 550); }, 350);
       }
     };
   }
-  return { inicio, mover, fim, deslizar };
+  return { inicio, mover, fim, acompanhar, largar };
 })();
