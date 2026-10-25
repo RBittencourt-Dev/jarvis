@@ -883,6 +883,7 @@ document.addEventListener("visibilitychange", () => {
 });
 // gesto vindo da webcam (gestos.py, via SSE): o HUD age aqui — punho para, joinha=sim, polegar baixo=não, mão aberta troca o modo
 function aoGesto(g) {
+  try { window.mostrarGesto && window.mostrarGesto(g); } catch (e) {}  // mostra o gesto no painel VISÃO
   if (g === "punho") { try { interromper(); } catch (e) {} fetch("/api/parar", { method: "POST" }).catch(() => {}); }
   else if (g === "sim" || g === "nao") { const a = document.getElementById("autorizacao"); const b = document.getElementById(g === "sim" ? "aut-sim" : "aut-nao"); if (a && !a.hidden && b) b.click(); }
   else if (g === "aberta") { aplicarVista(document.body.classList.contains("modo-foco") ? "completo" : "foco"); }
@@ -893,6 +894,13 @@ const doServidor = new EventSource("/api/extensao/eventos?canal=hud");
 doServidor.onmessage = (m) => {
   const e = JSON.parse(m.data);
   if (e.gesto) return aoGesto(e.gesto);
+  if (e.oficina) return window.abrirOficina && window.abrirOficina(e.oficina);   // bancada de montagem por gestos
+  if (e.oficina_fechar) return window.fecharOficina && window.fecharOficina();
+  if ("maos" in e) {   // cursores/arrastar (mao.js) + a bancada 3D quando estiver aberta
+    if (window.aoMaos) window.aoMaos(e.maos);
+    if (window.oficinaAtiva) window.oficinaMaos(e.maos);
+    return;
+  }
   if (e.remover) for (const id of e.remover) {
     const achado = cartoes.find((c) => c.el.dataset.id === id);
     if (achado) { cartoes.splice(cartoes.indexOf(achado), 1); achado.el.classList.add("saindo"); setTimeout(() => achado.el.remove(), 400); }

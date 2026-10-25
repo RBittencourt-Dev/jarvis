@@ -570,6 +570,7 @@ window.avisarErro = (msg) => CELULAR && fetch("/api/celular/log", { method: "POS
 if (CELULAR) addEventListener("error", (ev) => window.avisarErro(`${ev.message} @${(ev.filename || "").split("/").pop()}:${ev.lineno}`));
 fonte.onmessage = (m) => {
   const e = JSON.parse(m.data);
+  if ("maos" in e) { window.aoMaos && window.aoMaos(e.maos); return; }   // cursores + arrastar aqui no centro (palco)
   if (CELULAR) {
     try {
       if (e.limpar_palco || assuntoNovo(e)) window.limparPalco?.();
@@ -736,5 +737,6 @@ setInterval(() => ($("relogio").textContent = new Date().toLocaleTimeString("pt-
 <script src="/web/extensao3.js?v=2210e"></script>
 <script src="/web/holograma.js?v=2410h"></script>
 <script src="/web/popups.js?v=2210e"></script>
+<script src="/web/mao.js?v=11"></script>
 </body>
 </html>

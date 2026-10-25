@@ -1102,6 +1102,23 @@ async def hud_dados():
     return await asyncio.to_thread(hud_paineis.tudo)
 
 
+@app.get("/api/visao/camera")
+def api_visao_camera():
+    """Último quadro da webcam (com os pontos da mão) pro painel VISÃO. Só quando os gestos estão ligados."""
+    import gestos
+    jpg = gestos.frame_atual()
+    if not jpg:
+        return Response(status_code=204)
+    return Response(content=jpg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/visao/modo")
+def api_visao_modo(req: dict):
+    """Liga/desliga o 'só tracking' (oculta a câmera, mostra só o esqueleto da mão)."""
+    import gestos
+    return {"so_tracking": gestos.set_tracking_only(req.get("so_tracking", False))}
+
+
 musica_tocando = {"agora": False}
 
 
@@ -2631,8 +2648,49 @@ def com_a_selecao(texto):
     return (texto[:m.start()] + (troca + " " if troca else "") + sel["nome"] + texto[m.end():]).strip()
 
 
+_VERBOS_COMANDO = (r"(?:liga|desliga|ativa|desativa|abre|fecha|minimiza|maximiza|mostra|me mostra|pesquisa|procura|"
+                   r"toca|pausa|continua|manda|envia|aumenta|abaixa|bloqueia|passa|tira|traz|pergunta|pede|marca|"
+                   r"agenda|sugere|coloca|p[oõ]e|bota|gira|amplia|diminui|roda|grava|encerra|anota|fala)")
+_SEP_FORTE = re.compile(r"\s*(?:;|,?\s*(?:e\s+)?depois\b|,?\s*ent[aã]o\b|,?\s*e\s+a[ií]\b)\s*", re.I)
+_SEP_VERBO = re.compile(r"\s*(?:,|\be)\s+(?=" + _VERBOS_COMANDO + r"\b)", re.I)
+
+
+def separar_comandos(texto):
+    """Quebra uma fala com vários pedidos em tarefas, em ordem. Só separa em 'depois/então/;' ou quando
+    depois de 'e'/vírgula vem um VERBO de comando — assim 'mostra o preço e a ficha' NÃO é quebrado."""
+    t = re.sub(r"^\s*jarvis[ ,]*", "", texto.strip(), flags=re.I)
+    t = _SEP_FORTE.sub(" | ", t)
+    t = _SEP_VERBO.sub(" | ", t)
+    partes = [p.strip(" ,.") for p in t.split("|")]
+    partes = [p for p in partes if p]
+    return partes if len(partes) > 1 else [texto]
+
+
+def _varios(sid, sessao, partes):
+    """Roda cada tarefa em ordem, encadeando os streams; segura 'fim'/'dormir' até a última."""
+    async def fluxo():
+        for i, parte in enumerate(partes):
+            ultimo = i == len(partes) - 1
+            resp = await rotear(sid, sessao, parte, interpretar=True)   # cada parte é 1 comando (não re-quebra)
+            async for linha in resp.body_iterator:
+                s = linha if isinstance(linha, str) else linha.decode()
+                for ln in s.splitlines():
+                    try:
+                        e = json.loads(ln)
+                    except ValueError:
+                        continue
+                    if (e.get("fim") or e.get("dormir")) and not ultimo:
+                        continue   # não finaliza entre uma tarefa e outra
+                    yield json.dumps(e, ensure_ascii=False) + "\n"
+    return StreamingResponse(fluxo(), media_type="application/x-ndjson")
+
+
 async def rotear(sid, sessao, texto, interpretar=True):
     """Decide o caminho do pedido já entendido; o primeiro evento mostra na tela o que foi entendido."""
+    if interpretar:
+        partes = separar_comandos(texto)
+        if len(partes) > 1:
+            return _varios(sid, sessao, partes)   # vários pedidos numa fala: um de cada vez, em ordem
     # "me mostra fotos" logo depois de "pesquisa BMW X1" = fotos da BMW X1
     texto = contexto.resolver(texto, contexto.foco_atual(sessao)) or texto
     texto = com_a_selecao(texto)  # "esse país" = o que ele clicou no globo
@@ -2667,6 +2725,28 @@ async def rotear(sid, sessao, texto, interpretar=True):
 
 async def _rotear(sid, sessao, texto, interpretar=True):
     p = Pergunta(sessao=sid, texto=texto)
+    _to = p.texto.strip()
+    if re.search(r"\b(?:fecha\w*|sai\w*|encerra\w*)\s+(?:a\s+|da\s+)?(?:oficina|bancada)\b", _to, re.I):
+        extensao.publicar({"oficina_fechar": True}, "hud")   # bancada de montagem por gestos (web/oficina.js)
+        return em_linhas(sid, responder_ja("Fechando a oficina, chefe."))
+    _of = re.search(r"\bmont(?:a|ar)\s+(?:um\s+|meu\s+)?(?P<q>pc|computador|carro|quebra[- ]?cabe\w+)\b|\babr\w*\s+a\s+oficina\b|\bbancada\s+d[eo]\s+(?P<q2>pc|carro)\b|\boficina\s+holog\w+\b|\babr\w*\s+a\s+bancada\b|\bquebra[- ]?cabe\w+\b", _to, re.I)
+    if _of:
+        _q = ((_of.group("q") or _of.group("q2") or "").lower())
+        _g = ""   # ao entrar na oficina, liga os gestos se ainda não estiverem (ele monta com a mão)
+        try:
+            if not gestos._estado["ligado"]:
+                gestos.iniciar(); _g = " Liguei a câmera pros gestos."
+        except Exception:
+            pass
+        if "quebra" in _q or re.search(r"\bquebra[- ]?cabe", _to, re.I):
+            extensao.publicar({"oficina": "quebra"}, "hud"); _fala = "Quebra-cabeça do JARVIS na mesa, chefe. Pince as peças e encaixe." + _g
+        elif "carro" in _q:
+            extensao.publicar({"oficina": "carro"}, "hud"); _fala = "Bancada do carro, chefe. Monte e depois dê a partida." + _g
+        elif _q:
+            extensao.publicar({"oficina": "pc"}, "hud"); _fala = "Bancada do PC, chefe. Pince as peças e encaixe." + _g
+        else:
+            extensao.publicar({"oficina": "escolher"}, "hud"); _fala = "Oficina aberta. Vamos montar o quê, chefe: PC, carro ou quebra-cabeça?" + _g
+        return em_linhas(sid, responder_ja(_fala))
     para_o_claude = claude_ponte.entender(p.texto)
     if para_o_claude:
         # sempre confirma: a transcrição pode ter vindo errada

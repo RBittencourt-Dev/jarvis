@@ -79,7 +79,12 @@
     const now = performance.now(), seg = (now - t0) / 1000, st = estado(), nvl = nivel();
     const prog = suave(0, 1, Math.min(1, (now - t0) / 2200)); // ignição
     const resp = 1 + Math.sin(seg * 1.6) * 0.012;             // idle_breathing
-    const ang = (v, dir) => dir * seg * v * VEL * st.mult * Math.PI / 180;
+    // arranque: giro rápido ao LIGAR que desacelera (reator "dando partida")...
+    const Tarr = 1.8, v0 = 900, sa = Math.min(seg, Tarr);
+    const bootDeg = v0 * (sa - sa * sa / (2 * Tarr));          // integral de uma velocidade que decai
+    // ...e um GIRO DE FUNDO contínuo (graus/s) somado a todo anel pra SEMPRE parecer rodando (igual o radar)
+    const BASE = 12;
+    const ang = (v, dir) => dir * (seg * (v * VEL * st.mult + BASE) + bootDeg) * Math.PI / 180;
     const corE = st.cor; // sobrepõe a cor só em alerta (ou se CORES_DE_ESTADO)
     const cor = (padrao) => corE || padrao;
 
@@ -98,9 +103,10 @@
     L = CAMADAS.tecnico; ctx.globalAlpha = suave(0.55, 0.8, prog);
     anelSegmentado(cx, cy, L.r, L.w, L.seg, L.ativos, L.gap, cor(L.cor), ang(L.vel, L.dir), esc, 0);
 
-    // 3) ticks radiais (120, maior a cada 10) — estáticos
+    // 3) ticks radiais (120, maior a cada 10) — giram devagar (mostra bem que está rodando)
     L = CAMADAS.ticks; ctx.globalAlpha = prog * L.a; ctx.strokeStyle = cor(L.cor); ctx.lineWidth = 1 * esc; ctx.shadowBlur = 0;
-    for (let i = 0; i < L.n; i++) { const a = (i / L.n) * 6.283 - Math.PI / 2; const comp = (i % L.maior === 0 ? L.maiorL : L.menorL) * esc;
+    const rotTicks = ang(0, 1);
+    for (let i = 0; i < L.n; i++) { const a = (i / L.n) * 6.283 - Math.PI / 2 + rotTicks; const comp = (i % L.maior === 0 ? L.maiorL : L.menorL) * esc;
       const r2 = L.r * esc, r1 = r2 - comp; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2); ctx.stroke(); }
     ctx.globalAlpha = 1;
 

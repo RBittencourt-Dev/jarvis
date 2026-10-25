@@ -357,7 +357,7 @@ body.leve .cartao, body.leve #configuracoes { backdrop-filter: none; }
 /* ============================================================ palco: o centro da tela principal (22/10) */
 #palco-hud { position: fixed; z-index: 3; left: 50%; top: 47%; transform: translate(-50%, -50%) scale(.96); width: min(1240px, 76vw);
   height: 76vh; border: 0; background: transparent; opacity: 0; pointer-events: none; transition: opacity .45s, transform .45s; }
-body.palco-ativo #palco-hud { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+body.palco-ativo #palco-hud { opacity: 1; pointer-events: auto; left: 0; top: 0; width: 100vw; height: 100vh; transform: none; }
 .palco { transition: left .6s cubic-bezier(.2, .9, .3, 1), top .6s cubic-bezier(.2, .9, .3, 1), transform .6s cubic-bezier(.2, .9, .3, 1); }
 body.palco-ativo .palco { left: 92px; top: 96px; transform: translate(-50%, -50%) scale(.34); }
 body.palco-ativo #ligacoes { opacity: 0; }

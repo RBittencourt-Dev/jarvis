@@ -1,7 +1,7 @@
 // Portão do rosto: o Jarvis só abre depois de reconhecer o Rafael pela webcam.
 // Tudo roda neste navegador; o servidor guarda só os números do rosto (rosto.json).
 const LIMITE_RECONHECER = 0.5; // distância máxima para considerar o mesmo rosto
-const ACERTOS_SEGUIDOS = 3;
+const ACERTOS_SEGUIDOS = 1;    // o primeiro rosto que bater já abre (minimalista/rápido) — era 3
 const TEMPO_MAXIMO_MS = 15000;
 
 const portao = {
@@ -17,7 +17,7 @@ function dizer(texto) {
   return audio.play().then(() => new Promise((ok) => (audio.onended = audio.onerror = ok))).catch(() => {});
 }
 const espera = (ms) => new Promise((ok) => setTimeout(ok, ms));
-const opcoesDeteccao = () => new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+const opcoesDeteccao = () => new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });  // 224 é mais rápido que 320
 
 async function lerRostos(video, travado = false) {
   const rostos = await faceapi.detectAllFaces(video, opcoesDeteccao()).withFaceLandmarks().withFaceDescriptors();
@@ -43,12 +43,7 @@ function desenharMalha(video, rostos, travado) {
   for (const r of rostos) {
     const pts = r.landmarks.positions;
     ctx.strokeStyle = cor;
-    // fios até a ponta do nariz dão a cara de "malha" escaneada
-    ctx.globalAlpha = 0.25;
-    ctx.lineWidth = 1;
-    for (const i of [0, 2, 4, 6, 8, 10, 12, 14, 16, 17, 21, 22, 26, 36, 45, 48, 54]) {
-      ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[30].x, pts[30].y); ctx.stroke();
-    }
+    // minimalista: só o contorno do rosto + mira (tirei os fios radiais até o nariz)
     ctx.globalAlpha = 0.9;
     ctx.lineWidth = 1.5;
     for (const [de, ate, fechado] of GRUPOS) {
@@ -73,10 +68,11 @@ function desenharMalha(video, rostos, travado) {
 
 async function cadastrar(video) {
   const descritores = [];
-  const passos = ["olhe direto para a câmera", "vire um pouco para a esquerda", "vire um pouco para a direita", "levante um pouco o queixo", "abaixe um pouco o queixo", "olhe direto de novo"];
+  // cadastro enxuto: 3 amostras rápidas (chega pra reconhecer de primeira) — era 6
+  const passos = ["olhe para a câmera", "vire um pouco para a esquerda", "vire um pouco para a direita"];
   for (const passo of passos) {
     portao.texto(`Primeiro acesso — ${passo}`);
-    await espera(1200);
+    await espera(700);
     for (;;) {
       const rostos = await lerRostos(video);
       if (rostos.length === 1 && rostos[0].detection.score > 0.7) {
@@ -102,7 +98,7 @@ async function reconhecer(video, conhecidos) {
     progresso(acertos / ACERTOS_SEGUIDOS);
     portao.texto(rostos.length ? "Analisando…" : "Procurando um rosto…");
     if (acertos >= ACERTOS_SEGUIDOS) return true;
-    await espera(250);
+    await espera(120);  // confere mais rápido (pega o 1º match logo)
   }
   return false;
 }
@@ -155,8 +151,7 @@ async function verificarIdentidade() {
   }
   progresso(1);
   portao.el.classList.add("confirmado");
-  await lerRostos(video, true);
-  await espera(900);
+  await espera(300);  // abre quase na hora que confirma (era 900)
   video.srcObject.getTracks().forEach((t) => t.stop());
   portao.el.hidden = true;
   await boasVindas;

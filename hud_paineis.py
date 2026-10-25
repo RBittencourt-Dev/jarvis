@@ -49,18 +49,59 @@ def _gpu():
     return None
 
 
-def _temperatura():
+_temp_cache = {"t": 0.0, "v": None}
+
+
+def _temp_lhm():
+    """Lê a temperatura do processador do LibreHardwareMonitor (se estiver aberto com o
+    servidor web ligado, em http://localhost:8085). Windows não entrega °C pelo psutil;
+    esse é o jeito que funciona sem o Jarvis precisar ser administrador."""
     try:
-        temps = psutil.sensors_temperatures()
-        for chave in ("coretemp", "k10temp", "acpitz"):
-            if temps.get(chave):
-                return round(temps[chave][0].current)
-        for lista in temps.values():
-            if lista:
-                return round(lista[0].current)
+        import httpx
+        d = httpx.get("http://localhost:8085/data.json", timeout=0.6).json()
     except Exception:
-        pass
-    return None
+        return None
+    achado = {"pkg": None, "qualquer": None}
+
+    def anda(n):
+        txt = (n.get("Text") or "").lower()
+        val = (n.get("Value") or "")
+        if "°c" in val.lower() and ("cpu" in txt or "package" in txt or "tctl" in txt or "core" in txt):
+            try:
+                g = round(float(val.lower().split("°")[0].replace(",", ".").strip()))
+                if "package" in txt or "tctl" in txt:
+                    achado["pkg"] = g
+                elif achado["qualquer"] is None:
+                    achado["qualquer"] = g
+            except Exception:
+                pass
+        for c in n.get("Children", []):
+            anda(c)
+
+    anda(d)
+    return achado["pkg"] if achado["pkg"] is not None else achado["qualquer"]
+
+
+def _temperatura():
+    # cache de ~5s pra não martelar o LHM a cada atualização do painel
+    import time
+    if time.time() - _temp_cache["t"] < 5 and _temp_cache["v"] is not None:
+        return _temp_cache["v"]
+    v = _temp_lhm()
+    if v is None:
+        try:
+            temps = psutil.sensors_temperatures()  # funciona no Linux; no Windows volta vazio
+            for chave in ("coretemp", "k10temp", "acpitz"):
+                if temps.get(chave):
+                    v = round(temps[chave][0].current); break
+            if v is None:
+                for lista in temps.values():
+                    if lista:
+                        v = round(lista[0].current); break
+        except Exception:
+            pass
+    _temp_cache.update({"t": time.time(), "v": v})
+    return v
 
 
 def _bateria():
@@ -160,6 +201,15 @@ def noticias():
         return _guardar("noticias", [])
 
 
+def visao():
+    """Estado da VISÃO (câmera/gestos) pro painel do HUD."""
+    try:
+        import gestos
+        return {"gestos": bool(gestos._estado.get("ligado")), "erro": gestos._estado.get("erro")}
+    except Exception:
+        return {"gestos": False, "erro": None}
+
+
 def tudo():
     """Snapshot pros painéis. Rápido: sistema/rede na hora, clima/notícias do cache (10 min)."""
-    return {"sistema": sistema(), "rede": rede_agora(), "clima": clima(), "noticias": noticias()}
+    return {"sistema": sistema(), "rede": rede_agora(), "clima": clima(), "noticias": noticias(), "visao": visao()}
