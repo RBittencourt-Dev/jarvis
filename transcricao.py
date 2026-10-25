@@ -141,7 +141,10 @@ def _status():
 
 def entender(texto):
     t = texto.strip()
-    if PARAR.search(t):
+    m = PARAR.search(t)
+    # "para" no meio da frase é preposição ("muda a Clínica Sorriso PARA reunião marcada"), não o verbo parar:
+    # só vale como "parar" se vier no começo do pedido (com ou sem "jarvis"). Os outros verbos valem em qualquer lugar.
+    if m and (not re.match(r"para\b", m.group(0), re.I) or re.match(r"^(?:jarvis[ ,]*)?$", t[:m.start()], re.I)):
         return {"acao": "parar"}
     if STATUS.search(t):
         return {"acao": "status"}

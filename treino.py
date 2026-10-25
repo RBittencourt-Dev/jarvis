@@ -9,6 +9,10 @@ O esperado é um pedaço do resultado, sem diferença de maiúscula; "a|b" aceit
 """
 import sys
 
+# o terminal do Windows não é UTF-8 por padrão: sem isso o print de "→" e acentos quebra o treino
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 FRASES = [
     # --- microfone (19/10): "muta" = o Jarvis fica surdo e volta por voz; "do PC" = muta no Windows
     ("muta o microfone", "microfone mutar"),
