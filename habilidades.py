@@ -152,5 +152,8 @@ def para_prompt():
     for grupo, itens in GRUPOS:
         partes.append(f"{grupo}: " + "; ".join(faz for faz, _ in itens) + ".")
     corpo = "\n".join(partes)
-    return ("O QUE VOCÊ REALMENTE FAZ (só isto; se pedirem algo fora daqui, diga com honestidade que ainda não faz "
-            "isso, sem inventar que consegue):\n" + corpo)
+    # 25/10: ele quer que o Jarvis faça TUDO que pedir. Fora da lista não é "não faço": é descobrir e montar na hora
+    # (skill fazer-tudo). A honestidade continua: nunca dizer que fez sem ter feito.
+    return ("O QUE VOCÊ JÁ TEM PRONTO (atalhos testados). Pedido fora daqui: NÃO diga que não faz — descubra como e "
+            "faça com as ferramentas (pesquise, rode código, monte); só diga que não deu depois de tentar de verdade, "
+            "e nunca diga que fez o que não fez:\n" + corpo)

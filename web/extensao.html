@@ -59,6 +59,15 @@
   @keyframes some { from { width: 100%; } to { width: 0; } }
   .cartao.alerta { border-color: var(--ciano); box-shadow: 0 0 40px var(--ciano-fraco); }
 
+  /* ---------------------------------------------------- painel AO VIVO (paineis_vivos.py): iframe isolado + selo pulsando */
+  .cartao.vivo { padding: 14px 14px 10px; }
+  .cartao.vivo iframe { display: block; width: 100%; border: 0; min-height: 120px; background: transparent; }
+  .selo-vivo { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; color: #ff4d5e; letter-spacing: .15em; }
+  .selo-vivo::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #ff4d5e; box-shadow: 0 0 8px #ff4d5e;
+    animation: pulsa 1.4s ease-in-out infinite; }
+  .cartao.vivo .status { font-size: 11px; color: var(--apagado); letter-spacing: .08em; margin-top: 6px; text-align: right; }
+  @keyframes pulsa { 50% { opacity: .25; } }
+
   /* ---------------------------------------------------- mini-painel: PC e pomodoro */
   #painel { position: fixed; z-index: 5; top: 56px; right: 24px; width: 220px; display: grid; gap: 8px; pointer-events: none;
     font: 11px/1.4 Consolas, monospace; letter-spacing: .12em; color: var(--apagado); }
@@ -536,6 +545,7 @@ function remover(ids) {
   let algum = false;
   for (const id of ids) {
     if (!id) continue;
+    if (String(id).startsWith("vivo-")) vivosFechados.add(id);  // painel ao vivo fechado não volta na próxima atualização
     if ($("street").dataset.id === id) { fecharStreet(); algum = true; continue; }
     for (const el of document.querySelectorAll(`[data-id="${id}"]`)) {
       algum = true;
@@ -549,6 +559,133 @@ function remover(ids) {
   }
   if (algum) sons.fecha();
 }
+
+// ------------------------------------------------------------ painel AO VIVO (paineis_vivos.py)
+// O HTML que o cérebro desenhou roda num iframe SANDBOX (sem acesso a esta página nem ao servidor). Os números chegam
+// por postMessage e trocam só o texto (sem piscar). Classes prontas (CSS abaixo) deixam bonito sem esforço.
+const CSS_VIVO = `
+  :root { color-scheme: dark; }
+  body { margin: 0; font-family: Rajdhani, "Segoe UI", sans-serif; color: #d8f3ff; background: transparent; }
+  img { max-width: 100%; }
+  .vivo-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .vivo-item { position: relative; padding: 14px; text-align: center; background: linear-gradient(160deg, #0f2a40cc, #07131fcc);
+    border: 1px solid #39d0ff33; border-radius: 10px; overflow: hidden; }
+  .vivo-foto { width: 96px; height: 96px; object-fit: cover; border-radius: 50%; border: 2px solid #39d0ff; box-shadow: 0 0 18px #39d0ff55; }
+  .vivo-nome { margin-top: 8px; font-size: 18px; font-weight: 600; letter-spacing: .04em; }
+  .vivo-num { font-size: 40px; font-weight: 300; color: #39d0ff; line-height: 1.1; font-variant-numeric: tabular-nums;
+    transition: color .4s; }
+  .vivo-num.mudou { color: #fff; text-shadow: 0 0 14px #39d0ff; }
+  .vivo-rotulo { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: #7fa7bd; }
+  .vivo-barra { height: 8px; margin-top: 10px; background: #39d0ff1a; border-radius: 4px; overflow: hidden; }
+  .vivo-barra i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #1a8fff, #39d0ff);
+    box-shadow: 0 0 10px #39d0ff; transition: width 1s ease; }
+  .vivo-vs { align-self: center; font-size: 22px; color: #7fa7bd; letter-spacing: .2em; }
+  /* apresentação (apresentar.py): cada bloco entra em cascata, foto com zoom lento, número contando */
+  section { margin: 0 0 16px; }
+  .ap-entra { opacity: 0; animation: entra .7s cubic-bezier(.2,.9,.3,1) forwards; }
+  @keyframes entra { from { opacity: 0; transform: translateY(18px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+  .ap-capa { position: relative; min-height: 210px; border-radius: 12px; overflow: hidden; display: flex; align-items: flex-end;
+    background: radial-gradient(circle at 30% 20%, #123b5a, #050d16); border: 1px solid #39d0ff33; }
+  .ap-capa-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: kenburns 18s ease-out forwards; }
+  @keyframes kenburns { from { transform: scale(1.12); } to { transform: scale(1); } }
+  .ap-capa-texto { position: relative; width: 100%; padding: 18px; background: linear-gradient(transparent, #050d16ee 55%); }
+  .ap-capa h1 { margin: 0; font-size: 34px; font-weight: 600; letter-spacing: .03em; text-shadow: 0 0 18px #39d0ff66; }
+  .ap-capa p { margin: 4px 0 0; color: #9cc7dc; font-size: 17px; }
+  .ap-numeros { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+  .ap-num { padding: 14px; text-align: center; border: 1px solid #39d0ff33; border-radius: 10px; background: #0b1d2dcc; }
+  .ap-valor { font-size: 38px; font-weight: 300; color: #39d0ff; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px #39d0ff55; }
+  .ap-rotulo { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: #7fa7bd; margin-top: 4px; }
+  .ap-pontos h2 { margin: 0 0 8px; font-size: 13px; letter-spacing: .25em; text-transform: uppercase; color: #7fa7bd; font-weight: 600; }
+  .ap-pontos ul, .ap-pontos ol { margin: 0; padding: 0; list-style: none; counter-reset: passo; }
+  .ap-pontos li { position: relative; padding: 9px 0 9px 26px; border-top: 1px solid #39d0ff14; font-size: 17px; }
+  .ap-pontos ul li::before { content: ""; position: absolute; left: 6px; top: 17px; width: 8px; height: 8px; background: #39d0ff;
+    box-shadow: 0 0 8px #39d0ff; transform: rotate(45deg); }
+  .ap-pontos ol li { counter-increment: passo; } .ap-pontos ol li::before { content: counter(passo); position: absolute; left: 0;
+    top: 8px; color: #39d0ff; font-weight: 600; }
+  .ap-galeria { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+  .ap-galeria figure { margin: 0; overflow: hidden; border-radius: 8px; border: 1px solid #39d0ff33; height: 170px; }
+  .ap-galeria img { width: 100%; height: 100%; object-fit: cover; transition: transform 6s ease; }
+  .ap-galeria figure:hover img { transform: scale(1.1); }
+  .ap-comparacao { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .ap-col { padding: 12px; border: 1px solid #39d0ff33; border-radius: 10px; background: #0b1d2dcc; }
+  .ap-col-img { width: 100%; height: 120px; object-fit: cover; border-radius: 6px; }
+  .ap-col h3 { margin: 8px 0 4px; color: #39d0ff; font-weight: 600; }
+  .ap-col ul { margin: 0; padding-left: 18px; font-size: 15px; }
+  .ap-texto p { margin: 0; font-size: 17px; line-height: 1.5; color: #cfe9f7; }`;
+const SCRIPT_VIVO = `
+  const numero = (v) => parseFloat(String(v).replace(/\\./g, "").replace(",", "."));
+  function aplicar(d) {
+    for (const el of document.querySelectorAll("[data-campo]")) {
+      const v = d[el.dataset.campo]; if (v == null) continue;
+      const novo = String(v); if (el.textContent !== novo) { el.textContent = novo; el.classList.add("mudou"); setTimeout(() => el.classList.remove("mudou"), 900); }
+    }
+    for (const el of document.querySelectorAll("[data-largura]")) {
+      const n = numero(d[el.dataset.largura]); if (!isNaN(n)) el.style.width = Math.max(0, Math.min(100, n)) + "%";
+    }
+    for (const el of document.querySelectorAll("img[data-img]")) { const v = d[el.dataset.img]; if (v) el.src = v; }
+    parent.postMessage({ vivoAltura: document.documentElement.scrollHeight, id: window.name }, "*");
+  }
+  addEventListener("message", (m) => m.data && m.data.vivo && aplicar(m.data.vivo));
+  const altura = () => parent.postMessage({ vivoAltura: document.documentElement.scrollHeight, id: window.name }, "*");
+  addEventListener("load", () => {
+    // cascata: cada bloco entra um pouquinho depois do anterior
+    document.querySelectorAll(".ap-entra").forEach((el, i) => el.style.animationDelay = (i * 0.12) + "s");
+    // números contam do zero até o valor (com a vírgula do jeito brasileiro)
+    for (const el of document.querySelectorAll("[data-contar]")) {
+      const alvo = parseFloat(el.dataset.contar), casas = (el.dataset.contar.split(".")[1] || "").length, t0 = performance.now();
+      const passo = (t) => { const p = Math.min(1, (t - t0) / 1400), v = alvo * (1 - Math.pow(1 - p, 3));
+        el.textContent = v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+        if (p < 1) requestAnimationFrame(passo); };
+      requestAnimationFrame(passo);
+    }
+    altura();
+    document.querySelectorAll("img").forEach((img) => { img.onload = altura; img.onerror = () => { img.closest("figure")?.remove(); img.remove(); altura(); }; });
+  });`;
+const vivosFechados = new Set();  // ele fechou: a próxima atualização não reabre
+
+function htmlAutomatico(campos) {  // o cérebro não mandou visual: um número grande por campo
+  return `<div class="vivo-grade">${campos.map((c) => `<div class="vivo-item"><div class="vivo-rotulo">${c.replace(/_/g, " ")}</div>`
+    + `<div class="vivo-num" data-campo="${c}">—</div></div>`).join("")}</div>`;
+}
+
+function painelVivo({ id, titulo, html, campos = [], dados = {}, intervalo, hora, estatico }) {
+  if (vivosFechados.has(id)) return;
+  document.querySelector(`[data-id="${id}"]`)?.remove();
+  const c = document.createElement("article");
+  // apresentação (estatico) é um pop-up comum; o ao vivo fica fixo até ele mandar parar
+  c.className = "cartao vivo" + (estatico ? "" : " fixo"); c.dataset.id = id;
+  const h = document.createElement("h3"); h.textContent = titulo;
+  if (!estatico) { const selo = document.createElement("span"); selo.className = "selo-vivo"; selo.textContent = "AO VIVO"; h.append(selo); }
+  const f = document.createElement("iframe");
+  f.name = id;
+  f.setAttribute("sandbox", "allow-scripts");  // sem allow-same-origin: o HTML do cérebro não enxerga o Jarvis
+  f.srcdoc = `<!doctype html><meta charset="utf-8"><style>${CSS_VIVO}</style>${html || htmlAutomatico(campos)}<script>${SCRIPT_VIVO}<\/script>`;
+  f.onload = () => f.contentWindow.postMessage({ vivo: dados }, "*");
+  const st = document.createElement("div"); st.className = "status";
+  st.textContent = `atualizado ${hora || agora()} · a cada ${intervalo}s`;
+  c.append(h, f);
+  if (!estatico) c.append(st);
+  document.body.classList.remove("lugar", "silhueta");
+  lista.prepend(c);
+  if (estatico) podar();
+  atualizarEstado();
+  sons.popup();
+}
+
+function dadosVivo({ id, dados, hora, status }) {
+  const c = document.querySelector(`[data-id="${id}"]`);
+  if (!c) return;
+  if (dados) c.querySelector("iframe")?.contentWindow.postMessage({ vivo: dados }, "*");
+  const st = c.querySelector(".status");
+  if (st) st.textContent = status || `atualizado ${hora}`;
+  if (status && /encerrado/.test(status)) c.querySelector(".selo-vivo")?.remove();
+}
+
+addEventListener("message", (m) => {  // o iframe diz a altura do conteúdo: o cartão cresce junto (sem barra de rolagem)
+  if (!m.data || !m.data.vivoAltura) return;
+  const f = document.querySelector(`iframe[name="${m.data.id}"]`);
+  if (f) f.style.height = Math.min(m.data.vivoAltura + 4, innerHeight * 0.8) + "px";
+});
 
 // ------------------------------------------------------------ tempo real: o servidor empurra tudo
 // ?celular: o palco da tela do celular, que recebe uma cópia de tudo que as telas do PC mostram
@@ -579,6 +716,8 @@ fonte.onmessage = (m) => {
     } catch (erro) { window.avisarErro("troca de assunto: " + erro.message); }
   }
   if (e.cartao) cartao(e.cartao);
+  if (e.vivo) painelVivo(e.vivo);
+  if (e.vivo_dados) dadosVivo(e.vivo_dados);
   if (e.globo) irPara(e.globo);
   if (e.globo_opcoes) marcarOpcoes(e.globo_opcoes);
   if ("selecionar" in e) selecionar(e.selecionar);

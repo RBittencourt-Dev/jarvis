@@ -118,6 +118,8 @@ def entender(texto):
         return None
     if re.search(r"\b(?:voc[eê]|vc|tu)\b", t, re.I) and not re.search(r"\bimage|foto", t, re.I):
         return None  # "quem é você" é sobre o Jarvis
+    if re.search(r"\b(?:ao vivo|tempo real|monitor\w*|acompanh\w*|atualizando|pop-?ups?|painel)\b", t, re.I):
+        return None  # "monitora o bitcoin ao vivo num popup" = painel ao vivo do cérebro, não a cotação de uma vez
     m = IMAGEM.search(t)
     if m:
         return "imagem", m.group("o_que").strip()

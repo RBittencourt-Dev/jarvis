@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import random
 import re
 import subprocess
 import threading
@@ -33,6 +34,8 @@ import aprendizado
 import autocorrecao
 import bilingue
 import skills
+import paineis_vivos
+import apresentar as slides  # "apresentar" já é uma função daqui (apresentação 3D): o módulo vai como slides
 import lembretes
 import noticias
 import pomodoro
@@ -504,6 +507,30 @@ FERRAMENTAS = {
                                "(ex.: SKILL.md no GitHub). Pede o sim dele.", parametro("url", "o link")),
     "remover_skill": (skills.remover_skill, True, "Remove uma skill (vai pra skills/_removidas). Pede o sim dele.",
                       parametro("nome", "nome da skill")),
+    # painéis ao vivo (25/10): popup bonito que se atualiza sozinho com dados de um site (ver paineis_vivos.py)
+    "criar_painel_ao_vivo": (paineis_vivos.criar_painel_ao_vivo, False,
+                             "Cria um POPUP AO VIVO que se atualiza sozinho com números de um site (eleição, placar, cotação, "
+                             "status...). fonte = link https (prefira API que devolve JSON); campos = JSON {nome: caminho no "
+                             "JSON tipo 'cand[0].pvap'} ou {nome: 'descrição do valor'} pra página comum. html = o visual "
+                             "(fotos com <img src>, números em <span data-campo=\"nome\">, barra <div class=\"vivo-barra\"><i "
+                             "data-largura=\"nome\"></i></div>; classes prontas: vivo-grade, vivo-item, vivo-foto, vivo-nome, "
+                             "vivo-num, vivo-rotulo, vivo-barra, vivo-vs). Devolve os primeiros valores: CONFIRA e corrija.",
+                             {**parametro("titulo", "título do painel"), **parametro("fonte", "link https da fonte"),
+                              **parametro("campos", "JSON {nome: caminho ou descrição}"),
+                              **parametro("html", "HTML do visual (opcional: sem ele faz um layout automático)"),
+                              **parametro("intervalo", "segundos entre atualizações (padrão 30)"),
+                              **parametro("minutos", "por quanto tempo monitorar (padrão 180)")}),
+    "apresentar": (slides.apresentar, False,
+                   "APRESENTA a resposta na tela com fotos e animações, como num slide (use em TODA resposta que passa "
+                   "informação: explicação, comparação, resumo, dados, notícia, produto, lugar, pessoa). blocos = lista JSON: "
+                   "{tipo:'capa', titulo, subtitulo, imagem:'busca da foto'}, {tipo:'numeros', itens:[{valor:'204', "
+                   "sufixo:'cv', rotulo:'potência'}]}, {tipo:'pontos', titulo, itens:[...]}, {tipo:'etapas', itens:[...]}, "
+                   "{tipo:'imagens', busca:'...', quantas:3}, {tipo:'comparacao', colunas:[{titulo, imagem:'busca', "
+                   "itens:[...]}]}, {tipo:'texto', texto}. Fotos: escreva a BUSCA em INGLÊS, 2 a 4 palavras concretas "
+                   "('gasoline car engine', não 'combustão') — eu acho a foto. Comece com uma capa.",
+                   {**parametro("titulo", "título curto"), **parametro("blocos", "lista JSON de blocos")}),
+    "parar_painel_ao_vivo": (paineis_vivos.parar_painel_ao_vivo, False, "Para (e fecha) um painel ao vivo pelo título, "
+                             "ou 'todos'.", parametro("titulo", "título ou 'todos'")),
     "criar_automacao": (lambda nome, frase, acoes: "Criei a automação " + automacoes.salvar({
                             "nome": nome, "tipo": "frase", "frase": frase, "acoes": re.split(r"\s*[;\n]\s*", acoes)})["nome"],
                         False, "Cria um atalho de voz: quando ele disser a frase, roda as ações em ordem "
@@ -611,7 +638,8 @@ FERRAMENTAS.update({
                                      ("tela", "ver a tela, digitar, apertar teclas, clicar por nome, janelas, print, "
                                               "área de transferência, brilho"),
                                      ("programacao", "rodar código, git, editar arquivo, mostrar código"),
-                                     ("aprender", "aprender/esquecer habilidade, criar automação"),
+                                     ("aprender", "aprender/esquecer habilidade, criar automação, instalar/remover skill"),
+                                     ("aovivo", "popup ao vivo que se atualiza sozinho com números de um site, e parar ele"),
                                  )) + "; e cada conector ligado nas Configurações pelo nome dele.",
                              parametro("grupos", "nomes dos grupos, separados por vírgula")),
 })
@@ -622,7 +650,7 @@ FERRAMENTAS.update({
 GRUPOS = {
     "base": ["comando_jarvis", "buscar_na_web", "ler_site", "pesquisar_e_mostrar", "mostrar_na_tela",
              "lembrar", "mostrar_holograma", "calcular", "ver_registro", "planejar", "procurar_nos_meus_arquivos", "abrir_programa", "abrir_site",
-             "carregar_ferramentas", "pesquisar_google", "usar_skill"],
+             "carregar_ferramentas", "pesquisar_google", "usar_skill", "apresentar"],
     "arquivos": ["listar_pasta", "ler_arquivo", "criar_arquivo", "criar_planilha", "procurar_arquivo", "mover_arquivo",
                  "renomear_arquivo", "copiar_arquivo", "criar_pasta", "apagar_arquivo", "desfazer"],
     "tela": ["ver_tela", "digitar", "apertar_teclas", "clicar_em", "listar_janelas", "print_da_tela",
@@ -631,6 +659,7 @@ GRUPOS = {
     "aprender": ["aprender_habilidade", "esquecer_habilidade", "criar_automacao", "instalar_skill", "instalar_skill_do_link",
                  "remover_skill"],
     "powershell": ["executar_comando"],
+    "aovivo": ["criar_painel_ao_vivo", "parar_painel_ao_vivo", "rodar_codigo"],  # rodar_codigo: espiar o JSON da fonte
 }
 # 22/10: ele pedia "me mostra meu PC" e o cérebro saía rodando PowerShell. O PowerShell só vem quando o pedido é
 # coisa técnica do Windows; pro resto existe habilidade pronta (comando_jarvis) e ferramenta própria.
@@ -646,6 +675,7 @@ ATALHO_DE_GRUPO = [
                         r"[aá]rea de transfer|brilho", re.I)),
     ("programacao", re.compile(r"c[oó]digo|script|program|python|javascript|node|\bgit\b|commit|branch|bug|erro no|"
                                r"depura|debug|fun[cç][aã]o|repo", re.I)),
+    ("aovivo", re.compile(r"ao vivo|tempo real|monitor|acompanh|atualizando|placar|apura[cç][aã]o|live\b", re.I)),
     ("aprender", re.compile(r"aprend|ensin|automa[cç]|daqui pra frente|sempre que|quando eu (?:falar|pedir|disser)|esquece a habilidade|"
                             r"\bskills?\b|especialista em", re.I)),
 ]
@@ -657,7 +687,8 @@ def _definicao(nome):
         "name": nome, "description": desc,
         "parameters": {"type": "object", "properties": props,
                        "required": [k for k in props if k not in ("itens", "foco", "busca", "pasta", "janela", "texto",
-                                                                   "objetivo", "nivel", "tela")]}}}
+                                                                   "objetivo", "nivel", "tela", "html", "intervalo",
+                                                                   "minutos")]}}}
 
 
 def grupos_para(texto, sessao):
@@ -823,6 +854,46 @@ def aprender_site(sessao, url):
         _salvar_apps()
 
 
+VISUAIS = {"apresentar", "mostrar_na_tela", "criar_painel_ao_vivo", "pesquisar_e_mostrar", "mostrar_codigo",
+           "mostrar_holograma"}
+_ESTRUTURA = re.compile(r"(?:^|\n)\s*(?:\||#{1,4}\s|```|[-*•]\s|\d+[.)]\s)")
+
+
+def ponto_de_corte(texto):
+    """Até onde a VOZ fala: antes da primeira tabela/lista/título/código, ou no fim da frase depois de ~300 letras.
+    None = pode falar tudo. (Pedido dele: informação é apresentada na tela; falar só o resumo.)"""
+    m = _ESTRUTURA.search(texto)
+    pos = m.start() if m else None
+    quebra = texto.rfind("\n")
+    if pos is None and quebra >= 0 and len(texto) - quebra < 4:
+        pos = quebra  # linha nova que ainda não deu pra saber se é lista ("-" sozinho): espera o resto chegar
+    if len(texto) > 200 and texto.count("\n") >= 2:  # várias linhas de informação = é pra ver, não pra ouvir
+        pos = min(pos, texto.index("\n")) if pos is not None else texto.index("\n")
+    if len(texto) > 300:
+        fim = re.search(r"[.!?](?:\s|$)", texto[220:])
+        if fim:
+            pos = min(pos, 220 + fim.end()) if pos is not None else 220 + fim.end()
+    return pos
+
+
+async def apresentar_texto(texto):
+    """Resposta comprida do modelo → apresentação (capa, pontos, números, fotos). Falhou? Vai como pop-up de texto."""
+    pedido = ("Transforme a resposta abaixo numa apresentação de slide. Responda SÓ JSON {\"titulo\": \"...\", \"blocos\": [...]} "
+              "com blocos destes tipos: {\"tipo\":\"capa\",\"titulo\",\"subtitulo\",\"imagem\":\"busca da foto\"},{\"tipo\":\"numeros\",\"itens\":[{\"valor\",\"sufixo\",\"rotulo\"}]}, {\"tipo\":\"pontos\","
+              "\"titulo\",\"itens\":[...]}, {\"tipo\":\"etapas\",\"itens\":[...]}, {\"tipo\":\"comparacao\",\"colunas\":[{\"titulo\","
+              "\"imagem\",\"itens\":[...]}]}, {\"tipo\":\"imagens\",\"busca\",\"quantas\":2}, {\"tipo\":\"texto\",\"texto\"}. "
+              "Comece com capa; frases curtas; no máximo 6 blocos; código vira texto curto. Busca de foto: 2 a 4 palavras "
+              "EM INGLÊS, concretas e visuais (ex.: 'gasoline car engine', 'electric car charging', 'BMW X1 2024'), "
+              "nunca palavra abstrata.\n\nRESPOSTA:\n" + texto[:6000])
+    try:
+        bruto = await cerebro.completar([{"role": "user", "content": pedido}], json_mode=True, temperatura=0.2, max_tokens=1500)
+        j = json.loads(bruto[bruto.index("{"):bruto.rindex("}") + 1])
+        await asyncio.to_thread(slides.apresentar, str(j.get("titulo") or "Resumo"), json.dumps(j["blocos"]))
+    except Exception as e:
+        print(f"apresentar_texto falhou: {type(e).__name__}: {e}", flush=True)
+        await asyncio.to_thread(extensao.mostrar, "Resposta", texto)
+
+
 async def pensar(sessao):
     """Ciclo modelo → ferramenta → modelo. Solta o texto aos pedaços, para a voz começar antes do fim."""
     sid = next((k for k, v in sessoes.items() if v is sessao), None)
@@ -830,19 +901,33 @@ async def pensar(sessao):
     falhas = {}  # ferramenta → quantas vezes falhou neste pedido (3 = para de insistir nela)
     plano_atual.clear()
     comecou = time.time()
+    mostrou = False  # já pôs algo na tela neste pedido (apresentação, popup, painel ao vivo…)?
     for _ in range(10):
-        texto, chamadas = "", []
+        texto, chamadas, falado = "", [], 0
         try:
             async for tipo, valor in cerebro.conversar(sessao["mensagens"], definicoes_para(sessao), 0.5):
                 if tipo == "texto":
                     texto += valor
-                    yield {"trecho": valor}
+                    # 25/10: a voz fala só o resumo; tabela/lista/título/código ou texto comprido vai pra TELA
+                    corte = ponto_de_corte(texto)
+                    ate = len(texto) if corte is None else corte
+                    if ate > falado:
+                        yield {"trecho": texto[falado:ate]}
+                        falado = ate
                 else:
                     chamadas = valor
         except Exception as e:
             yield {"erro": f"cérebro fora do ar: {str(e)[:120]}"}
             return
         sessao["mensagens"].append({"role": "assistant", "content": texto, **({"tool_calls": chamadas} if chamadas else {})})
+        if not chamadas and falado < len(texto.rstrip()):
+            # o modelo escreveu um "documento" em vez de apresentar: eu mesmo transformo em apresentação
+            if not mostrou:
+                await apresentar_texto(texto)
+            yield {"trecho": " " + random.choice(["Botei o resto na tela, chefe.", "O detalhe tá na tela.",
+                                                   "Deixei tudo apresentado aí na tela."])}
+        if any(c["function"]["name"] in VISUAIS for c in chamadas):
+            mostrou = True
         if not chamadas:
             if passos and not deu_erro and sessao.get("pedido"):
                 aprendizado.gravar_caminho(sessao["pedido"], passos)
@@ -956,7 +1041,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (skills, avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, documentos, imagens, professor, rede, seguranca, especialistas, timer, lembretes, pomodoro, anotacoes, transcricao, gestos, noticias, sistemas)
+RECURSOS = (skills, paineis_vivos, avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, documentos, imagens, professor, rede, seguranca, especialistas, timer, lembretes, pomodoro, anotacoes, transcricao, gestos, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
