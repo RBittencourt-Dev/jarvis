@@ -48,6 +48,13 @@ GRUPOS = [
         ("Mandar mensagem no WhatsApp (você aprova o envio)", "manda um zap pro Rihan"),
         ("Tocar, pausar e trocar música no Spotify", "toca Tempo Perdido da Legião Urbana"),
     ]),
+    ("Skills (jeitos de pensar)", [
+        ("Pensar antes de responder, ser honesto, entender a fala torta e falar inglês (sempre ligadas)", "(automático)"),
+        ("Usar a skill do assunto: professor, programador, depurador, decisor, planejador, escritor, pesquisador, "
+         "matemático, negócios, criativo, segurança, inglês, produtividade, bem-estar", "(automático pelo assunto)"),
+        ("Instalar skill nova quando você pedir (você aprova), de um pedido ou de um link", "instala uma skill de nutricionista"),
+        ("Listar, mostrar e remover skills", "quais são suas skills / remove a skill X"),
+    ]),
     ("Pesquisa, notícias e imagens", [
         ("Pesquisar na web e te mostrar o resumo dentro de mim", "pesquisa o que é a LGPD"),
         ("Ler uma página e te contar o conteúdo", "lê esse site pra mim"),

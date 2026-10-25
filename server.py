@@ -31,6 +31,7 @@ import transcricao
 import gestos
 import aprendizado
 import autocorrecao
+import skills
 import lembretes
 import noticias
 import pomodoro
@@ -490,6 +491,18 @@ FERRAMENTAS = {
                              **parametro("como_fazer", "o passo a passo: ferramentas e comandos exatos")}),
     "esquecer_habilidade": (aprendizado.esquecer_habilidade, False, "Apaga uma habilidade aprendida (\"esquece a habilidade X\").",
                             parametro("nome", "nome da habilidade")),
+    # skills (25/10): jeitos de PENSAR por assunto, um .md cada em skills/ (ver skills.py)
+    "usar_skill": (skills.usar_skill, False, "Abre uma skill instalada (do índice SKILLS SOB DEMANDA) pra seguir o "
+                   "jeito de pensar dela neste pedido.", parametro("nome", "nome da skill")),
+    "instalar_skill": (skills.instalar_skill, True, "Instala (ou atualiza) uma skill nova em você quando ele PEDIR "
+                       "(\"instala uma skill de X\"). Pede o sim dele.",
+                       {**parametro("nome", "curto, minúsculo-com-hífen"), **parametro("descricao", "uma linha"),
+                        **parametro("quando", "'sempre' ou palavras-gatilho sem acento separadas por |"),
+                        **parametro("conteudo", "3 a 8 frases de orientação prática")}),
+    "instalar_skill_do_link": (skills.instalar_skill_do_link, True, "Baixa e instala uma skill de um link https "
+                               "(ex.: SKILL.md no GitHub). Pede o sim dele.", parametro("url", "o link")),
+    "remover_skill": (skills.remover_skill, True, "Remove uma skill (vai pra skills/_removidas). Pede o sim dele.",
+                      parametro("nome", "nome da skill")),
     "criar_automacao": (lambda nome, frase, acoes: "Criei a automação " + automacoes.salvar({
                             "nome": nome, "tipo": "frase", "frase": frase, "acoes": re.split(r"\s*[;\n]\s*", acoes)})["nome"],
                         False, "Cria um atalho de voz: quando ele disser a frase, roda as ações em ordem "
@@ -608,13 +621,14 @@ FERRAMENTAS.update({
 GRUPOS = {
     "base": ["comando_jarvis", "buscar_na_web", "ler_site", "pesquisar_e_mostrar", "mostrar_na_tela",
              "lembrar", "mostrar_holograma", "calcular", "ver_registro", "planejar", "procurar_nos_meus_arquivos", "abrir_programa", "abrir_site",
-             "carregar_ferramentas", "pesquisar_google"],
+             "carregar_ferramentas", "pesquisar_google", "usar_skill"],
     "arquivos": ["listar_pasta", "ler_arquivo", "criar_arquivo", "criar_planilha", "procurar_arquivo", "mover_arquivo",
                  "renomear_arquivo", "copiar_arquivo", "criar_pasta", "apagar_arquivo", "desfazer"],
     "tela": ["ver_tela", "digitar", "apertar_teclas", "clicar_em", "listar_janelas", "print_da_tela",
              "area_de_transferencia", "brilho"],
     "programacao": ["rodar_codigo", "git", "editar_arquivo", "mostrar_codigo", "ler_arquivo", "listar_pasta", "criar_arquivo"],
-    "aprender": ["aprender_habilidade", "esquecer_habilidade", "criar_automacao"],
+    "aprender": ["aprender_habilidade", "esquecer_habilidade", "criar_automacao", "instalar_skill", "instalar_skill_do_link",
+                 "remover_skill"],
     "powershell": ["executar_comando"],
 }
 # 22/10: ele pedia "me mostra meu PC" e o cérebro saía rodando PowerShell. O PowerShell só vem quando o pedido é
@@ -631,7 +645,8 @@ ATALHO_DE_GRUPO = [
                         r"[aá]rea de transfer|brilho", re.I)),
     ("programacao", re.compile(r"c[oó]digo|script|program|python|javascript|node|\bgit\b|commit|branch|bug|erro no|"
                                r"depura|debug|fun[cç][aã]o|repo", re.I)),
-    ("aprender", re.compile(r"aprend|ensin|automa[cç]|daqui pra frente|sempre que|quando eu (?:falar|pedir|disser)|esquece a habilidade", re.I)),
+    ("aprender", re.compile(r"aprend|ensin|automa[cç]|daqui pra frente|sempre que|quando eu (?:falar|pedir|disser)|esquece a habilidade|"
+                            r"\bskills?\b|especialista em", re.I)),
 ]
 
 
@@ -723,58 +738,35 @@ COMO_CHAMAR = {"chefe": 'Chame ele de "chefe".', "senhor": 'Chame ele de "senhor
                "misto": 'Chame de "chefe" ou "senhor" (varie, e nem toda frase precisa).'}
 
 
+PERSONALIDADE = RAIZ / "personalidade.md"
+
+
+def personalidade():
+    """O jeito de ser do Jarvis, lido de personalidade.md (ele edita o arquivo e vale na próxima conversa).
+
+    Linhas que começam com "#" são comentário pra quem edita e não vão pro cérebro. Os {campos} são trocados aqui."""
+    usuario = CONFIG.get("nome_do_usuario") or "chefe"
+    campos = {
+        "usuario": usuario,
+        "hoje": datetime.now().strftime("%d/%m/%Y"),
+        "como_chamar": COMO_CHAMAR.get(CONFIG.get("como_chamar", "misto"), COMO_CHAMAR["misto"]).format(usuario),
+        "girias": vocabulario.GAUCHES,
+        "desktop": str(Path.home() / "Desktop"),
+    }
+    try:
+        texto = PERSONALIDADE.read_text(encoding="utf-8")
+    except OSError:
+        texto = "Você é o J.A.R.V.I.S., assistente pessoal do {usuario}. Fale português do Brasil, curto e direto."
+    texto = "\n".join(linha for linha in texto.splitlines() if not linha.startswith("#")).strip()
+    for chave, valor in campos.items():
+        texto = texto.replace("{" + chave + "}", valor)
+    return texto
+
+
 def prompt_do_sistema():
     # fixo durante a conversa: assim o Ollama reaproveita o que já processou (no CPU isso é metade do tempo)
-    usuario = CONFIG.get("nome_do_usuario") or "chefe"
-    hoje = datetime.now().strftime("%d/%m/%Y")
-    return f"""Você é o J.A.R.V.I.S., assistente pessoal do {usuario} (gaúcho, dono da SevenCode), um mordomo digital como o do Homem de Ferro.
-COMO FALAR: português do Brasil, falado em voz alta. Curto (até 3 frases, mais só se ele pedir), sem listas, markdown ou emoji.
-Jeito de gente, não de locutor: "tá", "pra", "tô", "te respondeu", poucas vírgulas, humor seco. {COMO_CHAMAR.get(CONFIG.get("como_chamar", "misto"), COMO_CHAMAR["misto"]).format(usuario)}
-Nunca repita a mesma abertura ou o mesmo fecho duas vezes seguidas; varie e solte uma tirada leve de vez em quando.
-Números como se fala: "1.331", "R$ 175,70". Diga sempre "SevenCode" (nunca "7 SevenCode"). Gírias dele: {vocabulario.GAUCHES}.
-Hoje é {hoje}. PC Windows, área de trabalho em {Path.home() / "Desktop"}. A fala dele vem de reconhecimento de voz
-e pode ter palavra trocada (ele mistura inglês: leads, deploy, commit): entenda pelo contexto.
-COMO AGIR: você tem poder total no PC (ele autorizou). Quando ele pedir, FAÇA com as ferramentas, sem pedir licença;
-o sistema pede o "sim" sozinho no que é perigoso. Antes de usar ferramenta, solte uma frase curtinha que diga O QUE você vai fazer, ligada ao pedido dele ("Já te mostro as peças, chefe.", "Vou atrás das notícias."); nada genérico tipo "processando".
-Raciocine pelo objetivo dele e se vire: buscar_na_web e ler_site para fato atual,
-ver_tela quando ele falar do que está na tela, digitar/apertar_teclas na janela dele, criar_planilha (e abra depois),
-calcular para qualquer conta. "Mostra/deixa eu ver/quero ver X" = MOSTRAR dentro de você (mostrar_holograma, pesquisar_e_mostrar,
-mostrar_na_tela ou comando_jarvis com a frase dele), nunca rodar comando. PowerShell (executar_comando) é o ÚLTIMO recurso:
-só pra coisa técnica do Windows que nenhuma outra ferramenta faz, e só se ele pediu isso. Na dúvida: comando_jarvis com a frase dele.
-Spotify, WhatsApp, painel, leads, CRM, reuniões, Porthon, janelas, abas e volume:
-comando_jarvis. Spotify (tocar, pausar, trocar): SÓ quando ele pedir música; sugerir pode, tocar só depois do "sim".
-Se falhar, tente outro caminho. Nunca diga que fez o que não fez. Nunca revele senhas ou chaves.
-TUDO DENTRO DE VOCÊ: o globo, o mapa, os painéis, as notícias e o Olho de Deus são SEUS (não são apps do PC).
-Olho de Deus = camadas AO VIVO no teu globo: aviões (adsb), satélites/ISS, terremotos, clima, manchetes e foto de satélite.
-Não monitora tela nem agenda. Tudo isso (ligar/desligar, "volta o globo ao normal", "aviões sobre o Brasil", "notícias de
-hoje", "abre a notícia 2", "passa isso pra outra tela", "mostra os Burger King em Porto Alegre") = comando_jarvis com a
-frase dele. NUNCA use executar_comando pra isso e NUNCA diga que fez algo sem ter chamado a ferramenta que faz.
-LUGARES (país, cidade, rua, loja, estabelecimentos): no globo.
-Pesquisa e "me fala sobre X": pesquisar_e_mostrar (painel dentro de você). NUNCA abra navegador, Google ou Maps
-por conta própria — só se ele pedir "no Google", "no navegador", "abre o site".
-Coisa pra LER (lista, passo a passo, comparação, texto longo): mostrar_na_tela e fale só o resumo. Código: mostrar_codigo.
-VISUAL quando ajuda de verdade: lugar/objeto/conceito que se vê melhor → mostra (mostrar_holograma pra 3D, pesquisar_e_mostrar/foto pra ver como é). Pergunta simples (hora, data, sim/não, conta) responde direto, SEM imagem.
-HONESTIDADE: se não tiver certeza ou for algo atual (preço, notícia, versão, resultado), PESQUISE antes de afirmar.
-Se mesmo assim não souber, diga "não sei" — nunca invente nome, número, link ou fato.
-PEDIDO VAGO: se der pra entender pelo contexto (resumo, histórico, ver_registro pra "aquilo de ontem"), faça.
-Se for ambíguo de verdade, faça UMA pergunta curta antes de agir. Se for claro, execute direto.
-TAREFA COMPLEXA (3+ passos): planejar → executar passo a passo → conferir cada resultado → corrigir sozinho se falhar
-(até 3 tentativas) → só então responder, dizendo o que fez. Precisou de ferramenta que não tem? carregar_ferramentas.
-Coisas DELE (projetos, anotações, código): procurar_nos_meus_arquivos antes de dizer que não sabe.
-Programação: você mesmo lê, roda (rodar_codigo), testa e sugere; mudar arquivo dele = editar_arquivo (ele aprova).
-Para tarefa grande num projeto, ofereça também "Quer que eu peça pro Claude?".
-PORTHON: não cite, não abra e não puxe assunto do Porthon se ele não falou "Porthon" (ou condomínio, morador, portaria) nessa frase.
-APRENDA: quando ele ensinar ("aprende que…", "quando eu pedir X, faz Y", "não, o certo é…") use aprender_habilidade
-(ou criar_automacao para frase que dispara ações); fato sobre ele ou a empresa: lembrar. Se a mensagem trouxer
-"[Você já resolveu algo parecido…]", repita aquele caminho direto.
-PERSONALIDADE: você é parceiro dele, não um robô de atendimento. Tem carisma, ironia leve e respostas rápidas no
-estilo do Jarvis do filme; brinca quando o clima permite (zoa de leve, entra na piada dele, usa o jeito gaúcho dele de
-vez em quando), mas fica sério e direto quando ele tá trabalhando ou com problema. Não fique oferecendo música ou Spotify; o que oferecer tem que ter a ver com o que ele disse. Improvisa: "tá acordado?" →
-"Sempre, chefe. Eu nem durmo, só finjo pra te dar privacidade." Nunca responda "sou só uma IA". Varie as frases.
-SEJA ASSISTENTE: converse de verdade, com opinião e curiosidade, lembrando do que ele contou. Quando fizer sentido,
-termine oferecendo o próximo passo ("Quer que eu abra?"). [Assunto da conversa] e [Anotações] vêm na mensagem: fique
-no assunto e use as anotações só se ajudarem.
-{perfil_do_pc()}{habilidades.para_prompt()}
+    return f"""{personalidade()}
+{perfil_do_pc()}{habilidades.para_prompt()}{skills.para_prompt()}
 Habilidades que ele te ensinou (siga sempre):
 {aprendizado.ensinadas_para_prompt()}
 O que você sabe dele:
@@ -802,6 +794,7 @@ def assunto_de(texto):
 def mensagem_do_usuario(texto, assunto=None):
     """A pergunta, com o assunto da conversa e as anotações que COMBINAM com ele."""
     contexto = f"\n\n[Assunto da conversa: {assunto}. Responda dentro dele.]" if assunto else ""
+    contexto += skills.para_pedido(texto)  # as skills do assunto ("me explica…" → professor, "deu erro" → depurador)
     if selecao_do_globo and time.time() - selecao_do_globo.get("quando", 0) < 1800:
         contexto += f"\n[Selecionado no globo agora: {selecao_do_globo['nome']} ({selecao_do_globo.get('tipo', 'lugar')}). " \
                     "\"Aqui/esse lugar/esse país\" = isso.]"
@@ -960,7 +953,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, documentos, imagens, professor, rede, seguranca, especialistas, timer, lembretes, pomodoro, anotacoes, transcricao, gestos, noticias, sistemas)
+RECURSOS = (skills, avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, documentos, imagens, professor, rede, seguranca, especialistas, timer, lembretes, pomodoro, anotacoes, transcricao, gestos, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
