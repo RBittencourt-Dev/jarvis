@@ -202,8 +202,12 @@
       if (atual !== c) return;  // trocou de cena enquanto baixava
       const raiox = c.estilo === "raiox";
       const obj = gltf.scene;
+      const real = c.estilo === "real";  // escaneado com as cores de verdade (Scanner 3D)
+      // o material de verdade precisa de luz ambiente pra não ficar preto; a luz vai DENTRO do modelo e some junto com ele
+      if (real) obj.add(new T.HemisphereLight(0xffffff, 0x223344, 1.6));
       obj.traverse((o) => {
         if (!o.isMesh) return;
+        if (real) { for (const m of [].concat(o.material)) m.side = T.DoubleSide; return; }
         o.material = raiox
           ? new T.MeshPhongMaterial({ color: 0x4aa8ff, emissive: 0x1f6fd0, transparent: true, opacity: 0.3,
               side: T.DoubleSide, depthWrite: false, blending: T.AdditiveBlending, shininess: 70 })

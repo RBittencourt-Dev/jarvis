@@ -313,6 +313,13 @@ Pra coisas com camadas (planeta, célula, olho, átomo) use esfera_cortada uma d
 
 async def montar(assunto):
     t = _sa(assunto)
+    try:  # o cérebro pediu o holograma de algo que ele escaneou: usa o modelo da biblioteca
+        import hologramas3d
+        item = hologramas3d.pelo_nome(assunto)
+        if item:
+            return hologramas3d.cena(item)
+    except Exception:
+        pass
     for rx, modelo in MODELOS:
         if rx.search(t):
             return json.loads(json.dumps(modelo))

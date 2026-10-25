@@ -44,6 +44,7 @@ import rede
 import claude_ponte
 import claude_conversa
 import hud_paineis
+import hologramas3d
 import ferramentas_extra
 import extensao
 import fontes
@@ -2511,6 +2512,11 @@ async def pedido_interno(sid, sessao, tipo, valor):
         return apresentar(valor)
     if tipo == "hardware":
         return holo_hardware(valor)
+    if tipo == "holo_biblioteca":
+        item = hologramas3d.achar(valor)
+        if item:
+            mostrar_da_biblioteca(item)
+            return responder_ja(falas.escolher([f"Aqui, chefe: {item['nome']}.", f"Projetando {item['nome']}.", "Na tela, chefe."]))
     if tipo == "hardware_info":
         return info_hardware(valor)
     if tipo in ("neural", "neural_adicionar", "neural_buscar"):
@@ -2929,6 +2935,118 @@ async def api_holograma(h: Holo):
     holo_atual.clear()
     extensao.publicar_tela({"apresentacao": cena})
     return {"ok": True, "titulo": cena.get("titulo")}
+
+
+# ------------------------------------------------------------- Scanner 3D + biblioteca de hologramas (Configurações)
+def mostrar_da_biblioteca(item):
+    holo_atual.clear()
+    extensao.publicar_tela({"apresentacao": {**hologramas3d.cena(item), "id": _novo_id()}})
+
+
+def _scanner_terminou(item):
+    avisar(f"Holograma {item['nome']} pronto, chefe. Tá na biblioteca.")
+    mostrar_da_biblioteca(item)
+
+
+hologramas3d.ao_terminar = _scanner_terminou
+
+
+class Scanner(BaseModel):
+    foto_base64: str
+    nome: str = ""
+    estilo: str = "real"
+
+
+class EditarHolo(BaseModel):
+    nome: str | None = None
+    estilo: str | None = None
+
+
+class TokenHF(BaseModel):
+    token: str = ""
+
+
+@app.get("/api/hologramas")
+def api_hologramas():
+    return hologramas3d.listar()
+
+
+@app.post("/api/hologramas/scanner")
+def api_scanner(s: Scanner):
+    import base64
+    try:
+        foto = base64.b64decode(s.foto_base64.split(",")[-1], validate=False)
+        if len(foto) > 15 * 1024 * 1024:
+            raise ValueError("foto grande demais (máx. 15 MB)")
+        return {"trabalho": hologramas3d.iniciar(foto, s.nome, s.estilo)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/hologramas/scanner/{tid}")
+def api_scanner_estado(tid: str):
+    e = hologramas3d.estado(tid)
+    if not e:
+        raise HTTPException(404, "trabalho não existe (o Jarvis reiniciou?)")
+    return e
+
+
+@app.post("/api/hologramas/token")
+def api_hologramas_token(t: TokenHF):
+    try:
+        hologramas3d.guardar_token(t.token)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.get("/api/hologramas/arquivo/{nome}")
+def api_holograma_arquivo(nome: str):
+    if not re.fullmatch(r"[a-z0-9-]+\.(?:glb|png)", nome):
+        raise HTTPException(404)
+    caminho = hologramas3d.PASTA / nome
+    if not caminho.is_file():
+        raise HTTPException(404)
+    return FileResponse(caminho, media_type="model/gltf-binary" if nome.endswith(".glb") else "image/png")
+
+
+@app.post("/api/hologramas/{id_}/mostrar")
+async def api_holograma_biblioteca(id_: str):
+    pronto = next((p for p in hologramas3d.PRONTOS if p["id"] == id_), None)
+    if pronto:
+        if pronto["tipo"] == "hardware":
+            cena, _ = await asyncio.to_thread(hardware.CENAS[pronto["alvo"]])
+        elif pronto["tipo"] == "celular":
+            cena, _ = await asyncio.to_thread(celular.cena)
+        else:
+            cena = await apresentacoes.montar(pronto["alvo"])
+        cena.update(id=_novo_id(), auto=True)
+        holo_atual.clear()
+        if pronto["tipo"] == "hardware":
+            holo_atual.update(id=cena["id"], tipo=pronto["alvo"])
+            if pronto["alvo"] in hardware.DADOS:
+                tarefas_de_fundo.add(asyncio.create_task(atualizar_holo(cena["id"], pronto["alvo"])))
+        extensao.publicar_tela({"apresentacao": cena})
+        return {"ok": True}
+    item = hologramas3d.achar(id_)
+    if not item:
+        raise HTTPException(404, "não achei esse holograma")
+    mostrar_da_biblioteca(item)
+    return {"ok": True}
+
+
+@app.post("/api/hologramas/{id_}")
+def api_holograma_editar(id_: str, e: EditarHolo):
+    try:
+        return hologramas3d.editar(id_, e.nome, e.estilo)
+    except KeyError:
+        raise HTTPException(404, "não achei esse holograma")
+
+
+@app.delete("/api/hologramas/{id_}")
+def api_holograma_apagar(id_: str):
+    hologramas3d.apagar(id_)
+    return {"ok": True}
 
 
 class Microfone(BaseModel):

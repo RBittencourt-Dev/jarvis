@@ -253,6 +253,13 @@ def entender(texto):
         return ("globo_normal", None)
     if FECHAR_HOLO.match(t):
         return ("fechar_holo", None)
+    try:  # objeto escaneado da biblioteca: "mostra a caneca" (antes do resto, senão vira busca de foto)
+        import hologramas3d as _h3
+        item = _h3.pedido_de_voz(t)
+        if item:
+            return ("holo_biblioteca", item["id"])
+    except Exception:
+        pass
     if NEURAL_ABRIR.match(t):
         return ("neural", None)
     m = NEURAL_ADICIONAR.match(t)

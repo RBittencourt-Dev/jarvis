@@ -3,7 +3,7 @@
 (() => {
   const ABAS = [
     ["geral", "Geral"], ["modelos", "Modelos"], ["voz", "Voz"], ["proatividade", "Proatividade"], ["memoria", "Memória"],
-    ["privacidade", "Privacidade"], ["automacoes", "Automações"], ["falas", "Falas programadas"], ["marketing", "Marketing"], ["conectores", "Conectores"], ["planner", "7planner"], ["abertura", "Abertura"], ["instalacao", "Instalação"],
+    ["privacidade", "Privacidade"], ["automacoes", "Automações"], ["falas", "Falas programadas"], ["marketing", "Marketing"], ["scanner", "Scanner 3D"], ["hologramas", "Hologramas"], ["conectores", "Conectores"], ["planner", "7planner"], ["abertura", "Abertura"], ["instalacao", "Instalação"],
   ];
   const painel = $("configuracoes"), corpo = $("cfg-corpo"), abas = $("cfg-abas"), botao = $("abrir-configuracoes");
   let dados = null, abaAtual = "geral";
@@ -430,6 +430,122 @@
       return [lugar];
     },
 
+    // Scanner 3D: uma foto do objeto vira modelo 3D (IA grátis do Hugging Face) e vai pra biblioteca de hologramas
+    scanner() {
+      estiloHolo();
+      const video = h("video", { autoplay: true, muted: true, playsInline: true, className: "scan-video", hidden: true });
+      const previa = h("img", { className: "scan-previa", hidden: true, alt: "Foto do objeto" });
+      const arquivo = h("input", { type: "file", accept: "image/*", hidden: true });
+      const nome = h("input", { placeholder: "Ex.: caneca do Homem de Ferro" });
+      const estilo = seletor([["real", "Cores reais"], ["raiox", "Holograma azul"]], "real", () => {});
+      const progresso = h("p", { className: "cfg-texto scan-progresso" });
+      const gerar = h("button", { textContent: "Gerar 3D", disabled: true });
+      const camera = h("button", { className: "secundario", textContent: "Ligar câmera" });
+      const escolher = h("button", { className: "secundario", textContent: "Escolher foto…" });
+      let foto = null, fluxo = null;
+      const usar = (dataUrl) => { foto = dataUrl; previa.src = dataUrl; previa.hidden = false; gerar.disabled = false; };
+      const desligar = () => { fluxo?.getTracks().forEach((t) => t.stop()); fluxo = null; video.hidden = true; camera.textContent = "Ligar câmera"; };
+      camera.onclick = async () => {
+        if (fluxo) {  // segundo clique = bater a foto
+          const c = h("canvas", { width: video.videoWidth, height: video.videoHeight });
+          c.getContext("2d").drawImage(video, 0, 0); usar(c.toDataURL("image/jpeg", 0.92)); desligar(); return;
+        }
+        try {
+          fluxo = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 960 } });
+          video.srcObject = fluxo; video.hidden = false; previa.hidden = true; camera.textContent = "📸 Tirar foto";
+        } catch (e) { aviso("Câmera ocupada ou bloqueada (os gestos estão ligados?). Use “Escolher foto…”.", true); }
+      };
+      escolher.onclick = () => arquivo.click();
+      arquivo.onchange = () => {
+        const f = arquivo.files[0]; if (!f) return;
+        if (!nome.value) nome.value = f.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
+        const r = new FileReader(); r.onload = () => usar(r.result); r.readAsDataURL(f);
+      };
+      const acompanhar = (tid) => {
+        const passo = async () => {
+          let e; try { e = await api(`/api/hologramas/scanner/${tid}`); } catch (err) { progresso.textContent = "Perdi o andamento: " + err.message; return; }
+          if (e.estado === "gerando") { progresso.textContent = `⏳ ${e.etapa}… ${e.segundos} s`; return setTimeout(passo, 2000); }
+          gerar.disabled = false;
+          if (e.estado === "erro") { progresso.textContent = "✕ " + e.erro; return; }
+          progresso.textContent = `✓ Pronto: “${e.item.nome}” (${e.item.kb} KB, ${e.item.motor}). Já tá no holograma e na aba Hologramas. Fale: “mostra ${e.item.nome}”.`;
+        };
+        passo();
+      };
+      gerar.onclick = async () => {
+        if (!foto) return;
+        if (!nome.value.trim()) { aviso("Dá um nome pro objeto (é como você vai chamar ele por voz).", true); nome.focus(); return; }
+        gerar.disabled = true; progresso.textContent = "⏳ Enviando a foto…";
+        try { const r = await api("/api/hologramas/scanner", "POST", { foto_base64: foto, nome: nome.value.trim(), estilo: estilo.value }); acompanhar(r.trabalho); }
+        catch (e) { gerar.disabled = false; progresso.textContent = "✕ " + e.message; }
+      };
+      const token = h("input", { type: "password", placeholder: "hf_… (opcional)" });
+      const salvarToken = h("button", { className: "secundario", textContent: "Salvar token" });
+      const cota = h("p", { className: "cfg-texto" });
+      const recarregarCota = () => api("/api/hologramas").then((r) => {
+        cota.textContent = r.tem_token ? "Token do Hugging Face: guardado ✓ (cota maior)." : "Sem token: funciona, mas a cota grátis do dia é pequena (umas poucas peças).";
+        for (const g of r.gerando) { progresso.textContent = `⏳ ${g.nome}: ${g.etapa}…`; gerar.disabled = true; acompanhar(g.trabalho); }
+      }).catch(() => {});
+      salvarToken.onclick = async () => {
+        try { await api("/api/hologramas/token", "POST", { token: token.value }); token.value = ""; aviso("Token guardado neste PC."); recarregarCota(); }
+        catch (e) { aviso("Não salvei: " + e.message, true); }
+      };
+      recarregarCota();
+      // a câmera desliga ao trocar de aba / fechar
+      const vigia = new MutationObserver(() => { if (!video.isConnected) { desligar(); vigia.disconnect(); } });
+      vigia.observe(corpo, { childList: true });
+      return [
+        secao("Escanear um objeto",
+          h("p", { className: "cfg-texto" }, "Uma foto vira um modelo 3D pros hologramas. Dicas: o objeto SOZINHO, fundo liso, bem iluminado, " +
+            "foto meio de lado (pega frente e lateral). A parte de trás a IA imagina. Leva ~1 min; a IA roda na nuvem (de graça), não pesa o PC."),
+          h("div", { className: "scan-palco" }, video, previa),
+          h("div", { className: "botoes" }, camera, escolher, arquivo),
+          campo("Nome", nome, "É assim que você chama por voz: “mostra a caneca”."),
+          campo("Aparência", estilo),
+          h("div", { className: "botoes" }, gerar), progresso),
+        secao("Cota grátis",
+          cota,
+          campo("Token do Hugging Face", h("div", { className: "cfg-linha" }, token, salvarToken),
+            "Grátis: crie conta em huggingface.co → Settings → Access Tokens → New token (Read). Fica só neste PC.")),
+      ];
+    },
+
+    // Hologramas: tudo que dá pra projetar — os escaneados (editáveis) e os que o Jarvis já sabe montar
+    hologramas() {
+      estiloHolo();
+      const meus = h("div", { className: "holo-grade" }), prontos = h("div", { className: "holo-grade" });
+      const mostrarHolo = async (id) => {
+        try { await api(`/api/hologramas/${id}/mostrar`, "POST"); aviso("Na tela."); fechar(); }
+        catch (e) { aviso("Não abriu: " + e.message, true); }
+      };
+      const cartaoMeu = (i) => {
+        const nomeEl = h("input", { value: i.nome });
+        nomeEl.onchange = async () => { try { await api(`/api/hologramas/${i.id}`, "POST", { nome: nomeEl.value }); aviso("Renomeado."); } catch (e) { aviso(e.message, true); } };
+        const est = seletor([["real", "Cores reais"], ["raiox", "Holograma azul"]], i.estilo,
+          async (v) => { try { await api(`/api/hologramas/${i.id}`, "POST", { estilo: v }); aviso("Salvo."); } catch (e) { aviso(e.message, true); } });
+        const apagar = h("button", { className: "secundario", textContent: "Apagar" });
+        apagar.onclick = async () => {
+          if (apagar.dataset.certeza !== "1") { apagar.dataset.certeza = "1"; apagar.textContent = "Apagar mesmo?"; setTimeout(() => { apagar.dataset.certeza = ""; apagar.textContent = "Apagar"; }, 4000); return; }
+          await api(`/api/hologramas/${i.id}`, "DELETE"); aviso("Apagado."); recarregar();
+        };
+        return h("div", { className: "holo-cartao" },
+          h("img", { src: `/api/hologramas/arquivo/${i.id}.png`, alt: "", loading: "lazy" }),
+          nomeEl, est, h("small", {}, `${i.criado} · ${i.kb} KB · ${i.motor}`),
+          h("div", { className: "botoes" }, Object.assign(h("button", { textContent: "Mostrar" }), { onclick: () => mostrarHolo(i.id) }), apagar));
+      };
+      const recarregar = () => api("/api/hologramas").then((r) => {
+        meus.replaceChildren(...(r.meus.length ? r.meus.map(cartaoMeu)
+          : [h("p", { className: "cfg-texto" }, "Nenhum ainda. Vá na aba Scanner 3D e tire uma foto de algum objeto.")]));
+        prontos.replaceChildren(...r.prontos.map((p) => h("div", { className: "holo-cartao pronto" }, h("strong", {}, p.nome),
+          h("small", {}, { hardware: "ao vivo, deste PC", celular: "o seu celular", apresentacao: "apresentação com roteiro" }[p.tipo]),
+          h("div", { className: "botoes" }, Object.assign(h("button", { className: "secundario", textContent: "Mostrar" }), { onclick: () => mostrarHolo(p.id) })))));
+      }).catch((e) => meus.replaceChildren(h("p", { className: "erro" }, "Não carregou: " + e.message)));
+      recarregar();
+      return [
+        secao("Meus (escaneados)", h("p", { className: "cfg-texto" }, "Renomear muda como você chama por voz. Ou fale: “mostra a <nome>”."), meus),
+        secao("Prontos do Jarvis", prontos),
+      ];
+    },
+
     conectores() {
       const caixa = h("div", { className: "cfg-conectores" }, "Carregando…");
       const desenhar = async () => {
@@ -554,6 +670,21 @@
       } catch (e) { aviso("Falhou: " + e.message, true); }
     };
     return form;
+  }
+
+  // estilos das abas Scanner 3D / Hologramas (injetados uma vez, pra não mexer no jarvis.css)
+  function estiloHolo() {
+    if (document.getElementById("estilo-holo-cfg")) return;
+    document.head.append(h("style", { id: "estilo-holo-cfg", textContent: `
+      .scan-palco { display: grid; place-items: center; background: #0008; border: 1px dashed var(--ciano-fraco); min-height: 60px; }
+      .scan-video, .scan-previa { max-width: 100%; max-height: 300px; display: block; }
+      .scan-progresso { color: var(--texto); min-height: 1.2em; }
+      .holo-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+      .holo-cartao { display: grid; gap: 6px; align-content: start; padding: 8px; border: 1px solid #39d0ff1f; background: #0006; font-size: 13px; }
+      .holo-cartao img { width: 100%; aspect-ratio: 1; object-fit: contain; background: radial-gradient(#39d0ff22, transparent 70%); }
+      .holo-cartao input, .holo-cartao select { width: 100%; }
+      .holo-cartao small { color: var(--apagado); font-size: 11px; }
+      .holo-cartao .botoes { display: flex; gap: 6px; flex-wrap: wrap; }` }));
   }
 
   // ------------------------------------------------------------ abrir, fechar, trocar de aba

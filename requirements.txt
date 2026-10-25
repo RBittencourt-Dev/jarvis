@@ -103,3 +103,5 @@ watchfiles==1.3.0
 websockets==17.3
 wheel==0.48.0
 yarl==1.25.1
+gradio_client  # Scanner 3D: foto → modelo pela IA grátis do Hugging Face
+fast-simplification  # Scanner 3D: enxuga o modelo da IA reserva
