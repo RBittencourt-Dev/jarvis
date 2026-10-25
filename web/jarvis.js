@@ -206,14 +206,15 @@ function arrastavelHud(el) {
     const mover = (e) => {
       const dx = e.clientX - x0, dy = e.clientY - y0;
       if (!ativo && Math.hypot(dx, dy) < 8) return;
+      if (!ativo) { el.setPointerCapture?.(ev.pointerId); window.travessia?.inicio(el, e); }
       ativo = true; el.classList.add("arrastando");
       el.style.transform = `translate(${dx}px, ${dy}px)`;
-      el.classList.toggle("vai-sair", e.clientX < 40 || e.clientY < 40 || e.clientX > innerWidth - 40 || e.clientY > innerHeight - 40);
+      window.travessia?.mover(el, e);  // a outra tela desenha a parte que passou da borda (igual ao Windows)
     };
-    const soltar = async () => {
+    const soltar = async (e) => {
       removeEventListener("pointermove", mover); removeEventListener("pointerup", soltar);
       if (!ativo) return;
-      const sair = el.classList.contains("vai-sair");
+      const sair = window.travessia ? window.travessia.fim(el, e) : false;  // soltou com o mouse na outra tela?
       el.classList.remove("arrastando", "vai-sair");
       el.style.transform = "";
       if (!sair) return;

@@ -111,3 +111,100 @@
   }).observe(document.body, { childList: true, subtree: true });
   document.querySelectorAll(".cartao").forEach(botarX);
 })();
+
+// ------------------------------------------------------------ arrastar entre as telas IGUAL AO WINDOWS (25/10)
+// Pedido dele: "enquanto some de um lado aparece no outro". As telas são janelas separadas, então:
+//  - a tela de onde o popup sai manda a posição dele NA ÁREA DE TRABALHO (screenX/screenY: o mesmo sistema de
+//    coordenadas do Windows, que já sabe que a tela 1 fica à esquerda da 2) pro servidor, umas 30 vezes por segundo;
+//  - a outra tela desenha uma cópia ("fantasma") no mesmo ponto: a parte que passou da borda aparece lá;
+//  - soltou com o mouse já na outra tela → o popup muda de tela de verdade (/api/mover_item). Soltou na mesma → volta.
+window.travessia = (() => {
+  const EU = Math.random().toString(36).slice(2);
+  const TOPO = window.top === window;
+  let arraste = null, ultimoEnvio = 0, pendente = null;
+
+  const mandar = (msg) => fetch("/api/arraste", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...msg, de: EU, topo: TOPO }) }).catch(() => {});
+
+  // retângulo da janela inteira na área de trabalho (no palco, que é um iframe, é a janela do HUD em volta dele)
+  function minhaTela(e) {
+    const ox = e.screenX - e.clientX, oy = e.screenY - e.clientY;  // canto de cima/esquerda desta página no Windows
+    if (TOPO) return { x: ox, y: oy, w: innerWidth, h: innerHeight };
+    const r = frameElement.getBoundingClientRect();
+    return { x: ox - r.left, y: oy - r.top, w: top.innerWidth, h: top.innerHeight };
+  }
+  const dentro = (t, x, y) => x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h;
+
+  function inicio(el, e) {
+    const r = el.getBoundingClientRect();
+    const tela = minhaTela(e);
+    // cópia com a cara de agora (o CSS da outra tela é diferente: o visual principal vai junto, inline)
+    const copia = el.cloneNode(true);
+    const cs = getComputedStyle(el);
+    for (const p of ["background", "border", "padding", "color", "font", "clip-path", "box-shadow", "border-radius"])
+      copia.style.setProperty(p, cs.getPropertyValue(p));
+    copia.style.transform = ""; copia.style.margin = "0"; copia.style.width = r.width + "px"; copia.style.height = r.height + "px";
+    copia.querySelector(":scope > .fechar-x")?.remove();
+    arraste = { id: el.dataset.id || "", px: e.clientX - r.left, py: e.clientY - r.top, tela };
+    // no palco (quadro no meio do HUD) o original seria cortado na borda do quadro: quem desenha é o HUD, por cima
+    if (!TOPO) el.style.opacity = "0";
+    mandar({ acao: "inicio", id: arraste.id, html: copia.outerHTML, w: r.width, h: r.height, tela, dados: el.__dados || null });
+  }
+
+  function mover(el, e) {
+    if (!arraste) return false;
+    const msg = { acao: "mover", id: arraste.id, x: e.screenX - arraste.px, y: e.screenY - arraste.py, tela: arraste.tela };
+    const agora = performance.now();
+    if (agora - ultimoEnvio > 33) { ultimoEnvio = agora; mandar(msg); pendente = null; }
+    else pendente = msg;  // o último ponto sempre chega (no fim)
+    return !dentro(arraste.tela, e.screenX, e.screenY);  // true = o mouse já está na outra tela
+  }
+
+  function fim(el, e) {
+    if (!arraste) return false;
+    if (pendente) mandar(pendente);
+    const fora = !dentro(arraste.tela, e.screenX, e.screenY);
+    mandar({ acao: "fim", id: arraste.id, fora, tela: arraste.tela });
+    arraste = pendente = null;
+    return fora;
+  }
+
+  // ---- quem RECEBE: só a janela de cima de cada tela (o palco usa a do HUD) e nunca o celular
+  if (TOPO && !/celular/.test(location.search)) {
+    const css = document.createElement("style");
+    css.textContent = `.fantasma-tela { position: fixed; z-index: 99999; pointer-events: none; opacity: .95; transition: none;
+      box-sizing: border-box; overflow: hidden; }
+      .fantasma-tela.sumindo { transition: opacity .5s; opacity: 0; }`;
+    document.head.append(css);
+    const fantasmas = {};
+    // onde fica o canto desta janela no Windows (janela sem barra: o Jarvis abre em tela cheia)
+    const meuCanto = () => ({ x: screenX + (outerWidth - innerWidth) / 2, y: screenY + (outerHeight - innerHeight) });
+    const mesmaTela = (t) => t && Math.abs(t.x - meuCanto().x) < 40 && Math.abs(t.y - meuCanto().y) < 80 && Math.abs(t.w - innerWidth) < 40;
+    const fonte = new EventSource("/api/extensao/eventos?canal=arraste");
+    fonte.onmessage = (m) => {
+      let d; try { d = JSON.parse(m.data); } catch { return; }
+      if (d.de === EU || (d.topo && mesmaTela(d.tela))) return;  // a própria tela já mostra o original
+      const chave = d.de + d.id;
+      if (d.acao === "inicio") {
+        fantasmas[chave]?.remove();
+        const f = document.createElement("div");
+        f.className = "fantasma-tela"; f.style.width = d.w + "px"; f.style.height = d.h + "px"; f.style.left = "-9999px";
+        f.innerHTML = d.html;
+        const fr = f.querySelector("iframe");  // painel ao vivo: os números entram no fantasma também
+        if (fr && d.dados) fr.addEventListener("load", () => fr.contentWindow.postMessage({ vivo: d.dados }, "*"));
+        document.body.append(f);
+        fantasmas[chave] = f;
+      } else if (d.acao === "mover" && fantasmas[chave]) {
+        const c = meuCanto();
+        fantasmas[chave].style.left = (d.x - c.x) + "px";
+        fantasmas[chave].style.top = (d.y - c.y) + "px";
+      } else if (d.acao === "fim" && fantasmas[chave]) {
+        const f = fantasmas[chave]; delete fantasmas[chave];
+        if (!d.fora) return f.remove();
+        // soltou aqui: o popup de verdade chega em instantes pelo servidor; o fantasma some devagar por cima
+        setTimeout(() => { f.classList.add("sumindo"); setTimeout(() => f.remove(), 550); }, 350);
+      }
+    };
+  }
+  return { inicio, mover, fim };
+})();

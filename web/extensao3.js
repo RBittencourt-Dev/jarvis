@@ -410,17 +410,17 @@
       const mover = (e) => {
         const dx = e.clientX - x0, dy = e.clientY - y0;
         if (!ativo && Math.hypot(dx, dy) < 8) return;
-        if (!ativo) { ativo = true; el.classList.add("arrastando"); el.setPointerCapture?.(ev.pointerId); }
-        el.style.transform = `translate(${dx}px, ${dy}px) scale(.97)`;
-        const borda = e.clientX < MARGEM || e.clientY < MARGEM || e.clientX > innerWidth - MARGEM || e.clientY > innerHeight - MARGEM;
-        el.classList.toggle("vai-sair", borda);
+        if (!ativo) { ativo = true; el.classList.add("arrastando"); el.setPointerCapture?.(ev.pointerId); window.travessia?.inicio(el, e); }
+        el.style.transform = `translate(${dx}px, ${dy}px)`;
+        // igual ao Windows: o mouse passou pra outra tela (pela posição real dos monitores) = vai pra lá ao soltar
+        window.travessia?.mover(el, e);
       };
-      const soltar = async () => {
+      const soltar = async (e) => {
         removeEventListener("pointermove", mover); removeEventListener("pointerup", soltar);
         if (!ativo) return;
-        const sair = el.classList.contains("vai-sair");
+        const sair = window.travessia ? window.travessia.fim(el, e) : false;
         el.classList.remove("arrastando", "vai-sair");
-        if (!sair) { el.style.transform = ""; return; }
+        if (!sair) { el.style.transform = ""; el.style.opacity = ""; return; }
         el.style.transition = "opacity .25s, transform .25s"; el.style.opacity = "0";
         sons.viagem();
         const id = el.dataset.id || "";

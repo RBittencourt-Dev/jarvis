@@ -648,8 +648,9 @@ function htmlAutomatico(campos) {  // o cérebro não mandou visual: um número 
     + `<div class="vivo-num" data-campo="${c}">—</div></div>`).join("")}</div>`;
 }
 
-function painelVivo({ id, titulo, html, campos = [], dados = {}, intervalo, hora, estatico }) {
-  if (vivosFechados.has(id)) return;
+function painelVivo({ id, titulo, html, campos = [], dados = {}, intervalo, hora, estatico, movido }) {
+  if (vivosFechados.has(id) && !movido) return;  // arrastado de volta pra cá não conta como "ele fechou"
+  vivosFechados.delete(id);
   document.querySelector(`[data-id="${id}"]`)?.remove();
   const c = document.createElement("article");
   // apresentação (estatico) é um pop-up comum; o ao vivo fica fixo até ele mandar parar
@@ -664,6 +665,7 @@ function painelVivo({ id, titulo, html, campos = [], dados = {}, intervalo, hora
   const st = document.createElement("div"); st.className = "status";
   st.textContent = `atualizado ${hora || agora()} · a cada ${intervalo}s`;
   c.append(h, f);
+  c.__dados = dados;  // os números de agora: o "fantasma" na outra tela (arrastar entre telas) desenha com eles
   if (!estatico) c.append(st);
   document.body.classList.remove("lugar", "silhueta");
   lista.prepend(c);
@@ -675,7 +677,7 @@ function painelVivo({ id, titulo, html, campos = [], dados = {}, intervalo, hora
 function dadosVivo({ id, dados, hora, status }) {
   const c = document.querySelector(`[data-id="${id}"]`);
   if (!c) return;
-  if (dados) c.querySelector("iframe")?.contentWindow.postMessage({ vivo: dados }, "*");
+  if (dados) { c.__dados = dados; c.querySelector("iframe")?.contentWindow.postMessage({ vivo: dados }, "*"); }
   const st = c.querySelector(".status");
   if (st) st.textContent = status || `atualizado ${hora}`;
   if (status && /encerrado/.test(status)) c.querySelector(".selo-vivo")?.remove();
@@ -873,9 +875,9 @@ setInterval(() => ($("relogio").textContent = new Date().toLocaleTimeString("pt-
 <script src="/web/vendor/GLTFLoader.js"></script>
 <script src="/web/extensao2.js?v=2210e"></script>
 <script src="/web/timers.js?v=2210f" data-onde="ext"></script>
-<script src="/web/extensao3.js?v=2210e"></script>
+<script src="/web/extensao3.js?v=2510a"></script>
 <script src="/web/holograma.js?v=2410h"></script>
-<script src="/web/popups.js?v=2510a"></script>
+<script src="/web/popups.js?v=2510b"></script>
 <script src="/web/mao.js?v=11"></script>
 </body>
 </html>

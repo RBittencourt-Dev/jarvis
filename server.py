@@ -4155,7 +4155,7 @@ def extensao_sinal():
 
 @app.get("/api/extensao/eventos")
 async def extensao_eventos(canal: str = "extensao"):
-    canal = canal if canal in ("extensao", "hud", "palco", "celular") else "extensao"
+    canal = canal if canal in ("extensao", "hud", "palco", "celular", "arraste") else "extensao"
     return StreamingResponse(extensao.eventos(canal), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
@@ -4677,9 +4677,20 @@ def api_holo_fechado(d: dict):
 
 @app.post("/api/mover_item")
 def api_mover_item(a: Arrasto):
-    """Arrastou um painel/pop-up até a borda: ele passa pra outra tela."""
+    """Arrastou um painel/pop-up pra outra tela (soltou com o mouse já no outro monitor): ele passa pra lá."""
+    if a.id.startswith("vivo-"):  # painel ao vivo (eleição, cotação…): muda de tela e segue atualizando lá
+        return {"ok": paineis_vivos.mover(a.id, a.de)}
     fala = extensao.mover_por_id(a.id, a.de, CONFIG["porta"], a.dado)
     return {"ok": bool(fala), "fala": fala}
+
+
+@app.post("/api/arraste")
+async def api_arraste(dado: dict):
+    """Arrastar entre telas igual ao Windows: a tela de onde o popup sai manda aqui a posição dele na área de trabalho
+    (início, cada movimento, fim) e a outra tela desenha a parte que já passou da borda. Só repassa, não guarda nada."""
+    if dado.get("acao") in ("inicio", "mover", "fim") and len(json.dumps(dado)) < 400_000:
+        extensao.publicar(dado, "arraste")
+    return {"ok": True}
 
 
 parar_agora = {"em": 0.0}

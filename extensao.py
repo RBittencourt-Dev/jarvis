@@ -25,7 +25,7 @@ TITULO = "J.A.R.V.I.S. · Extensão"
 URL = "http://127.0.0.1:{porta}/extensao"
 PERFIL = RAIZ / ".perfil-extensao"  # perfil próprio: o Chrome respeita posição e tela cheia (janela nova num perfil já aberto ignora)
 
-_ouvintes = {"extensao": set(), "hud": set(), "palco": set(), "celular": set()}  # palco = o centro da tela principal (iframe no HUD)  # filas (asyncio.Queue) de quem está com a página aberta
+_ouvintes = {"extensao": set(), "hud": set(), "palco": set(), "celular": set(), "arraste": set()}  # palco = o centro da tela principal (iframe no HUD)  # filas (asyncio.Queue) de quem está com a página aberta
 # de onde veio o pedido que está rodando agora ("pc" | "celular"). O servidor marca no começo do pedido e o valor
 # segue junto pras ferramentas (asyncio.to_thread copia o contexto), então publicar() sabe pra qual tela mandar.
 origem = contextvars.ContextVar("origem", default="pc")

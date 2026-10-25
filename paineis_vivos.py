@@ -114,10 +114,29 @@ def _publicar(evento):
     pid = (evento.get("vivo") or evento.get("vivo_dados") or {}).get("id") or (evento.get("remover") or [None])[0]
     if "vivo" in evento:
         _canal_de[pid] = "palco" if extensao.tem_palco() else "extensao"
+        _ultimo[pid] = dict(evento["vivo"])
+    if evento.get("vivo_dados", {}).get("dados") and pid in _ultimo:  # guarda os números de agora pra redesenhar na outra tela
+        _ultimo[pid].update(dados=evento["vivo_dados"]["dados"], hora=evento["vivo_dados"].get("hora"))
     canal = _canal_de.get(pid, "palco" if extensao.tem_palco() else "extensao")
     if "remover" in evento:
         _canal_de.pop(pid, None)
+        _ultimo.pop(pid, None)
     extensao.publicar(evento, canal)
+
+
+_ultimo = {}  # id do painel -> o último desenho dele (html + números), pra arrastar pra outra tela
+
+
+def mover(pid, de):
+    """Arrastou o painel ao vivo pra outra tela: some de uma e aparece na outra com os números de agora."""
+    vivo = _ultimo.get(pid)
+    destino = "extensao" if de == "palco" else "palco"
+    if not vivo or (destino == "palco" and not extensao.tem_palco()):
+        return False
+    extensao.publicar({"remover": [pid]}, _canal_de.get(pid, de))
+    _canal_de[pid] = destino
+    extensao.publicar({"vivo": {**vivo, "movido": True}}, destino)
+    return True
 
 
 def fechar(pid):
