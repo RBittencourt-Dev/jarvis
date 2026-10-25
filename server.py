@@ -829,6 +829,8 @@ def mensagem_do_usuario(texto, assunto=None):
     contexto += skills.para_pedido(texto)  # as skills do assunto ("me explica…" → professor, "deu erro" → depurador)
     if bilingue.parece_ingles(texto):  # a regra da skill sozinha o modelo às vezes ignora: aqui vai junto da frase
         contexto += "\n\n[Ele falou em INGLÊS (está aprendendo): responda EM INGLÊS simples e natural.]"
+    if time.time() - ultimo_tom["quando"] < 20:
+        contexto += dica_de_tom(ultimo_tom["tom"])
     if selecao_do_globo and time.time() - selecao_do_globo.get("quando", 0) < 1800:
         contexto += f"\n[Selecionado no globo agora: {selecao_do_globo['nome']} ({selecao_do_globo.get('tipo', 'lugar')}). " \
                     "\"Aqui/esse lugar/esse país\" = isso.]"
@@ -1635,6 +1637,40 @@ class Pergunta(BaseModel):
     texto: str
     alternativas: list[str] = []  # outras versões do que o Chrome ouviu
     celular: bool = False  # veio da tela do celular: o que mostrar vai só pra ela
+    tom: dict | None = None  # entonação medida na tela (web/entonacao.js): volume, ritmo, energia, final, altura
+
+
+# ------------------------------------------------------------- entonação (25/10): COMO ele falou vira dica pro cérebro
+ultimo_tom = {"tom": None, "quando": 0.0}
+
+
+def dica_de_tom(tom):
+    """{"volume": "alto", "ritmo": "rápido", "final": "sobe"…} → frase curta pro cérebro ler o clima da fala."""
+    if not tom:
+        return ""
+    partes, leitura = [], []
+    if tom.get("volume") in ("alto", "baixo"):
+        partes.append(f"falou mais {tom['volume']} que o normal")
+    if tom.get("ritmo") in ("rápido", "devagar"):
+        partes.append(f"{'mais rápido' if tom['ritmo'] == 'rápido' else 'mais devagar'} que o normal")
+    if tom.get("energia") in ("animado", "monótono"):
+        partes.append("voz animada" if tom["energia"] == "animado" else "voz arrastada, sem energia")
+    if tom.get("final") == "sobe":
+        partes.append("a voz SOBE no fim (tom de pergunta/dúvida)")
+    elif tom.get("final") == "desce":
+        partes.append("a voz desce no fim (afirmação/ordem)")
+    if not partes:
+        return ""
+    if tom.get("volume") == "alto" and tom.get("ritmo") == "rápido":
+        leitura.append("pode estar com pressa ou irritado: seja direto, sem enrolar")
+    elif tom.get("energia") == "animado":
+        leitura.append("tá empolgado: entre no clima")
+    elif tom.get("energia") == "monótono" or (tom.get("volume") == "baixo" and tom.get("ritmo") == "devagar"):
+        leitura.append("pode estar cansado ou desanimado: fale com calma e mais curto")
+    if tom.get("final") == "sobe":
+        leitura.append("trate como PERGUNTA mesmo sem '?' no texto")
+    return (f"\n[Entonação da voz dele: {', '.join(partes)}"
+            + (f" → {'; '.join(leitura)}" if leitura else "") + ". Use isso com naturalidade, sem comentar que mediu.]")
 
 
 class Decisao(BaseModel):
@@ -1959,6 +1995,7 @@ MOSTRAR_ONDE = re.compile(
 async def conversar(p: Pergunta):
     sid = p.sessao if p.sessao in sessoes else str(uuid.uuid4())
     sessao = sessoes.setdefault(sid, {"mensagens": [], "pendente": None})
+    ultimo_tom.update(tom=p.tom, quando=time.time())  # a mensagem pro cérebro leva o clima da fala (dica_de_tom)
     if p.celular:
         sessao["celular"] = True
     extensao.origem.set("celular" if sessao.get("celular") else "pc")

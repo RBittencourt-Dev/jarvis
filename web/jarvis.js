@@ -565,12 +565,12 @@ async function chamar(url, corpo) {
   if (!$("autorizacao").hidden) estado("ouvindo", "Diga sim ou não");
 }
 
-function perguntar(texto, alternativas = []) {
+function perguntar(texto, alternativas = [], tom = null) {
   texto = texto.trim();
   if (!texto) return;
   if (trocouVista(texto)) return;  // "modo foco/completo/segurança" é resolvido no HUD, não vai pro servidor
   escrever(texto, "eu");
-  chamar("/api/conversar", { sessao, texto, alternativas });
+  chamar("/api/conversar", { sessao, texto, alternativas, ...(tom ? { tom } : {}) });
 }
 
 async function irDormir() {
@@ -633,6 +633,7 @@ function criarReconhecimento() {
       return;
     }
     $("texto").value = (juntando.texto + " " + ultimo[0].transcript).trim();
+    if (!juntando.inicio) juntando.inicio = performance.now() - 600;  // começo da fala (pra medir a entonação)
     // "Jar…" no meio da palavra: já responde (som curto + núcleo aceso), sem esperar ele terminar a frase.
     // Se ele emendar o pedido, executa direto; se ficar só no nome, aí sim vem o "Pois não, chefe?".
     if (!conversaAberta() && Date.now() - acordadoEm > 4000 && /\bj[aá]r/i.test(ultimo[0].transcript)) {
@@ -765,6 +766,10 @@ function acabouDeFalar() {
 function fimDaFala() {
   let dito = juntando.texto.trim();
   const alternativas = juntando.alternativas;
+  // como ele falou (volume, ritmo, tom, fim da frase subindo/descendo) — o 1 s de silêncio do fim fica de fora
+  let tom = null;
+  try { tom = window.entonacao?.resumo(juntando.inicio || performance.now() - 8000, performance.now() - 1000, dito.split(/\s+/).length); } catch {}
+  juntando.inicio = 0;
   juntando.texto = "";
   $("texto").value = "";
   if (!dito || ocupado) return;
@@ -797,7 +802,7 @@ function fimDaFala() {
     else if (NAO.test(dito)) decidir(false);
     return;
   }
-  perguntar(dito, alternativas);
+  perguntar(dito, alternativas, tom);
 }
 
 function ouvir() {
