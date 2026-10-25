@@ -14,6 +14,14 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 FRASES = [
+    # --- eleição 2026 ao vivo (25/10): painel do TSE com fotos, fala a cada atualização
+    ("mostra os resultados das eleições ao vivo", "eleicao mostrar"),
+    ("jarvis mostra o resultado da eleição", "eleicao mostrar"),
+    ("quem tá ganhando a eleição", "eleicao mostrar"),
+    ("como tá a apuração", "eleicao mostrar"),
+    ("para de falar da eleição", "eleicao mudo"),
+    ("fecha o painel da eleição", "eleicao parar"),
+    ("quem ganhou a eleição de 2022", "modelo|pesquis|saber"),
     # --- microfone (19/10): "muta" = o Jarvis fica surdo e volta por voz; "do PC" = muta no Windows
     ("muta o microfone", "microfone mutar"),
     ("muta o mic", "microfone mutar"),

@@ -35,6 +35,7 @@ import autocorrecao
 import bilingue
 import skills
 import paineis_vivos
+import eleicao
 import apresentar as slides  # "apresentar" já é uma função daqui (apresentação 3D): o módulo vai como slides
 import lembretes
 import noticias
@@ -1043,7 +1044,7 @@ def abrir_interface():
     return "Abrindo a interface, chefe."
 
 
-RECURSOS = (skills, paineis_vivos, avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, documentos, imagens, professor, rede, seguranca, especialistas, timer, lembretes, pomodoro, anotacoes, transcricao, gestos, noticias, sistemas)
+RECURSOS = (skills, eleicao, paineis_vivos, avisos_diarios, planner7, celular, falas_programadas, instagram, marketing, vendas, documentos, imagens, professor, rede, seguranca, especialistas, timer, lembretes, pomodoro, anotacoes, transcricao, gestos, noticias, sistemas)
 CLIMA_EM = re.compile(r"\b(?:em|no|na|pra|para|de)\s+(?P<cidade>(?!hoje|amanh|agora|semana)[^\d?!.]{3,40}?)\s*(?:hoje|amanh[aã]|agora|essa semana)?[?.!]*$", re.I)
 
 
@@ -1101,7 +1102,10 @@ def avisar(fala, cartao=None, importancia="info"):
     registro.anotar("aviso", fala, tipo="aviso")
 
 
-vigia_pc = {"em": 0.0, "rotina": time.time() - 3000}  # rotina: 10 min depois de ligar
+eleicao.falar = lambda fala: avisar(fala, None, "marcado")  # apuração ao vivo: ele pediu pra falar a cada atualização
+
+
+vigia_pc ={"em": 0.0, "rotina": time.time() - 3000}  # rotina: 10 min depois de ligar
 
 
 async def relogio_dos_avisos():

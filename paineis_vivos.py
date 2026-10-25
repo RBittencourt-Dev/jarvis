@@ -154,8 +154,9 @@ def criar_painel_ao_vivo(titulo: str, fonte: str, campos: str, html: str = "", i
                 + f"\nComeço do que ela devolve:\n{_amostra(fonte)}\nAjuste os campos e chame de novo.")
     _paineis[pid] = painel
     if not extensao.aberta() and not extensao.tem_palco():
-        from server import CONFIG
-        extensao.abrir(CONFIG["porta"])
+        # porta lida do config.json: "from server import" carregaria uma 2ª cópia do servidor (ele roda como __main__)
+        from pathlib import Path
+        extensao.abrir(json.loads((Path(__file__).parent / "config.json").read_text(encoding="utf-8")).get("porta", 8765))
     _publicar({"vivo": {"id": pid, "titulo": titulo, "html": painel["html"], "campos": list(campos_),
                         "dados": painel["dados"], "intervalo": segundos, "hora": time.strftime("%H:%M:%S")}})
     threading.Thread(target=_rodar, args=(pid,), daemon=True).start()
