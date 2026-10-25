@@ -47,7 +47,13 @@
   @keyframes pop-fade { from { opacity: 0; filter: blur(10px); } }
   @keyframes pop-varre { to { top: 100%; } }
   .cartao.saindo { animation: pop-sai .45s ease-in forwards !important; }
-  @keyframes pop-sai { to { opacity: 0; transform: scale(.85); filter: blur(6px) brightness(2); clip-path: inset(48% 0 48% 0); } }`;
+  @keyframes pop-sai { to { opacity: 0; transform: scale(.85); filter: blur(6px) brightness(2); clip-path: inset(48% 0 48% 0); } }
+  /* X pra fechar na mão (pedido 25/10): longe dos cantos cortados de todas as formas */
+  .cartao > .fechar-x { position: absolute; top: 6px; right: 36px; z-index: 5; width: 26px; height: 26px; padding: 0;
+    border: 1px solid var(--ciano-fraco, #39d0ff44); background: #06121dcc; color: #8fb8cc; font: 16px/22px sans-serif;
+    cursor: pointer; border-radius: 50%; transition: color .2s, border-color .2s, background .2s; pointer-events: auto; }
+  .cartao > .fechar-x:hover { color: #fff; border-color: #ff5a6a; background: #ff5a6a33; }
+  .cartao > h3:first-of-type { padding-right: 60px; }`;
   document.head.append(css);
 
   const ENTRADAS = ["entra-zoom", "entra-desdobra", "entra-glitch", "entra-desliza", "entra-fade"];
@@ -80,11 +86,28 @@
     // o texto pode chegar depois (pop-up "aguardando"): reavalia a cor uma vez
     setTimeout(() => { if (!/tom-/.test(c.className)) { const t2 = tom(c); if (t2) c.classList.add(t2); } }, 1500);
   }
+  // X em todo pop-up: fecha na mão. Painel ao vivo fechado no X avisa o servidor, que para de consultar o site
+  // (e a eleição para de falar). Na lateral/palco usa o remover() de lá (lembra que fechou); no HUD só some.
+  function botarX(c) {
+    if (c.querySelector(":scope > .fechar-x")) return;
+    const x = document.createElement("button");
+    x.className = "fechar-x"; x.textContent = "×"; x.title = "Fechar";
+    x.onclick = (ev) => {
+      ev.stopPropagation();
+      const id = c.dataset.id || (c.dataset.id = "mao-" + Math.random().toString(36).slice(2));
+      if (id.startsWith("vivo-")) fetch("/api/vivo/fechar?id=" + encodeURIComponent(id), { method: "POST" }).catch(() => {});
+      if (typeof window.remover === "function") return window.remover([id]);
+      c.classList.add("saindo");
+      setTimeout(() => c.remove(), 450);
+    };
+    c.append(x);
+  }
   new MutationObserver((ms) => {
     for (const m of ms) for (const n of m.addedNodes) {
       if (n.nodeType !== 1) continue;
-      if (n.classList?.contains("cartao")) estilizar(n);
-      n.querySelectorAll?.(".cartao").forEach(estilizar);
+      if (n.classList?.contains("cartao")) { estilizar(n); botarX(n); }
+      n.querySelectorAll?.(".cartao").forEach((c) => { estilizar(c); botarX(c); });
     }
   }).observe(document.body, { childList: true, subtree: true });
+  document.querySelectorAll(".cartao").forEach(botarX);
 })();

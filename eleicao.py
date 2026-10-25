@@ -237,6 +237,13 @@ def mostrar():
     return resumo_falado(sit, "Apuração na tela, chefe") + " Te falo a cada atualização."
 
 
+def fechar(pid):
+    """Fechou no X da tela: para de consultar o TSE e de falar."""
+    if _estado["id"] == pid:
+        _estado["parar"].set()
+        _estado["id"] = None
+
+
 def parar(silencioso=False):
     if not _estado["id"]:
         return "O painel da eleição não tá ligado, chefe."

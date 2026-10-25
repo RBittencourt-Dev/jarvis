@@ -105,10 +105,27 @@ def _amostra(fonte):
 
 # ------------------------------------------------------------------ o popup
 
+_canal_de = {}  # id do painel -> a tela onde ele está (pedido dele 25/10: UMA tela só, não as duas)
+
+
 def _publicar(evento):
-    # vai pros dois palcos (principal e lateral): quem tiver o popup atualiza, quem não tiver ignora
-    for canal in ("palco", "extensao"):
-        extensao.publicar(evento, canal)
+    """O painel nasce numa tela só: a principal (palco do HUD) se estiver aberta, senão a lateral.
+    As atualizações e o "remover" vão pra mesma tela onde ele nasceu."""
+    pid = (evento.get("vivo") or evento.get("vivo_dados") or {}).get("id") or (evento.get("remover") or [None])[0]
+    if "vivo" in evento:
+        _canal_de[pid] = "palco" if extensao.tem_palco() else "extensao"
+    canal = _canal_de.get(pid, "palco" if extensao.tem_palco() else "extensao")
+    if "remover" in evento:
+        _canal_de.pop(pid, None)
+    extensao.publicar(evento, canal)
+
+
+def fechar(pid):
+    """Ele fechou o painel no X da tela: para de consultar o site também."""
+    p = _paineis.get(pid)
+    if p:
+        p["parar"].set()
+    _canal_de.pop(pid, None)
 
 
 def _rodar(pid):

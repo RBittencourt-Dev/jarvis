@@ -4139,6 +4139,14 @@ def api_extensao(p: PedidoExtensao):
     return {"fala": extensao.abrir(CONFIG["porta"]) if p.abrir else extensao.fechar()}
 
 
+@app.post("/api/vivo/fechar")
+def vivo_fechar(id: str):
+    """X de um painel ao vivo na tela: além de sumir, para de consultar o site (e a eleição para de falar)."""
+    paineis_vivos.fechar(id)
+    eleicao.fechar(id)
+    return {"ok": True}
+
+
 @app.post("/api/extensao/sinal")
 def extensao_sinal():
     extensao.sinal()
