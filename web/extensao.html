@@ -624,6 +624,17 @@ const SCRIPT_VIVO = `
     }
     for (const el of document.querySelectorAll("img[data-img]")) { const v = d[el.dataset.img]; if (v) el.src = v; }
     parent.postMessage({ vivoAltura: document.documentElement.scrollHeight, id: window.name }, "*");
+    setTimeout(foto, 1400);
+  }
+  // "foto" do painel do jeito que está agora (números e fotos no lugar, sem script): é o que aparece na outra tela
+  // enquanto ele arrasta o painel de uma tela pra outra
+  function foto() {
+    const estilos = [...document.querySelectorAll("style")].map((s) => s.outerHTML).join("");
+    const corpo = document.body.cloneNode(true);
+    corpo.querySelectorAll("script").forEach((s) => s.remove());
+    const cs = getComputedStyle(document.body);
+    const caixa = "font:" + cs.font + ";color:" + cs.color + ";margin:" + cs.margin + ";padding:" + cs.padding;
+    parent.postMessage({ vivoFoto: estilos + '<div style="' + caixa.replace(/"/g, "'") + '">' + corpo.innerHTML + "</div>", id: window.name }, "*");
   }
   addEventListener("message", (m) => m.data && m.data.vivo && aplicar(m.data.vivo));
   const altura = () => parent.postMessage({ vivoAltura: document.documentElement.scrollHeight, id: window.name }, "*");
@@ -640,6 +651,7 @@ const SCRIPT_VIVO = `
     }
     altura();
     document.querySelectorAll("img").forEach((img) => { img.onload = altura; img.onerror = () => { img.closest("figure")?.remove(); img.remove(); altura(); }; });
+    setTimeout(foto, 1600);
   });`;
 const vivosFechados = new Set();  // ele fechou: a próxima atualização não reabre
 
@@ -684,6 +696,11 @@ function dadosVivo({ id, dados, hora, status }) {
 }
 
 addEventListener("message", (m) => {  // o iframe diz a altura do conteúdo: o cartão cresce junto (sem barra de rolagem)
+  if (m.data && m.data.vivoFoto) {  // a "foto" do painel (pra cópia que aparece na outra tela ao arrastar)
+    const f = document.querySelector(`iframe[name="${m.data.id}"]`);
+    if (f && m.source === f.contentWindow && m.data.vivoFoto.length < 300000) f.closest(".cartao").__foto = m.data.vivoFoto;
+    return;
+  }
   if (!m.data || !m.data.vivoAltura) return;
   const f = document.querySelector(`iframe[name="${m.data.id}"]`);
   if (f) f.style.height = Math.min(m.data.vivoAltura + 4, innerHeight * 0.8) + "px";
@@ -875,9 +892,9 @@ setInterval(() => ($("relogio").textContent = new Date().toLocaleTimeString("pt-
 <script src="/web/vendor/GLTFLoader.js"></script>
 <script src="/web/extensao2.js?v=2210e"></script>
 <script src="/web/timers.js?v=2210f" data-onde="ext"></script>
-<script src="/web/extensao3.js?v=2510a"></script>
+<script src="/web/extensao3.js?v=2510b"></script>
 <script src="/web/holograma.js?v=2410h"></script>
-<script src="/web/popups.js?v=2510b"></script>
-<script src="/web/mao.js?v=11"></script>
+<script src="/web/popups.js?v=2510e"></script>
+<script src="/web/mao.js?v=12"></script>
 </body>
 </html>

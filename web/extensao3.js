@@ -410,7 +410,7 @@
       const mover = (e) => {
         const dx = e.clientX - x0, dy = e.clientY - y0;
         if (!ativo && Math.hypot(dx, dy) < 8) return;
-        if (!ativo) { ativo = true; el.classList.add("arrastando"); el.setPointerCapture?.(ev.pointerId); window.travessia?.inicio(el, e); }
+        if (!ativo) { ativo = true; el.classList.add("arrastando"); el.setPointerCapture?.(ev.pointerId); window.travessia?.inicio(el, e, x0, y0); }
         el.style.transform = `translate(${dx}px, ${dy}px)`;
         // igual ao Windows: o mouse passou pra outra tela (pela posição real dos monitores) = vai pra lá ao soltar
         window.travessia?.mover(el, e);

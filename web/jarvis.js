@@ -206,7 +206,7 @@ function arrastavelHud(el) {
     const mover = (e) => {
       const dx = e.clientX - x0, dy = e.clientY - y0;
       if (!ativo && Math.hypot(dx, dy) < 8) return;
-      if (!ativo) { el.setPointerCapture?.(ev.pointerId); window.travessia?.inicio(el, e); }
+      if (!ativo) { el.setPointerCapture?.(ev.pointerId); window.travessia?.inicio(el, e, x0, y0); }
       ativo = true; el.classList.add("arrastando");
       el.style.transform = `translate(${dx}px, ${dy}px)`;
       window.travessia?.mover(el, e);  // a outra tela desenha a parte que passou da borda (igual ao Windows)

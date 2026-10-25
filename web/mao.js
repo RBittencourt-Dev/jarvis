@@ -48,8 +48,26 @@
     c.agarrado = perto; c.gx0 = x; c.gy0 = y; c.base = lerOff(perto);
     perto.__pego = c; perto.classList.add("mao-arrastando");
   }
+  // passar pra outra tela com a mão (25/10): a câmera só cobre ESTA tela, então segurando o card e encostando a mão
+  // na borda do lado da outra tela (no PC dele a tela 1 fica à ESQUERDA) o card desliza reto pra lá e fica lá
+  const LADO_DA_OUTRA_TELA = -1;  // -1 = esquerda, 1 = direita
   function arrastar(c, x, y) {
-    if (c.agarrado) c.agarrado.style.transform = `translate(${c.base.x + (x - c.gx0)}px, ${c.base.y + (y - c.gy0)}px)`;
+    if (!c.agarrado || c.agarrado.__indo) return;
+    c.agarrado.style.transform = `translate(${c.base.x + (x - c.gx0)}px, ${c.base.y + (y - c.gy0)}px)`;
+    const naBorda = LADO_DA_OUTRA_TELA < 0 ? x < innerWidth * 0.025 : x > innerWidth * 0.975;
+    if (naBorda && window.travessia?.deslizar) {
+      const el = c.agarrado;
+      el.__indo = true;
+      soltar(c);
+      window.travessia.deslizar(el, LADO_DA_OUTRA_TELA, EH_TOPO ? "hud" : "palco", el.__dado).then((ok) => {
+        el.__indo = false;
+        if (!ok) { el.style.opacity = ""; el.style.transform = ""; return; }  // não deu: volta pro lugar
+        if (EH_TOPO && typeof cartoes !== "undefined") {  // cartão do HUD: sai da lista dele (o servidor já mostrou na outra)
+          const achado = cartoes.find((k) => k.el === el); if (achado) cartoes.splice(cartoes.indexOf(achado), 1);
+          el.remove();
+        }
+      });
+    }
   }
   function soltar(c) {
     if (!c.agarrado) return;
