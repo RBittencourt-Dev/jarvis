@@ -30,6 +30,7 @@ import anotacoes
 import transcricao
 import gestos
 import aprendizado
+import autocorrecao
 import lembretes
 import noticias
 import pomodoro
@@ -1357,7 +1358,8 @@ def resposta_aprendida(texto):
     return respostas.get(chave) if chave and not NAO_GUARDAR.search(texto) else None
 
 
-ESQUECER = re.compile(r"^(?:jarvis[ ,]*)?(?:t[aá] errado|est[aá] errado|errado|resposta errada|esquece(?: isso)?|n[aã]o é isso)\b", re.I)
+ESQUECER = re.compile(r"^(?:jarvis[ ,]*)?(?:t[aá] errado|est[aá] errado|errado|resposta errada|esquece(?: isso)?|n[aã]o é isso|"
+                      r"n[aã]o (?:era|foi) isso|entendeu errado|wrong|that'?s wrong)\b", re.I)
 ultima_aprendida = {"chave": None}
 ultima_interpretacao = {}  # frase que o interpretador traduziu por último ("errado" desfaz)
 
@@ -1401,6 +1403,99 @@ def destino_do_apelido(alvo):
         if set(normalizar(apelido).split()) <= palavras:
             return destino
     return None
+
+
+# ------------------------------------------------------------- autocorreção (25/10): acerta sozinho, sem perguntar
+ultima_autocorrecao = {}  # {"de": "vs cold", "para": "vs code", "quando": t} — "errado" logo depois desfaz
+ultima_abertura = {}  # o último "abre X" (como a voz escreveu) — "não, eu falei Y" ensina X → Y
+
+
+def _alvo_conhecido(alvo):
+    """O alvo já abre do jeito que foi dito (apelido, site, programa, pasta)? Sem varrer o PC de novo."""
+    return bool(destino_do_apelido(alvo) or navegadores.site_conhecido(alvo) or resolver_programa(alvo, pode_atualizar=False))
+
+
+def _nomes_que_abrem():
+    """Tudo que o 'abre X' conhece: programas do PC, apelidos, sites, nomes em português do Windows, pastas."""
+    return (list(APPS["indice"]) + list(APPS["aprendidos"]) + list(CONFIG.get("apelidos", {}))
+            + list(navegadores.SITES) + list(windows_nomes.TRADUCOES) + list(windows_nomes.PASTAS))
+
+
+def autocorrigir(texto, anotar=True):
+    """"abre o vs cold" → "abre o vs code": o alvo que não existe vira o nome conhecido que SOA igual.
+
+    Também troca, sem perguntar, palavra que soa como um termo dele com nota alta ("lídis" → leads).
+    Na dúvida não troca nada. Devolve o texto (corrigido ou igual)."""
+    m = PEDIDO_DE_ABRIR.match(texto.strip())
+    if m:
+        pedido, _tela = telas.separar(m.group(1))
+        pedido, _nav = navegadores.separar(pedido)
+        alvo = re.sub(r"^(?:site|programa|app|aplicativo|sistema)\s+(?:do|da|de)\s+", "", pedido).strip()
+        aprendida = vocabulario.DADOS["corrigir"].get(vocabulario._sem_acento(alvo))
+        if aprendida:  # ele já ensinou ("quando eu falar X é Y") — vale antes do som
+            return texto.replace(alvo, aprendida, 1)
+        if (alvo and len(alvo.split()) <= 4 and vocabulario._sem_acento(alvo) not in vocabulario.DADOS["nao_corrigir"]
+                and not sistema.entender(texto) and not _alvo_conhecido(alvo)):
+            certo = autocorrecao.melhor(alvo, _nomes_que_abrem())
+            # "configurações de wifi" não vira só "configurações": se o nome achado já está DENTRO do que ele disse,
+            # o resto é detalhe que importa (outro caminho cuida), não erro de som
+            if certo and set(normalizar(certo).split()) < set(normalizar(alvo).split()):
+                certo = None
+            if anotar and alvo:
+                ultima_abertura.update({"alvo": alvo, "quando": time.time()})
+            if certo and certo != normalizar(alvo):
+                if anotar:
+                    ultima_autocorrecao.update({"de": alvo, "para": certo, "quando": time.time()})
+                return texto.replace(alvo, certo, 1)
+        elif anotar and alvo:
+            ultima_abertura.update({"alvo": alvo, "quando": time.time()})
+        return texto  # pedido de abrir: o resto da frase não é palavra pra corrigir por som
+    trocas = [(p, t) for p, t, n in vocabulario.suspeitas(texto, com_nota=True) if n >= 0.88]
+    for palavra, termo in trocas:
+        texto = re.sub(rf"\b{re.escape(palavra)}\b", termo, texto)
+        if anotar:
+            ultima_autocorrecao.update({"de": palavra, "para": termo, "quando": time.time()})
+    return texto
+
+
+# "não, eu falei VS Code" / "eu disse notion" / "era o excel" logo depois de um "abre X" que deu errado:
+# ele APRENDE (o que a voz escreveu → o que ele quis) e já abre o certo. Da próxima vez vai direto.
+# (precisa do "não" ou do "quis dizer": "eu falei com o Rihan" é conversa, não correção)
+EU_FALEI = re.compile(r"^(?:jarvis[ ,]*)?(?:n[aã]o[ ,]+(?:eu\s+)?(?:falei|disse|pedi|quis\s+dizer|era)|(?:eu\s+)?quis\s+dizer|"
+                      r"no[ ,]+i\s+said)\s+(?:o\s+|a\s+)?(?P<certo>[\w .+-]{2,40}?)[.!]*$", re.I)
+
+
+def aprender_eu_falei(texto):
+    """Devolve o nome certo (e já aprendeu a troca), ou None se não for uma correção de um 'abre X' recente."""
+    m = EU_FALEI.match(texto.strip())
+    if not m or not ultima_abertura or time.time() - ultima_abertura.get("quando", 0) > 120:
+        return None
+    errado, certo = ultima_abertura["alvo"], m.group("certo").strip()
+    if normalizar(errado) == normalizar(certo):
+        return None
+    chave = vocabulario._sem_acento(errado)
+    vocabulario.DADOS["corrigir"][chave] = certo
+    if chave in vocabulario.DADOS["nao_corrigir"]:
+        vocabulario.DADOS["nao_corrigir"].remove(chave)
+    vocabulario._salvar()
+    if APPS["aprendidos"].pop(normalizar(errado), None):
+        _salvar_apps()
+    ultima_abertura.clear()
+    ultima_autocorrecao.clear()
+    return certo
+
+
+def desfazer_autocorrecao():
+    """Ele disse "errado" logo depois de uma autocorreção: aquela troca nunca mais acontece sozinha."""
+    if not ultima_autocorrecao or time.time() - ultima_autocorrecao.get("quando", 0) > 120:
+        return None
+    de, para = ultima_autocorrecao["de"], ultima_autocorrecao["para"]
+    vocabulario.confirmar([(de, para)], False)  # vai pra lista de "não corrigir"
+    chave = normalizar(de)
+    if APPS["aprendidos"].pop(chave, None):
+        _salvar_apps()
+    ultima_autocorrecao.clear()
+    return f"Foi mal, chefe. Eu tinha entendido '{para}' no lugar de '{de}'; não troco mais. Me fala de novo do seu jeito?"
 
 
 PERGUNTAS_DO_PAINEL = [
@@ -1510,9 +1605,7 @@ def rota_de(texto, alternativas=(), assunto=None, foco=None):
         return "midia " + valor[1] if tipo == "tecla" else "tocar " + valor
     if vocabulario.ENSINO.match(texto.strip()):
         return "ensino"
-    sugerido, trocas = vocabulario.com_sugestao(texto)
-    if trocas:
-        return f"pergunta: {sugerido}"
+    texto = autocorrigir(texto, anotar=False)  # igual ao conversar: corrige pelo som, sem perguntar (sem anotar: é só consulta)
     claude = claude_ponte.entender(texto)
     if claude:
         return f"claude {claude['modo']} {claude['projeto']}"
@@ -1821,6 +1914,10 @@ async def conversar(p: Pergunta):
     if not sessao.get("dialogo"):
         p = Pergunta(sessao=p.sessao, texto=sinonimos.normalizar(vocabulario.corrigir(p.texto)),
                      alternativas=[sinonimos.normalizar(vocabulario.corrigir(a)) for a in p.alternativas], celular=p.celular)
+    # "não, eu falei VS Code" logo depois de um "abre X" errado: aprende a troca e já abre o certo
+    certo = aprender_eu_falei(p.texto)
+    if certo:
+        return await rotear(sid, sessao, f"abre {certo}")
     # falou em pedaços ("fecha as abas" … "do YouTube" … "no Chrome"): junta com o pedido anterior
     juntado = juntar_com_o_anterior(sessao, p.texto)
     if juntado:
@@ -1982,13 +2079,9 @@ async def conversar(p: Pergunta):
     ensinado = vocabulario.ensino(texto)
     if ensinado:
         return em_linhas(sid, responder_ja(ensinado))
-    sugerido, trocas = vocabulario.com_sugestao(texto)
-    if trocas:
-        # soa como um termo dele mas não é certeza: pergunta antes de agir
-        sessao["pendente"] = {"correcao": trocas, "original": texto, "corrigido": sugerido,
-                              "nome": "confirmar o que você disse", "args": {"entendi": sugerido},
-                              "fala": f"Você quis dizer: {sugerido}?"}
-        return em_linhas(sid, pedir_confirmacao(sessao["pendente"]), {"entendido": texto})
+    # 25/10: não pergunta mais "você quis dizer…?" — corrige sozinho pelo som ("vs cold" → VS Code);
+    # se errar, ele diz "errado" e a troca é desfeita e esquecida (desfazer_autocorrecao)
+    texto = autocorrigir(texto)
     await asyncio.to_thread(anotar_se_for_fato, texto)  # e segue: o cérebro responde normalmente
     return await rotear(sid, sessao, texto)
 
@@ -2903,6 +2996,9 @@ async def _rotear(sid, sessao, texto, interpretar=True):
     if not PEDIDO_DE_ABRIR.match(p.texto.strip()) and any(r.search(p.texto) for r, _, _ in PERGUNTAS_DO_PAINEL):
         return em_linhas(sid, comentando(COMENTARIOS_DO_PAINEL, asyncio.to_thread(dados_do_painel, p.texto)))
     if ESQUECER.match(p.texto.strip()):
+        desfeita = desfazer_autocorrecao()  # o mais recente primeiro: a troca de palavra que ele acabou de ver
+        if desfeita:
+            return em_linhas(sid, responder_ja(desfeita))
         if ultimo_caminho.get("pedido") and time.time() - ultimo_caminho.get("quando", 0) < 300:
             ultimo_caminho.clear()
             aprendizado.esquecer_ultimo_caminho()

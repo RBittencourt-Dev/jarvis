@@ -17,6 +17,8 @@ Pra ensinar um jeito novo: acrescente na lista certa aqui embaixo e um caso no t
 """
 import re
 
+import bilingue
+
 # verbo no infinitivo / no "você" (abra, mostre) → no jeito "tu" que as regras usam (abre, mostra)
 VERBOS = {
     "abrir": "abre", "abra": "abre", "mostrar": "mostra", "mostre": "mostra", "fechar": "fecha", "feche": "fecha",
@@ -99,7 +101,7 @@ def normalizar(texto):
     """A frase dele no jeito que as regras entendem. Sem nada pra trocar, devolve igual."""
     if not texto or not texto.strip():
         return texto
-    t = texto.strip()
+    t = bilingue.traduzir(texto.strip())  # "open vs code" → "abre vs code" (pedido em inglês vira o jeito de sempre)
     for _ in range(2):  # "tu pode deixar eu ver…" passa duas vezes
         antes = t
         m = EMBRULHO.match(t)

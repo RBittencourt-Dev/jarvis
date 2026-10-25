@@ -109,8 +109,9 @@ def _sem_ligar_pra_acento(palavra):
     return "".join(f"[{VARIANTES[c]}]" if c in VARIANTES else re.escape(c) for c in palavra)
 
 
-def suspeitas(texto):
-    """Palavras que soam como um termo dele mas não estão escritas assim: [(palavra, termo)]."""
+def suspeitas(texto, com_nota=False):
+    """Palavras que soam como um termo dele mas não estão escritas assim: [(palavra, termo)] ou, com_nota,
+    [(palavra, termo, nota)] — o server troca sozinho as de nota alta (sem perguntar)."""
     achadas = []
     for palavra in re.findall(r"[\wÀ-ú'-]{4,}", texto):
         chave = _sem_acento(palavra)
@@ -123,7 +124,7 @@ def suspeitas(texto):
             if r > nota:
                 melhor, nota = termo, r
         if nota >= 0.8:
-            achadas.append((palavra, melhor))
+            achadas.append((palavra, melhor, nota) if com_nota else (palavra, melhor))
     return achadas
 
 
