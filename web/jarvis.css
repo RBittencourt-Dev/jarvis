@@ -462,3 +462,85 @@ body.barra-aberta #barra { opacity: 1; transform: none; pointer-events: auto; }
 #radar-hud .radar-cap { position: absolute; left: 0; right: 0; bottom: 11px; text-align: center; pointer-events: none;
   font: 700 8px var(--display); letter-spacing: .22em; color: color-mix(in srgb, var(--ciano) 72%, transparent); }
 #radar-hud b { align-content: center; padding-bottom: 7px; }  /* sobe o número pra caber o rótulo embaixo */
+
+/* ============================================================ CAMADA iOS (modernização, 26/10)
+   Vidro fosco + cantos arredondados + tipografia SF + botões em pílula nas SUPERFÍCIES.
+   O núcleo/reator ciano, a marca e os números em Orbitron ficam intactos (identidade do Jarvis).
+   Reversível: basta apagar deste comentário até o fim do arquivo. */
+:root {
+  --sf: -apple-system, "SF Pro Display", "SF Pro Text", "Segoe UI", system-ui, "Helvetica Neue", sans-serif;
+  --r-grande: 22px;   /* raio dos painéis */
+  --r-medio: 14px;    /* raio de itens/campos */
+  --vidro: color-mix(in srgb, #0d1b2a 58%, transparent);
+  --vidro-forte: color-mix(in srgb, #0d1b2a 74%, transparent);
+  --fio: color-mix(in srgb, #ffffff 12%, transparent);     /* borda hairline clara */
+  --realce: inset 0 1px 0 color-mix(in srgb, #ffffff 10%, transparent);  /* brilho no topo, estilo iOS */
+  --sombra-flutua: 0 14px 44px rgba(0, 0, 0, .5);
+}
+body { font-family: var(--sf); font-size: 15px; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+/* scanlines e molduras bem mais discretas: iOS é limpo (não removo, só suavizo) */
+body::after { opacity: .14; }
+#molduras i { border-color: color-mix(in srgb, var(--ciano) 16%, transparent); }
+
+/* ---- cartões: vidro fosco arredondado, sem chanfro nem barra dura ---- */
+.cartao, body.caverna .cartao {
+  background: var(--vidro);
+  border: 1px solid var(--fio);
+  border-radius: var(--r-grande);
+  clip-path: none;
+  backdrop-filter: blur(26px) saturate(160%);
+  -webkit-backdrop-filter: blur(26px) saturate(160%);
+  box-shadow: var(--sombra-flutua), var(--realce);
+  padding: 16px 18px;
+}
+.cartao::before { content: none; }   /* tira a barra ciano vertical */
+.cartao h3 { font-family: var(--sf); letter-spacing: .06em; text-transform: none; font-size: 12px; font-weight: 600; color: var(--apagado); }
+.cartao li { border-top: 1px solid color-mix(in srgb, #ffffff 8%, transparent); padding: 6px 0; }
+.cartao .galeria img { border-radius: 12px; border: 0; }
+.cartao.aguardando { border-style: dashed; }
+
+/* ---- campos e caixas de texto: pílula de vidro ---- */
+input, #form-auto select, #form-auto textarea {
+  background: var(--vidro-forte); border: 1px solid var(--fio); border-radius: var(--r-medio);
+  padding: 11px 14px; backdrop-filter: blur(12px);
+}
+input { border-radius: 999px; }
+input:focus, #form-auto select:focus, #form-auto textarea:focus { border-color: var(--ciano); box-shadow: 0 0 0 3px var(--ciano-fraco); outline: none; }
+
+/* ---- botões: pílula iOS ---- */
+button, .botao, .cfg-itens button, .cfg-secao .botoes button {
+  border-radius: 999px; padding: 10px 18px; font-family: var(--sf); font-weight: 600;
+  transition: transform .12s ease, filter .15s ease, background .15s ease; border: 0;
+}
+button:active, .botao:active { transform: scale(.96); }
+button { background: var(--ciano); color: #04121c; box-shadow: 0 4px 16px var(--ciano-fraco); }
+button:hover { filter: brightness(1.08); }
+button.secundario { background: color-mix(in srgb, #ffffff 10%, transparent); color: var(--texto); border: 1px solid var(--fio); box-shadow: none; }
+button.secundario:hover { background: color-mix(in srgb, #ffffff 16%, transparent); }
+
+/* ---- painéis flutuantes (automações, barra, autorização) ---- */
+#automacoes, #configuracoes, #autorizacao, #barra {
+  border-radius: var(--r-grande); border: 1px solid var(--fio);
+  background: var(--vidro); backdrop-filter: blur(28px) saturate(160%); -webkit-backdrop-filter: blur(28px) saturate(160%);
+  box-shadow: var(--sombra-flutua), var(--realce);
+}
+#autorizacao { border-color: color-mix(in srgb, var(--perigo) 55%, transparent); }
+#lista-auto li { border: 1px solid var(--fio); border-radius: var(--r-medio); background: color-mix(in srgb, #ffffff 5%, transparent); padding: 10px 12px; }
+.topo-auto h2 { font-family: var(--sf); letter-spacing: .04em; text-transform: none; font-size: 14px; }
+
+/* ---- botão redondo flutuante (microfone/menu): vidro com realce ---- */
+.icone { background: var(--vidro-forte); border: 1px solid var(--fio); backdrop-filter: blur(16px);
+  box-shadow: var(--sombra-flutua), var(--realce); }
+.icone:hover, .icone[aria-expanded="true"] { border-color: var(--ciano); box-shadow: 0 0 24px var(--ciano-fraco), var(--realce); }
+
+/* ---- painéis fixos do HUD (SISTEMA / REDE / VISÃO / HOJE): mesma cara iOS ---- */
+.hudp {
+  background: var(--vidro); border: 1px solid var(--fio); border-radius: var(--r-grande);
+  clip-path: none; backdrop-filter: blur(26px) saturate(160%); -webkit-backdrop-filter: blur(26px) saturate(160%);
+  box-shadow: var(--sombra-flutua), var(--realce); padding: 14px 16px;
+}
+.hudp::before { content: none; }   /* tira a barra ciano vertical */
+.hudp h3 { font: 600 11px/1 var(--sf); letter-spacing: .14em; color: var(--apagado); margin-bottom: 10px; }
+.hudp .g b { border-radius: 999px; height: 4px; }   /* barrinhas de nível arredondadas */
+.hudp .ticker { border-top: 1px solid color-mix(in srgb, #ffffff 8%, transparent); }
+#barra { border-radius: var(--r-grande); }
