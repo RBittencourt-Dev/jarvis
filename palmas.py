@@ -114,6 +114,8 @@ def acordar(motivo):
     global ultima_abertura
     if time.time() - ultima_abertura < 5:
         return
+    if (servidor_no_ar() or {}).get("desativado"):
+        return  # modo de espera: palma/nome não abrem nada. Só o atalho da área de trabalho reativa.
     ultima_abertura = time.time()
     print(motivo)
     threading.Thread(target=abrir_jarvis, daemon=True).start()
@@ -528,6 +530,12 @@ def trazer_para_frente(espera=10):
 
 def abrir_jarvis():
     status = servidor_no_ar()
+    if status and status.get("desativado"):
+        try:
+            httpx.post(URL + "/api/ativar", timeout=2)  # abrir pelo atalho tira do modo de espera
+            status["desativado"] = False
+        except Exception:
+            pass
     if janela_do_jarvis() or (status and status["tela_aberta"]):
         trazer_para_frente(espera=1)  # já está aberto (ou minimizado): só volta pra frente
         for hwnd in janelas_da_extensao():

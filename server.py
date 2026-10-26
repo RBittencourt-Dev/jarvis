@@ -113,6 +113,9 @@ PASTAS_PERMITIDAS = [Path(os.path.expandvars(p)).expanduser().resolve() for p in
 
 app = FastAPI()
 ultimo_sinal_da_tela = 0.0  # a interface avisa que está aberta; as palmas consultam
+# "se desativa": modo de espera. Fica em memória (zera ao religar o servidor), então reiniciar o PC já reativa;
+# abrir pelo atalho da área de trabalho (palmas.abrir_jarvis) chama /api/ativar. Nunca reativa por voz.
+estado_ativo = {"desativado": False}
 
 
 @app.middleware("http")
@@ -1093,6 +1096,8 @@ def avisar(fala, cartao=None, importancia="info"):
     """Aviso que chega sozinho (lembrete, pomodoro, site caiu): a tela fala; com a tela fechada, o segundo plano fala.
     Não perturbe / nível de proatividade (Configurações): o que não pode falar agora vira só pop-up, mudo."""
     cartao = extensao.com_id(cartao) if cartao else None
+    if estado_ativo["desativado"]:
+        return  # modo de espera: nada de falar sozinho (lembrete/pomodoro/site caiu ficam quietos)
     if proatividade.pode_falar(importancia):
         novidades_de_leads.append({"fala": fala, "cartao": cartao})
     elif not cartao:
@@ -1999,6 +2004,16 @@ MOSTRAR_ONDE = re.compile(
 async def conversar(p: Pergunta):
     sid = p.sessao if p.sessao in sessoes else str(uuid.uuid4())
     sessao = sessoes.setdefault(sid, {"mensagens": [], "pendente": None})
+    # modo de espera: enquanto desativado, ouve mas não responde nada. Só volta pelo atalho/reinício (nunca por voz).
+    _txt = p.texto.strip()
+    if estado_ativo["desativado"]:
+        return em_linhas(sid, responder_ja(""))
+    if internos.SE_DESATIVAR.match(_txt) or internos.SE_DESATIVAR.match(vocabulario.limpar(_txt)):
+        estado_ativo["desativado"] = True
+        extensao.publicar({"desativado": True})
+        extensao.publicar({"desativado": True}, canal="hud")
+        return em_linhas(sid, responder_ja("Entrando em modo de espera, chefe. Me reative abrindo o Jarvis pelo "
+                                           "atalho da área de trabalho ou reiniciando o PC."))
     ultimo_tom.update(tom=p.tom, quando=time.time())  # a mensagem pro cérebro leva o clima da fala (dica_de_tom)
     if p.celular:
         sessao["celular"] = True
@@ -3185,6 +3200,8 @@ def novidades():
     Varredura de segurança que ACHOU falhas vem com uma 'oferta': armo o pendente (claude, modo FAZER) na sessão
     aberta e deixo o HUD mostrar o sim/não. No "sim", /api/decidir roda claude_ponte.executar e abre o Claude pra
     corrigir (aprovando cada passo). Só a pasta local, nunca produção."""
+    if estado_ativo["desativado"]:
+        return {"blocos": []}  # modo de espera: a tela/segundo plano não falam nada
     blocos = claude_ponte.novidades() + seguranca.novidades() + novidades_de_leads[:]
     novidades_de_leads.clear()
     sid = SESSAO_ATUAL.get("sid")
@@ -3617,6 +3634,8 @@ async def em_segundo_plano(f: Fundo):
     A sessão "fundo" guarda a conversa; se o pedido anterior esperava um "sim", esta fala é a resposta.
     """
     sid = "fundo"
+    if estado_ativo["desativado"]:
+        return {"fala": ""}  # modo de espera: não atende nem com a tela fechada
     sessao = sessoes.setdefault(sid, {"mensagens": [], "pendente": None})
     texto = f.texto.strip()
     if sessao["pendente"] and SIM_FALADO.match(texto):
@@ -4261,7 +4280,27 @@ def status():
             "ouvido_da_tela": ouvido_da_tela["estado"], "tela_ouviu_ha": time.time() - ouvido_da_tela["ouviu_em"],
             "modelo": cerebro.nome_do_cerebro(), "modo": modo_atual(),
             "musica": musica_tocando["agora"], "autenticado": rosto_ja_conferido() or not ARQUIVO_ROSTO.exists() or not CONFIG.get("usar_rosto", True), "casa": {k: lugares.CASA[k] for k in ("lat", "lng")}, "extensao": extensao.aberta(), "usar_extensao": extensao.preferida(),
+            "desativado": estado_ativo["desativado"],
             "trechos_de_conhecimento": len(TRECHOS)}
+
+
+@app.post("/api/desativar")
+def desativar():
+    """Modo de espera: o Jarvis para de ouvir/responder/avisar. Só volta por /api/ativar (atalho) ou reiniciando."""
+    estado_ativo["desativado"] = True
+    extensao.publicar({"desativado": True})
+    extensao.publicar({"desativado": True}, canal="hud")
+    return {"desativado": True}
+
+
+@app.post("/api/ativar")
+def ativar():
+    """Religa depois do modo de espera. Chamado por palmas.abrir_jarvis (abrir pelo atalho da área de trabalho)."""
+    voltou = estado_ativo["desativado"]
+    estado_ativo["desativado"] = False
+    extensao.publicar({"desativado": False})
+    extensao.publicar({"desativado": False}, canal="hud")
+    return {"desativado": False, "voltou": voltou}
 
 
 @app.get("/spotify/conectar")

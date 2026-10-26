@@ -82,6 +82,15 @@ LIMPAR_DISPLAY = re.compile(J + r"(?:(?:limpa|limpar|fecha|fechar|reseta|resetar
 # "reinicia o Jarvis", "se reinicia", "reinicia você" (NÃO 'reinicia o computador' — isso é do sistema.py)
 REINICIAR_JARVIS = re.compile(J + r"(?:se\s+reinicia(?:r)?|(?:reinicia(?:r|e)?|reinicializa(?:r)?|reseta(?:r)?)\s+"
                               r"(?:voc[eê](?:\s+mesmo)?|tu|ti|o\s+jarvis|a\s+si))" + FIM)
+# "se desativa": entra em modo de espera e só volta abrindo pelo atalho da área de trabalho ou reiniciando o PC
+# (pedido dele: um jeito de calar o Jarvis sem desligar o PC, sem reativar por voz pra ele não "se ligar sozinho").
+SE_DESATIVAR = re.compile(J + r"(?:se\s+(?:desativa(?:r)?|desliga(?:r)?)|"
+                          r"(?:desativa(?:r)?|desliga(?:r)?)\s+(?:voc[eê](?:\s+mesm[oa])?|tu|ti|o\s+jarvis|a\s+si)"
+                          r"(?:\s+at[eé]\s+eu\s+(?:te\s+)?chamar)?|"
+                          r"(?:desativa(?:r)?|desliga(?:r)?)\s+at[eé]\s+eu\s+(?:te\s+)?chamar|"
+                          r"(?:vai|v[aá])\s+dormir|tira\s+uma\s+soneca|modo\s+soneca|"
+                          r"entra\s+(?:em\s+(?:espera|stand\s*-?by|hiberna[cç][aã]o)|no\s+modo\s+espera)|"
+                          r"fica\s+(?:quiet[oa]|em\s+sil[eê]ncio)\s+at[eé]\s+eu\s+(?:te\s+)?chamar)" + FIM)
 # só no celular (tela pequena): "limpa a interface/o hud", "fecha/limpa tudo" = some com tudo que ele abriu lá.
 # No PC essas frases seguem como antes (pedido dele: "no PC tudo fica como antes").
 LIMPAR_CELULAR = re.compile(J + r"(?:fecha|fechar|limpa|limpar|tira|apaga)\s+(?:todos\s+os\s+pain[eé]is|tudo\s+da\s+tela|a\s+tela(?:\s+toda)?|"
